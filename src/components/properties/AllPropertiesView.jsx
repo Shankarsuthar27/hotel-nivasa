@@ -21,7 +21,6 @@ import {
 export default function AllPropertiesView({
   property,
   onSaveProperty,
-  onOpenCashDrawer,
   showToast
 }) {
   const [mode, setMode] = useState('list'); // 'list' | 'edit'
@@ -229,16 +228,6 @@ export default function AllPropertiesView({
 
           {/* Top-Right Action Controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button
-              type="button"
-              className="properties-cash-drawer-pill"
-              onClick={onOpenCashDrawer}
-              title="Open Register Cash Drawer"
-            >
-              <Archive size={14} strokeWidth={2.2} />
-              <span>Open Cash Drawer</span>
-            </button>
-
             <button
               type="button"
               className="properties-btn-primary"
@@ -533,16 +522,6 @@ export default function AllPropertiesView({
           </span>
           <span style={{ color: '#64748b', fontWeight: 500 }}>PMS</span>
         </div>
-
-        <button
-          type="button"
-          className="properties-cash-drawer-pill"
-          onClick={onOpenCashDrawer}
-          title="Open Register Cash Drawer"
-        >
-          <Archive size={14} strokeWidth={2.2} />
-          <span>Open Cash Drawer</span>
-        </button>
       </div>
 
       {/* Main Form Container (Matching Image 2) */}

@@ -31,7 +31,6 @@ export default function MyTeamView({
   onManagePermissions,
   onRemoveInvitation,
   onRemoveMember,
-  onOpenCashDrawer,
   showToast,
   onNavigateToAccept
 }) {
@@ -125,17 +124,6 @@ export default function MyTeamView({
           <span className="my-team-crumb-sep">&gt;</span>
           <span className="my-team-crumb-active">My Team</span>
         </div>
-
-        {/* Open Cash Drawer Amber Pill Button (Matches Image 1) */}
-        <button
-          type="button"
-          className="my-team-cash-drawer-pill"
-          onClick={onOpenCashDrawer}
-          title="Open Register Cash Drawer"
-        >
-          <Archive size={14} strokeWidth={2.2} />
-          <span>Open Cash Drawer</span>
-        </button>
       </header>
 
       {/* 2. Controls Bar: Property Dropdown & Search & Invite CTA */}

@@ -1732,6 +1732,8 @@ body.has-res-modal-open .tape-chart-container {
   display: flex;
   flex-direction: column;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+  user-select: none;
 }
 
 .kpi-card:hover {

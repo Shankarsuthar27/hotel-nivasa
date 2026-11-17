@@ -14,7 +14,6 @@ import {
   Building2,
   Settings,
   ShieldCheck,
-  CircleDollarSign,
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
@@ -81,11 +80,6 @@ export default function Sidebar({
       icon: LayoutGrid,
       badge: counts?.dirtyRooms > 0 ? counts.dirtyRooms : null,
       badgeDanger: true
-    },
-    {
-      id: 'cashier',
-      label: 'Cashier',
-      icon: CircleDollarSign
     },
     {
       id: 'nightaudit',

@@ -21,7 +21,6 @@ import GroupRoomMoveModal from './components/reservations/GroupRoomMoveModal';
 import BookingVoucherModal from './components/reservations/BookingVoucherModal';
 import GstInvoiceModal from './components/folios/GstInvoiceModal';
 import MaintenanceBlockModal from './components/calendar/MaintenanceBlockModal';
-import CashDrawerModal from './components/reservations/CashDrawerModal';
 import DashboardView from './components/dashboard/DashboardView';
 import EditReservationView from './components/reservations/EditReservationView';
 import AddReservationView from './components/reservations/AddReservationView';
@@ -96,7 +95,6 @@ export default function App() {
 
   const [isMaintenanceOpen, setIsMaintenanceOpen] = useState(false);
   const [maintenanceInitialData, setMaintenanceInitialData] = useState(null);
-  const [isCashDrawerOpen, setIsCashDrawerOpen] = useState(false);
 
   // Toast Notification
   const [toastMessage, setToastMessage] = useState(null);
@@ -117,15 +115,14 @@ export default function App() {
       isRoomMoveOpen ||
       isVoucherOpen ||
       isInvoiceOpen ||
-      isMaintenanceOpen ||
-      isCashDrawerOpen;
+      isMaintenanceOpen;
 
     if (isAnyModalOpen) {
       document.body.classList.add('has-res-modal-open');
     } else {
       document.body.classList.remove('has-res-modal-open');
     }
-  }, [isRoomMoveOpen, isVoucherOpen, isInvoiceOpen, isMaintenanceOpen, isCashDrawerOpen]);
+  }, [isRoomMoveOpen, isVoucherOpen, isInvoiceOpen, isMaintenanceOpen]);
 
   useEffect(() => {
     const unsubscribe = pmsStore.subscribe((newState) => {
@@ -472,10 +469,6 @@ export default function App() {
             activeTab={activeTab}
             activeSubtab={router.subtab}
             setActiveTab={(tab, subtab) => {
-              if (tab === 'cashier') {
-                setIsCashDrawerOpen(true);
-                return;
-              }
               if (tab === 'myteam') {
                 navigate('/my-team');
                 return;
@@ -528,7 +521,18 @@ export default function App() {
               reservations={state.reservations}
               announcements={state.announcements || []}
               onNavigateTab={(tab, options) => {
-                navigate('/' + tab);
+                const targetTab = tab === 'myteam' ? 'my-team' : tab;
+                if (options?.tab) {
+                  navigate(`/${targetTab}?tab=${options.tab}`);
+                } else if (options?.filter) {
+                  if (tab === 'reservations' && ['arrivals', 'departures', 'in_house'].includes(options.filter)) {
+                    navigate(`/${targetTab}?tab=${options.filter}`);
+                  } else {
+                    navigate(`/${targetTab}?filter=${options.filter}`);
+                  }
+                } else {
+                  navigate('/' + targetTab);
+                }
               }}
               onAddAnnouncement={(note) => {
                 pmsStore.addAnnouncement(note);
@@ -751,7 +755,6 @@ export default function App() {
               }}
               onRemoveInvitation={(id) => pmsStore.removeInvitation(id)}
               onRemoveMember={(id) => pmsStore.removeTeamMember(id)}
-              onOpenCashDrawer={() => setIsCashDrawerOpen(true)}
               showToast={showToast}
               onNavigateToAccept={(tok) => navigate(`/accept-invite?token=${tok}`)}
             />
@@ -768,7 +771,6 @@ export default function App() {
               onSaveGranularPermissions={(userId, perms, targetProps, copyIds) => {
                 pmsStore.updateGranularPermissions(userId, perms, targetProps, copyIds);
               }}
-              onOpenCashDrawer={() => setIsCashDrawerOpen(true)}
               onBack={() => navigate('/my-team')}
               showToast={showToast}
             />
@@ -783,7 +785,8 @@ export default function App() {
               roomTypes={state.roomTypes || []}
               rooms={state.rooms || []}
               ratePlans={state.ratePlans || []}
-              onOpenCashDrawer={() => setIsCashDrawerOpen(true)}
+              taxRules={state.taxRules || []}
+              serviceCharges={state.serviceCharges || []}
               onSaveProperty={(patch) => {
                 pmsStore.updateProperty(patch);
               }}
@@ -827,6 +830,24 @@ export default function App() {
               }}
               onDeleteRatePlan={(id) => {
                 pmsStore.deleteRatePlan(id);
+              }}
+              onCreateTaxRule={(data) => {
+                pmsStore.addTaxRule(data);
+              }}
+              onUpdateTaxRule={(id, patch) => {
+                pmsStore.updateTaxRule(id, patch);
+              }}
+              onDeleteTaxRule={(id) => {
+                pmsStore.deleteTaxRule(id);
+              }}
+              onCreateServiceCharge={(data) => {
+                pmsStore.addServiceCharge(data);
+              }}
+              onUpdateServiceCharge={(id, patch) => {
+                pmsStore.updateServiceCharge(id, patch);
+              }}
+              onDeleteServiceCharge={(id) => {
+                pmsStore.deleteServiceCharge(id);
               }}
               showToast={showToast}
             />
@@ -920,12 +941,6 @@ export default function App() {
         rooms={state.rooms}
         onSubmit={handleAddMaintenanceBlock}
         onDelete={handleDeleteMaintenanceBlock}
-      />
-
-      {/* 7. Cash Drawer Management Modal */}
-      <CashDrawerModal
-        isOpen={isCashDrawerOpen}
-        onClose={() => setIsCashDrawerOpen(false)}
       />
     </div>
   );

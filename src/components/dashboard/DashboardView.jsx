@@ -152,7 +152,13 @@ export default function DashboardView({
       {/* 2. Top 6 KPI Cards Grid */}
       <div className="kpi-grid">
         {/* Card 1: Arrivals */}
-        <div className="kpi-card kpi-border-blue">
+        <div
+          className="kpi-card kpi-border-blue"
+          onClick={() => onNavigateTab && onNavigateTab('reservations', { tab: 'arrivals', filter: 'arrivals' })}
+          title="Click to view Arrivals in Reservations"
+          role="button"
+          tabIndex={0}
+        >
           <div className="kpi-top">
             <div className="kpi-icon-box kpi-icon-blue">
               <LogIn size={18} />
@@ -160,7 +166,10 @@ export default function DashboardView({
             <button
               className="kpi-eye-btn"
               title="View Arrivals"
-              onClick={() => onNavigateTab && onNavigateTab('reservations', { filter: 'arrivals' })}
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigateTab && onNavigateTab('reservations', { tab: 'arrivals', filter: 'arrivals' });
+              }}
             >
               <Eye size={13} />
             </button>
@@ -174,7 +183,13 @@ export default function DashboardView({
         </div>
 
         {/* Card 2: Departures */}
-        <div className="kpi-card kpi-border-green">
+        <div
+          className="kpi-card kpi-border-green"
+          onClick={() => onNavigateTab && onNavigateTab('reservations', { tab: 'departures', filter: 'departures' })}
+          title="Click to view Departures in Reservations"
+          role="button"
+          tabIndex={0}
+        >
           <div className="kpi-top">
             <div className="kpi-icon-box kpi-icon-green">
               <LogOut size={18} />
@@ -182,7 +197,10 @@ export default function DashboardView({
             <button
               className="kpi-eye-btn"
               title="View Departures"
-              onClick={() => onNavigateTab && onNavigateTab('reservations', { filter: 'departures' })}
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigateTab && onNavigateTab('reservations', { tab: 'departures', filter: 'departures' });
+              }}
             >
               <Eye size={13} />
             </button>
@@ -196,7 +214,13 @@ export default function DashboardView({
         </div>
 
         {/* Card 3: In-House */}
-        <div className="kpi-card kpi-border-purple">
+        <div
+          className="kpi-card kpi-border-purple"
+          onClick={() => onNavigateTab && onNavigateTab('reservations', { tab: 'in_house', filter: 'in_house' })}
+          title="Click to view In-House reservations"
+          role="button"
+          tabIndex={0}
+        >
           <div className="kpi-top">
             <div className="kpi-icon-box kpi-icon-purple">
               <Home size={18} />
@@ -204,7 +228,10 @@ export default function DashboardView({
             <button
               className="kpi-eye-btn"
               title="View In-House Bookings"
-              onClick={() => onNavigateTab && onNavigateTab('reservations', { filter: 'in_house' })}
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigateTab && onNavigateTab('reservations', { tab: 'in_house', filter: 'in_house' });
+              }}
             >
               <Eye size={13} />
             </button>
@@ -218,7 +245,13 @@ export default function DashboardView({
         </div>
 
         {/* Card 4: Available Rooms */}
-        <div className="kpi-card kpi-border-cyan">
+        <div
+          className="kpi-card kpi-border-cyan"
+          onClick={() => onNavigateTab && onNavigateTab('housekeeping')}
+          title="Click to view Room Grid in Housekeeping"
+          role="button"
+          tabIndex={0}
+        >
           <div className="kpi-top">
             <div className="kpi-icon-box kpi-icon-cyan">
               <DoorIcon size={18} />
@@ -226,7 +259,10 @@ export default function DashboardView({
             <button
               className="kpi-eye-btn"
               title="View Room Grid"
-              onClick={() => onNavigateTab && onNavigateTab('housekeeping')}
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigateTab && onNavigateTab('housekeeping');
+              }}
             >
               <Eye size={13} />
             </button>
@@ -242,7 +278,13 @@ export default function DashboardView({
         </div>
 
         {/* Card 5: VIP Guests */}
-        <div className="kpi-card kpi-border-amber">
+        <div
+          className="kpi-card kpi-border-amber"
+          onClick={() => onNavigateTab && onNavigateTab('guests', { filter: 'vip' })}
+          title="Click to view VIP Guests CRM"
+          role="button"
+          tabIndex={0}
+        >
           <div className="kpi-top">
             <div className="kpi-icon-box kpi-icon-amber">
               <Star size={18} />
@@ -250,7 +292,10 @@ export default function DashboardView({
             <button
               className="kpi-eye-btn"
               title="View VIP Guests"
-              onClick={() => onNavigateTab && onNavigateTab('guests', { filter: 'vip' })}
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigateTab && onNavigateTab('guests', { filter: 'vip' });
+              }}
             >
               <Eye size={13} />
             </button>
@@ -264,7 +309,13 @@ export default function DashboardView({
         </div>
 
         {/* Card 6: Single Ladies */}
-        <div className="kpi-card kpi-border-pink">
+        <div
+          className="kpi-card kpi-border-pink"
+          onClick={() => onNavigateTab && onNavigateTab('reservations', { filter: 'single_ladies' })}
+          title="Click to view Single Ladies in Reservations"
+          role="button"
+          tabIndex={0}
+        >
           <div className="kpi-top">
             <div className="kpi-icon-box kpi-icon-pink">
               <VenusIcon size={18} />
@@ -272,7 +323,10 @@ export default function DashboardView({
             <button
               className="kpi-eye-btn"
               title="View Single Ladies"
-              onClick={() => onNavigateTab && onNavigateTab('reservations', { filter: 'single_ladies' })}
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigateTab && onNavigateTab('reservations', { filter: 'single_ladies' });
+              }}
             >
               <Eye size={13} />
             </button>
@@ -317,13 +371,25 @@ export default function DashboardView({
             <div className="flow-label">Today's Flow</div>
             <div className="flow-pills-row">
               {/* Arrivals flow pill */}
-              <div className="flow-pill flow-pill-green" title="Expected arrivals remaining today">
+              <div
+                className="flow-pill flow-pill-green"
+                title="Click to view Expected Arrivals today"
+                role="button"
+                style={{ cursor: 'pointer' }}
+                onClick={() => onNavigateTab && onNavigateTab('reservations', { tab: 'arrivals', filter: 'arrivals' })}
+              >
                 <LogIn size={14} className="flow-pill-icon" />
                 <span className="flow-pill-count">{expectedArrivals}</span>
               </div>
 
               {/* Departures flow pill */}
-              <div className="flow-pill flow-pill-blue" title="Expected departures remaining today">
+              <div
+                className="flow-pill flow-pill-blue"
+                title="Click to view Expected Departures today"
+                role="button"
+                style={{ cursor: 'pointer' }}
+                onClick={() => onNavigateTab && onNavigateTab('reservations', { tab: 'departures', filter: 'departures' })}
+              >
                 <LogOut size={14} className="flow-pill-icon" />
                 <span className="flow-pill-count">{expectedDepartures}</span>
               </div>
@@ -333,22 +399,42 @@ export default function DashboardView({
 
         {/* Bottom: 4 Revenue Metric Cards */}
         <div className="revenue-metrics-grid">
-          <div className="revenue-metric-card">
+          <div
+            className="revenue-metric-card"
+            style={{ cursor: 'pointer' }}
+            title="Click to view Financial Reports"
+            onClick={() => onNavigateTab && onNavigateTab('reports')}
+          >
             <div className="metric-label">RevPAR</div>
             <div className="metric-val">{formatCurrency(revpar)}</div>
           </div>
 
-          <div className="revenue-metric-card">
+          <div
+            className="revenue-metric-card"
+            style={{ cursor: 'pointer' }}
+            title="Click to view Financial Reports"
+            onClick={() => onNavigateTab && onNavigateTab('reports')}
+          >
             <div className="metric-label">ADR</div>
             <div className="metric-val">{formatCurrency(adr)}</div>
           </div>
 
-          <div className="revenue-metric-card">
+          <div
+            className="revenue-metric-card"
+            style={{ cursor: 'pointer' }}
+            title="Click to view Financial Reports"
+            onClick={() => onNavigateTab && onNavigateTab('reports')}
+          >
             <div className="metric-label">Room Revenue</div>
             <div className="metric-val">{formatCurrency(roomRevenue)}</div>
           </div>
 
-          <div className="revenue-metric-card">
+          <div
+            className="revenue-metric-card"
+            style={{ cursor: 'pointer' }}
+            title="Click to view Financial Reports"
+            onClick={() => onNavigateTab && onNavigateTab('reports')}
+          >
             <div className="metric-label">Total Revenue</div>
             <div className="metric-val">{formatCurrency(totalRevenue)}</div>
           </div>

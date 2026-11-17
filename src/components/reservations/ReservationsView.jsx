@@ -33,9 +33,9 @@ import GuestCheckOutModal from './GuestCheckOutModal';
 import BookingDetailsDrawer from './BookingDetailsDrawer';
 import GroupReservationListDrawer from './GroupReservationListDrawer';
 import CancelReservationModal from './CancelReservationModal';
+import SlidingTabBar from '../common/SlidingTabBar';
 import ReservationsToolbar from './ReservationsToolbar';
 import ReservationsListView from './ReservationsListView';
-import CashDrawerModal from './CashDrawerModal';
 import AmendStayDrawer from './AmendStayDrawer';
 
 // Custom Icons for exact pixel match
@@ -86,9 +86,14 @@ export default function ReservationsView({
   // Navigation & View Mode
   const [activeTab, setActiveTab] = useState(initialTab || 'all'); // 'all' | 'arrivals' | 'in_house' | 'departures'
   const [viewMode, setViewMode] = useState('list'); // 'list' (Table View matching screenshot) | 'grid'
+
+  useEffect(() => {
+    if (initialTab && initialTab !== activeTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   const [bookingType, setBookingType] = useState('ALL'); // 'ALL' | 'GROUP'
   const [editingReservation, setEditingReservation] = useState(null);
-  const [isCashDrawerOpen, setIsCashDrawerOpen] = useState(false);
 
   // Workflow Modals: Step 2 Check-in & Step 4 Check-out
   const [checkInModalRes, setCheckInModalRes] = useState(null);
@@ -153,6 +158,16 @@ export default function ReservationsView({
       departures: Math.max(1, reservations.filter((r) => r.status === 'checked_out' && (r.actualCheckOutDate === businessDate || r.checkOutDate === businessDate)).length)
     };
   }, [reservations, businessDate]);
+
+  const statusTabs = useMemo(
+    () => [
+      { id: 'all', label: 'Reservations', count: counts.all },
+      { id: 'arrivals', label: 'Arrivals', count: counts.arrivals },
+      { id: 'in_house', label: 'In-house', count: counts.in_house },
+      { id: 'departures', label: 'Departures', count: counts.departures }
+    ],
+    [counts.all, counts.arrivals, counts.in_house, counts.departures]
+  );
 
   // Filter reservations
   const filteredReservations = useMemo(() => {
@@ -298,15 +313,6 @@ export default function ReservationsView({
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
-            className="btn-open-cash-drawer"
-            onClick={() => setIsCashDrawerOpen(true)}
-            title="Open Cash Drawer"
-          >
-            <span style={{ fontSize: '15px', lineHeight: 1 }}>🪙</span>
-            <span>Open Cash Drawer</span>
-          </button>
-          <button
-            type="button"
             className="btn-create-reservation"
             onClick={onNewReservation}
           >
@@ -316,29 +322,14 @@ export default function ReservationsView({
         </div>
       </div>
 
-      {/* 2. Status Tabs Bar */}
-      <div className="res-tabs-bar">
-        {[
-          { id: 'all', label: 'Reservations', count: counts.all },
-          { id: 'arrivals', label: 'Arrivals', count: counts.arrivals },
-          { id: 'in_house', label: 'In-house', count: counts.in_house },
-          { id: 'departures', label: 'Departures', count: counts.departures }
-        ].map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              className={`res-tab-btn ${isActive ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <span className="tab-label-text">{tab.label}</span>
-              <span className={`tab-counter-pill ${isActive ? 'active' : ''}`}>
-                {tab.count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {/* 2. Status Tabs Bar with Smooth Sliding Active Underline Indicator */}
+      <SlidingTabBar
+        tabs={statusTabs}
+        activeTab={activeTab}
+        onChange={(tabId) => setActiveTab(tabId)}
+        className="mb-1"
+        ariaLabel="Reservation status views"
+      />
 
       {/* 3. Horizontal Filter Bar & Actions (Exact OTAL PMS Specification) */}
       <ReservationsToolbar
@@ -535,12 +526,6 @@ export default function ReservationsView({
           }
           setCancellingRes(null);
         }}
-      />
-
-      {/* Cash Drawer Management Modal */}
-      <CashDrawerModal
-        isOpen={isCashDrawerOpen}
-        onClose={() => setIsCashDrawerOpen(false)}
       />
 
       {/* Step 8: Amend Stay Slide-Over Drawer (Exact OTAL PMS Match) */}

@@ -23,7 +23,6 @@ import {
 } from 'lucide-react';
 import { calculateRoomTax } from '../../services/taxEngine';
 import ReservationConfirmationModal from './ReservationConfirmationModal';
-import CashDrawerModal from './CashDrawerModal';
 import CustomTimePickerModal from '../common/CustomTimePickerModal';
 import CustomDatePicker from '../common/CustomDatePicker';
 import { navigate } from '../../services/router';
@@ -215,7 +214,6 @@ export default function AddReservationView({
   const [bookingSource, setBookingSource] = useState('walk-in');
   const [sendConfirmationMail, setSendConfirmationMail] = useState(true);
   const [createdReservation, setCreatedReservation] = useState(null);
-  const [isCashDrawerOpen, setIsCashDrawerOpen] = useState(false);
 
   // Sync dates when explicit initialData is passed (e.g. clicking a specific cell on calendar)
   useEffect(() => {
@@ -305,7 +303,8 @@ export default function AddReservationView({
       roomTypeId: defaultRoomTypeId,
       ratePlanCode: '',
       ratePlanName: '',
-      roomId: initialData?.room?.id || 'unassigned',
+      roomId: initialData?.room?.id || '',
+      roomNumber: initialData?.room?.roomNumber || '',
       roomsCount: 1,
       adults: 1,
       children: 2,
@@ -380,10 +379,15 @@ export default function AddReservationView({
           }
         }
 
+        const firstAvail = allRooms.find(
+          (rmItem) => isMatchingRoomType(rmItem, rt.id) && isRoomAvailableForRow(rmItem, rmId)
+        );
+
         return {
           ...r,
           roomTypeId: rt.id,
-          roomId: 'unassigned',
+          roomId: firstAvail ? firstAvail.id : '',
+          roomNumber: firstAvail ? firstAvail.roomNumber : '',
           ratePlanCode: updatedRatePlanCode,
           ratePlanName: updatedRatePlanName,
           adults: rt.baseAdults || 1,
@@ -508,12 +512,27 @@ export default function AddReservationView({
   useEffect(() => {
     setConfiguredRooms((prev) =>
       prev.map((rm) => {
-        if (!rm.roomId || rm.roomId === 'unassigned') return rm;
+        if (!rm.roomId || rm.roomId === 'unassigned') {
+          const avail = allRooms.find(
+            (r) => isMatchingRoomType(r, rm.roomTypeId) && isRoomAvailableForRow(r, rm.id)
+          );
+          if (avail) {
+            return { ...rm, roomId: avail.id, roomNumber: avail.roomNumber };
+          }
+          return { ...rm, roomId: '', roomNumber: '' };
+        }
         const targetRoom = allRooms.find((r) =>
           isResMatchingRoom({ roomId: rm.roomId, roomNumber: rm.roomId }, r)
         );
         if (!targetRoom || !isRoomAvailableForRow(targetRoom, rm.id)) {
-          return { ...rm, roomId: 'unassigned', roomNumber: '' };
+          const fallback = allRooms.find(
+            (r) => isMatchingRoomType(r, rm.roomTypeId) && isRoomAvailableForRow(r, rm.id)
+          );
+          return {
+            ...rm,
+            roomId: fallback ? fallback.id : '',
+            roomNumber: fallback ? fallback.roomNumber : ''
+          };
         }
         return rm;
       })
@@ -521,6 +540,13 @@ export default function AddReservationView({
   }, [checkInDate, checkOutDate, allReservations, allMaintenanceBlocks, allRooms]);
 
   const handleSelectRoomNo = (rmId, roomIdVal) => {
+    if (!roomIdVal || roomIdVal === 'unassigned') {
+      setConfiguredRooms((prev) =>
+        prev.map((r) => (r.id === rmId ? { ...r, roomId: '', roomNumber: '' } : r))
+      );
+      setActiveDropdown(null);
+      return;
+    }
     const selectedObj = allRooms.find((r) => r.id === roomIdVal || r.roomNumber === roomIdVal);
     const selNum = String(selectedObj?.roomNumber || roomIdVal).trim().toLowerCase().replace(/^rm_/, '');
     const selectedRt = selectedObj
@@ -533,23 +559,21 @@ export default function AddReservationView({
           return {
             ...r,
             roomId: roomIdVal,
-            roomNumber: selectedObj?.roomNumber || (roomIdVal !== 'unassigned' ? roomIdVal : ''),
+            roomNumber: selectedObj?.roomNumber || roomIdVal,
             roomTypeId: selectedObj?.roomTypeId || r.roomTypeId,
             roomTypeName: selectedRt?.name || r.roomTypeName
           };
         }
         // If another row already had this room assigned, clear it to avoid duplicate room assignment
-        if (roomIdVal !== 'unassigned') {
-          const rNum = String(r.roomNumber || r.roomId).trim().toLowerCase().replace(/^rm_/, '');
-          if (
-            rNum === selNum ||
-            isResMatchingRoom(
-              { roomId: r.roomId, roomNumber: r.roomId },
-              selectedObj || { id: roomIdVal, roomNumber: roomIdVal }
-            )
-          ) {
-            return { ...r, roomId: 'unassigned', roomNumber: '' };
-          }
+        const rNum = String(r.roomNumber || r.roomId).trim().toLowerCase().replace(/^rm_/, '');
+        if (
+          rNum === selNum ||
+          isResMatchingRoom(
+            { roomId: r.roomId, roomNumber: r.roomId },
+            selectedObj || { id: roomIdVal, roomNumber: roomIdVal }
+          )
+        ) {
+          return { ...r, roomId: '', roomNumber: '' };
         }
         return r;
       })
@@ -572,17 +596,20 @@ export default function AddReservationView({
   };
 
   const handleAddRoomRow = () => {
-    const defaultRt = roomTypes.find((rt) => rt.id === defaultRoomTypeId);
+    const defaultRt = roomTypes.find((rt) => rt.id === defaultRoomTypeId) || roomTypes[0];
     const nextId = (configuredRooms.reduce((max, r) => Math.max(max, r.id), 0) || 0) + 1;
+    const firstAvail = allRooms.find(
+      (r) => defaultRt && isMatchingRoomType(r, defaultRt.id) && isRoomAvailableForRow(r, nextId)
+    );
     setConfiguredRooms((prev) => [
       ...prev,
       {
         id: nextId,
-        roomTypeId: defaultRoomTypeId,
+        roomTypeId: defaultRt?.id || defaultRoomTypeId,
         ratePlanCode: '',
         ratePlanName: '',
-        roomId: 'unassigned',
-        roomNumber: '',
+        roomId: firstAvail ? firstAvail.id : '',
+        roomNumber: firstAvail ? firstAvail.roomNumber : '',
         roomsCount: 1,
         adults: defaultRt?.baseAdults || 1,
         children: defaultRt?.baseChildren ?? 0,
@@ -594,15 +621,18 @@ export default function AddReservationView({
   const handleRemoveRoomRow = (id) => {
     setConfiguredRooms((prev) => {
       if (prev.length <= 1) {
-        const defaultRt = roomTypes.find((rt) => rt.id === defaultRoomTypeId);
+        const defaultRt = roomTypes.find((rt) => rt.id === defaultRoomTypeId) || roomTypes[0];
+        const firstAvail = allRooms.find(
+          (r) => defaultRt && isMatchingRoomType(r, defaultRt.id) && isRoomAvailableForRow(r, 1)
+        );
         return [
           {
             id: 1,
-            roomTypeId: defaultRoomTypeId,
+            roomTypeId: defaultRt?.id || defaultRoomTypeId,
             ratePlanCode: '',
             ratePlanName: '',
-            roomId: 'unassigned',
-            roomNumber: '',
+            roomId: firstAvail ? firstAvail.id : '',
+            roomNumber: firstAvail ? firstAvail.roomNumber : '',
             roomsCount: 1,
             adults: defaultRt?.baseAdults || 1,
             children: defaultRt?.baseChildren ?? 0,
@@ -851,17 +881,7 @@ export default function AddReservationView({
           <span className="transition-colors text-gray-900 font-bold otal-header-crumb-active">Add Reservation</span>
         </div>
         <div className="flex-1 max-w-md px-8 otal-header-spacer" />
-        <div className="flex items-center gap-3 otal-header-actions">
-          <button
-            type="button"
-            className="justify-center whitespace-nowrap small-title-4 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed border hover:text-accent-foreground h-8 rounded-full border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold flex items-center gap-1.5 px-3 cursor-pointer shadow-2xs btn-otal-cash-drawer"
-            onClick={() => setIsCashDrawerOpen(true)}
-            title="Open Cash Drawer"
-          >
-            <span className="material-symbols-outlined select-none text-amber-600" style={{ fontSize: '16px' }}>point_of_sale</span>
-            <span>Open Cash Drawer</span>
-          </button>
-        </div>
+        <div className="flex items-center gap-3 otal-header-actions" />
       </header>
 
       {/* Main page content wrapper */}
@@ -1225,7 +1245,7 @@ export default function AddReservationView({
                                   ? selectedRoom.roomNumber
                                   : rm.roomId && rm.roomId !== 'unassigned'
                                   ? rm.roomId
-                                  : 'Unassigned'}
+                                  : 'Select Room'}
                               </span>
                               {activeDropdown === `${rm.id}-roomNo` ? (
                                 <ChevronUp size={15} color="#475569" />
@@ -1236,19 +1256,6 @@ export default function AddReservationView({
 
                             {activeDropdown === `${rm.id}-roomNo` && (
                               <div className="room-config-popover" style={{ bottom: 'calc(100% + 4px)', left: 0, minWidth: '150px' }}>
-                                {/* Unassigned Option */}
-                                <div
-                                  className="room-config-popover-item"
-                                  onClick={() => handleSelectRoomNo(rm.id, 'unassigned')}
-                                >
-                                  <span style={{ fontWeight: (!rm.roomId || rm.roomId === 'unassigned') ? 600 : 400 }}>
-                                    Unassigned
-                                  </span>
-                                  {(!rm.roomId || rm.roomId === 'unassigned') && (
-                                    <Check size={14} color="#2563EB" />
-                                  )}
-                                </div>
-
                                 {/* Available Rooms of Selected Room Type */}
                                 {matchingRooms.length > 0 ? (
                                   matchingRooms.map((r) => {
@@ -1730,14 +1737,6 @@ export default function AddReservationView({
         </div>
       </div>
       </div>
-
-      {/* Cash Drawer Management Modal */}
-      {isCashDrawerOpen && (
-        <CashDrawerModal
-          isOpen={isCashDrawerOpen}
-          onClose={() => setIsCashDrawerOpen(false)}
-        />
-      )}
 
       {/* Reservation Confirmation Pop-up with Reservation Number & Summary Card (Step 1.7) */}
       {createdReservation && (

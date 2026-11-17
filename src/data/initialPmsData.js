@@ -940,3 +940,27 @@ export const initialGuests = [
     reservationIds: []
   }
 ];
+
+export const initialTaxRules = [
+  {
+    id: 'tax_rule_india_gst',
+    name: 'India Hotel Slab GST',
+    presentationLabel: 'GST',
+    categoryType: 'GST',
+    calculationMode: 'percentage',
+    priceInclusion: 'EXCLUSIVE',
+    useSlabs: true,
+    slabs: [
+      { min: 1, max: 7500, rate: 5 },
+      { min: 7501, max: null, rate: 18 }
+    ],
+    splits: [
+      { name: 'CGST', share: 0.5 },
+      { name: 'SGST', share: 0.5 }
+    ],
+    status: 'active'
+  }
+];
+
+export const initialServiceCharges = [];
+

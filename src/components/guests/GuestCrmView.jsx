@@ -227,13 +227,6 @@ export default function GuestCrmView({
   const endIndex = Math.min(startIndex + pageSize, totalResults);
   const currentGuests = filteredGuests.slice(startIndex, endIndex);
 
-  // Cash Drawer handler
-  const handleOpenCashDrawer = () => {
-    if (onShowToast) {
-      onShowToast('💵 Cash drawer opened successfully.');
-    }
-  };
-
   return (
     <div className="guests-page-container">
       {/* 1. Top Header Bar matching OTAL PMS */}
@@ -259,17 +252,6 @@ export default function GuestCrmView({
             </>
           )}
         </div>
-
-        {/* Open Cash Drawer Action Button */}
-        <button
-          type="button"
-          className="open-cash-drawer-btn"
-          onClick={handleOpenCashDrawer}
-          title="Open Register Cash Drawer"
-        >
-          <Archive size={14} strokeWidth={2.2} />
-          <span>Open Cash Drawer</span>
-        </button>
       </header>
 
       {/* 2. Main Content Body */}

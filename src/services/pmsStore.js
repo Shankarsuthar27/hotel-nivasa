@@ -14,7 +14,9 @@ import {
   initialOtaChannels,
   initialTeamMembers,
   initialNightAudits,
-  initialAuditTrail
+  initialAuditTrail,
+  initialTaxRules,
+  initialServiceCharges
 } from '../data/initialPmsData';
 import { calculateRoomTax } from './taxEngine';
 import { getRoleDefaultPermissions } from '../data/rolePresets';
@@ -539,6 +541,10 @@ class PMSStore {
         this.restrictions = parsed.restrictions || {};
         this.maintenanceBlocks = parsed.maintenanceBlocks || [];
         this.deletedReservationIds = new Set(parsed.deletedReservationIds || []);
+        this.taxRules = (parsed.taxRules && parsed.taxRules.length > 0)
+          ? parsed.taxRules
+          : JSON.parse(JSON.stringify(initialTaxRules));
+        this.serviceCharges = parsed.serviceCharges || JSON.parse(JSON.stringify(initialServiceCharges));
         this.save();
         return;
       } catch (e) {
@@ -562,6 +568,8 @@ class PMSStore {
     this.teamMembers = JSON.parse(JSON.stringify(initialTeamMembers));
     this.nightAudits = JSON.parse(JSON.stringify(initialNightAudits));
     this.auditTrail = JSON.parse(JSON.stringify(initialAuditTrail));
+    this.taxRules = JSON.parse(JSON.stringify(initialTaxRules));
+    this.serviceCharges = JSON.parse(JSON.stringify(initialServiceCharges));
     this.stopouts = {};
     this.dailyRates = {
       base: {
@@ -604,6 +612,8 @@ class PMSStore {
       dailyRates: this.dailyRates,
       restrictions: this.restrictions,
       maintenanceBlocks: this.maintenanceBlocks,
+      taxRules: this.taxRules,
+      serviceCharges: this.serviceCharges,
       propertiesList: (this.propertiesList || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT'),
       currentUser: this.currentUser || { id: 'usr_owner', name: 'Astha India', role: 'Owner', email: 'owner@hotelastha.com', initials: 'AI', status: 'ACTIVE' },
       isAuthenticated: this.isAuthenticated === true,
@@ -663,6 +673,8 @@ class PMSStore {
       dailyRates: this.dailyRates,
       restrictions: this.restrictions,
       maintenanceBlocks: this.maintenanceBlocks,
+      taxRules: this.taxRules || [],
+      serviceCharges: this.serviceCharges || [],
       propertiesList: (this.propertiesList || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT'),
       currentUser: this.currentUser || { id: 'usr_owner', name: 'Astha India', role: 'Owner', email: 'owner@hotelastha.com', initials: 'AI', status: 'ACTIVE' },
       isAuthenticated: this.isAuthenticated === true,
@@ -3765,6 +3777,122 @@ class PMSStore {
       }
     } else {
       this.deleteDocFromFirestore('ratePlans', planId);
+    }
+    this.save();
+    this.notify();
+    return { success: true };
+  }
+
+  addTaxRule(ruleData) {
+    const id = ruleData.id || `tax_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    const newRule = {
+      id,
+      name: (ruleData.name || 'Custom Tax Rule').trim(),
+      presentationLabel: (ruleData.presentationLabel || ruleData.name || 'TAX').trim(),
+      categoryType: ruleData.categoryType || 'GST',
+      calculationMode: ruleData.calculationMode || 'percentage',
+      priceInclusion: ruleData.priceInclusion || 'EXCLUSIVE',
+      useSlabs: ruleData.useSlabs === true,
+      rate: Number(ruleData.rate) || 0,
+      slabs: Array.isArray(ruleData.slabs) ? ruleData.slabs : [],
+      splits: Array.isArray(ruleData.splits) ? ruleData.splits : [],
+      status: ruleData.status || 'active',
+      createdAt: new Date().toISOString()
+    };
+    this.taxRules = [...(this.taxRules || []), newRule];
+    this.logAudit('CREATE_TAX_RULE', 'PROPERTIES', newRule.id, `Created tax rule ${newRule.name}`);
+    this.save();
+    this.syncDocToFirestore('taxRules', newRule.id, newRule);
+    this.notify();
+    return newRule;
+  }
+
+  updateTaxRule(ruleId, patch) {
+    let updatedRule = null;
+    this.taxRules = (this.taxRules || []).map(r => {
+      if (r.id === ruleId) {
+        updatedRule = {
+          ...r,
+          ...patch,
+          id: r.id,
+          updatedAt: new Date().toISOString()
+        };
+        return updatedRule;
+      }
+      return r;
+    });
+
+    if (updatedRule) {
+      this.logAudit('UPDATE_TAX_RULE', 'PROPERTIES', updatedRule.id, `Updated tax rule ${updatedRule.name}`);
+      this.save();
+      this.syncDocToFirestore('taxRules', updatedRule.id, updatedRule);
+      this.notify();
+    }
+    return updatedRule;
+  }
+
+  deleteTaxRule(ruleId) {
+    const rule = (this.taxRules || []).find(r => r.id === ruleId);
+    this.taxRules = (this.taxRules || []).filter(r => r.id !== ruleId);
+    if (rule) {
+      this.logAudit('DELETE_TAX_RULE', 'PROPERTIES', rule.id, `Deleted tax rule ${rule.name}`);
+      this.deleteDocFromFirestore('taxRules', rule.id);
+    }
+    this.save();
+    this.notify();
+    return { success: true };
+  }
+
+  addServiceCharge(chargeData) {
+    const id = chargeData.id || `svc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    const newCharge = {
+      id,
+      name: (chargeData.name || 'Service Charge').trim(),
+      category: chargeData.category || 'Food & Beverage',
+      sacCode: (chargeData.sacCode || '').trim(),
+      price: Number(chargeData.price) || 0,
+      taxRuleId: chargeData.taxRuleId || '',
+      status: chargeData.status || 'active',
+      createdAt: new Date().toISOString()
+    };
+    this.serviceCharges = [...(this.serviceCharges || []), newCharge];
+    this.logAudit('CREATE_SERVICE_CHARGE', 'PROPERTIES', newCharge.id, `Created service charge ${newCharge.name}`);
+    this.save();
+    this.syncDocToFirestore('serviceCharges', newCharge.id, newCharge);
+    this.notify();
+    return newCharge;
+  }
+
+  updateServiceCharge(chargeId, patch) {
+    let updatedCharge = null;
+    this.serviceCharges = (this.serviceCharges || []).map(s => {
+      if (s.id === chargeId) {
+        updatedCharge = {
+          ...s,
+          ...patch,
+          id: s.id,
+          updatedAt: new Date().toISOString()
+        };
+        return updatedCharge;
+      }
+      return s;
+    });
+
+    if (updatedCharge) {
+      this.logAudit('UPDATE_SERVICE_CHARGE', 'PROPERTIES', updatedCharge.id, `Updated service charge ${updatedCharge.name}`);
+      this.save();
+      this.syncDocToFirestore('serviceCharges', updatedCharge.id, updatedCharge);
+      this.notify();
+    }
+    return updatedCharge;
+  }
+
+  deleteServiceCharge(chargeId) {
+    const charge = (this.serviceCharges || []).find(s => s.id === chargeId);
+    this.serviceCharges = (this.serviceCharges || []).filter(s => s.id !== chargeId);
+    if (charge) {
+      this.logAudit('DELETE_SERVICE_CHARGE', 'PROPERTIES', charge.id, `Deleted service charge ${charge.name}`);
+      this.deleteDocFromFirestore('serviceCharges', charge.id);
     }
     this.save();
     this.notify();

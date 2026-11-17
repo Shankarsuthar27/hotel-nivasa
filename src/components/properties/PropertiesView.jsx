@@ -5,6 +5,7 @@ import RoomsManagementView from './RoomsManagementView';
 import RatePlansView from './RatePlansView';
 import AllPropertiesView from './AllPropertiesView';
 import PropertySettingsView from '../settings/PropertySettingsView';
+import TaxServicesView from './TaxServicesView';
 import './properties.css';
 
 export default function PropertiesView({
@@ -15,9 +16,8 @@ export default function PropertiesView({
   roomTypes = [],
   rooms = [],
   ratePlans = [],
-  taxes = [],
-  services = [],
-  onOpenCashDrawer,
+  taxRules = [],
+  serviceCharges = [],
   onSaveProperty,
   onCreateMealPlan,
   onUpdateMealPlan,
@@ -31,6 +31,12 @@ export default function PropertiesView({
   onCreateRatePlan,
   onUpdateRatePlan,
   onDeleteRatePlan,
+  onCreateTaxRule,
+  onUpdateTaxRule,
+  onDeleteTaxRule,
+  onCreateServiceCharge,
+  onUpdateServiceCharge,
+  onDeleteServiceCharge,
   showToast
 }) {
   const [roomsActiveTab, setRoomsActiveTab] = useState('room-types');
@@ -38,6 +44,7 @@ export default function PropertiesView({
   const [triggerAddRoom, setTriggerAddRoom] = useState(0);
   const [triggerAddMealPlan, setTriggerAddMealPlan] = useState(0);
   const [triggerAddRatePlan, setTriggerAddRatePlan] = useState(0);
+  const [triggerAddTaxRule, setTriggerAddTaxRule] = useState(0);
 
   // Always reset modal triggers when switching sections or tabs
   React.useEffect(() => {
@@ -45,6 +52,7 @@ export default function PropertiesView({
     setTriggerAddRoom(0);
     setTriggerAddMealPlan(0);
     setTriggerAddRatePlan(0);
+    setTriggerAddTaxRule(0);
   }, [subtab, roomsActiveTab]);
 
   const getSubtabTitle = () => {
@@ -72,7 +80,6 @@ export default function PropertiesView({
       <AllPropertiesView
         property={property}
         onSaveProperty={onSaveProperty}
-        onOpenCashDrawer={onOpenCashDrawer}
         showToast={showToast}
       />
     );
@@ -108,17 +115,6 @@ export default function PropertiesView({
 
         {/* Top-Right Action Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {/* Amber Open Cash Drawer Pill Button */}
-          <button
-            type="button"
-            className="properties-cash-drawer-pill"
-            onClick={onOpenCashDrawer}
-            title="Open Register Cash Drawer"
-          >
-            <Archive size={14} strokeWidth={2.2} />
-            <span>Open Cash Drawer</span>
-          </button>
-
           {/* Contextual Action Button for Meal Plans */}
           {subtab === 'meal-plans' && (
             <button
@@ -164,6 +160,17 @@ export default function PropertiesView({
                 <span>Add Room</span>
               </button>
             )
+          )}
+          {/* Contextual Action Button for Tax & Services (Matching Image 1: "+ Create Tax Rule") */}
+          {subtab === 'tax-services' && (
+            <button
+              type="button"
+              className="properties-btn-primary"
+              onClick={() => setTriggerAddTaxRule((prev) => prev + 1)}
+            >
+              <Plus size={16} />
+              <span>Create Tax Rule</span>
+            </button>
           )}
         </div>
       </header>
@@ -257,19 +264,18 @@ export default function PropertiesView({
       )}
 
       {subtab === 'tax-services' && (
-        <div className="properties-content-area">
-          <div className="properties-table-card" style={{ padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-              <Percent size={20} color="#2563EB" />
-              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#0F172A' }}>
-                Taxes & Extra Services
-              </h3>
-            </div>
-            <p style={{ color: '#64748B', fontSize: '13.5px' }}>
-              Configure GST / VAT slabs, SAC codes, and addon service billings.
-            </p>
-          </div>
-        </div>
+        <TaxServicesView
+          taxRules={taxRules}
+          serviceCharges={serviceCharges}
+          triggerAddTaxRule={triggerAddTaxRule}
+          onCreateTaxRule={onCreateTaxRule}
+          onUpdateTaxRule={onUpdateTaxRule}
+          onDeleteTaxRule={onDeleteTaxRule}
+          onCreateServiceCharge={onCreateServiceCharge}
+          onUpdateServiceCharge={onUpdateServiceCharge}
+          onDeleteServiceCharge={onDeleteServiceCharge}
+          showToast={showToast}
+        />
       )}
     </div>
   );

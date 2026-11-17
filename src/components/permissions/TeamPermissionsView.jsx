@@ -101,7 +101,6 @@ export default function TeamPermissionsView({
   initialMemberId,
   initialSubtab,
   onSaveGranularPermissions,
-  onOpenCashDrawer,
   onBack,
   showToast
 }) {
@@ -328,17 +327,6 @@ export default function TeamPermissionsView({
           <span className="permissions-crumb-sep">&gt;</span>
           <span className="permissions-crumb-active">Permissions</span>
         </div>
-
-        {/* Amber Open Cash Drawer Pill Button */}
-        <button
-          type="button"
-          className="permissions-cash-drawer-pill"
-          onClick={onOpenCashDrawer}
-          title="Open Register Cash Drawer"
-        >
-          <Archive size={14} strokeWidth={2.2} />
-          <span>Open Cash Drawer</span>
-        </button>
       </header>
 
       {/* 2. Subtabs Navigation Bar */}
@@ -949,145 +937,6 @@ export default function TeamPermissionsView({
                 disabled={isReadOnly}
               />
             ))}
-          </div>
-        </div>
-
-        {/* CARD 7: Cashier & Cash Drawer Management */}
-        <div className="permissions-card">
-          <div className="permissions-card-header green-tint">
-            <div className="permissions-icon-box green-theme">
-              <Archive size={20} color="#16A34A" />
-            </div>
-            <div>
-              <h4 className="permissions-card-title">Cashier & Cash Drawer Management</h4>
-              <p className="permissions-card-sub">Control shifts, cash drawers, petty cash payouts, safe drops, and supervisor handover</p>
-            </div>
-          </div>
-
-          <div className="perm-item-row">
-            <div className="perm-item-left">
-              <div className="permissions-icon-box gray-theme">
-                <Clock size={18} />
-              </div>
-              <div>
-                <div className="perm-item-title">View Cashier & Shift Logs</div>
-                <div className="perm-item-sub">Access cashier dashboard, active register status, and shift logs</div>
-              </div>
-            </div>
-            <OtalSwitch
-              checked={permissions.cashier?.viewShiftLogs}
-              onChange={() => handleToggle('cashier.viewShiftLogs')}
-              disabled={isReadOnly}
-              ariaLabel="View Cashier & Shift Logs"
-            />
-          </div>
-
-          <div className="perm-item-row">
-            <div className="perm-item-left">
-              <div className="permissions-icon-box gray-theme">
-                <Archive size={18} />
-              </div>
-              <div>
-                <div className="perm-item-title">Open Cashier Shift</div>
-                <div className="perm-item-sub">Allow staff to clock into a cash drawer and set opening float</div>
-              </div>
-            </div>
-            <OtalSwitch
-              checked={permissions.cashier?.openShift}
-              onChange={() => handleToggle('cashier.openShift')}
-              disabled={isReadOnly}
-              ariaLabel="Open Cashier Shift"
-            />
-          </div>
-
-          <div className="perm-item-row">
-            <div className="perm-item-left">
-              <div className="permissions-icon-box gray-theme">
-                <CheckCircle2 size={18} />
-              </div>
-              <div>
-                <div className="perm-item-title">Close Shift & Handover</div>
-                <div className="perm-item-sub">Allow staff to perform currency denomination count and close their own shift</div>
-              </div>
-            </div>
-            <OtalSwitch
-              checked={permissions.cashier?.closeShift}
-              onChange={() => handleToggle('cashier.closeShift')}
-              disabled={isReadOnly}
-              ariaLabel="Close Shift & Handover"
-            />
-          </div>
-
-          <div className="perm-item-row">
-            <div className="perm-item-left">
-              <div className="permissions-icon-box gray-theme">
-                <ArrowRightLeft size={18} />
-              </div>
-              <div>
-                <div className="perm-item-title">Petty Cash In / Out (Pay-In & Pay-Out)</div>
-                <div className="perm-item-sub">Allow recording counter petty cash payouts, receipts, and float replenishments</div>
-              </div>
-            </div>
-            <OtalSwitch
-              checked={permissions.cashier?.pettyCash}
-              onChange={() => handleToggle('cashier.pettyCash')}
-              disabled={isReadOnly}
-              ariaLabel="Petty Cash In / Out"
-            />
-          </div>
-
-          <div className="perm-item-row">
-            <div className="perm-item-left">
-              <div className="permissions-icon-box gray-theme">
-                <Lock size={18} />
-              </div>
-              <div>
-                <div className="perm-item-title">Safe Drop (Transfer to Safe)</div>
-                <div className="perm-item-sub">Allow dropping excess counter cash to the property safe during the shift</div>
-              </div>
-            </div>
-            <OtalSwitch
-              checked={permissions.cashier?.safeDrop}
-              onChange={() => handleToggle('cashier.safeDrop')}
-              disabled={isReadOnly}
-              ariaLabel="Safe Drop"
-            />
-          </div>
-
-          <div className="perm-item-row">
-            <div className="perm-item-left">
-              <div className="permissions-icon-box gray-theme">
-                <AlertTriangle size={18} />
-              </div>
-              <div>
-                <div className="perm-item-title">Force-Close Shift (Supervisor)</div>
-                <div className="perm-item-sub">Authorize supervisors to force-close abandoned shifts to unblock Night Audit</div>
-              </div>
-            </div>
-            <OtalSwitch
-              checked={permissions.cashier?.forceClose}
-              onChange={() => handleToggle('cashier.forceClose')}
-              disabled={isReadOnly}
-              ariaLabel="Force-Close Shift"
-            />
-          </div>
-
-          <div className="perm-item-row">
-            <div className="perm-item-left">
-              <div className="permissions-icon-box gray-theme">
-                <SlidersHorizontal size={18} />
-              </div>
-              <div>
-                <div className="perm-item-title">Manage Cash Drawers & Registers</div>
-                <div className="perm-item-sub">Create and configure physical cash drawer registers and default float amounts</div>
-              </div>
-            </div>
-            <OtalSwitch
-              checked={permissions.cashier?.manageRegisters}
-              onChange={() => handleToggle('cashier.manageRegisters')}
-              disabled={isReadOnly}
-              ariaLabel="Manage Cash Drawers & Registers"
-            />
           </div>
         </div>
 
