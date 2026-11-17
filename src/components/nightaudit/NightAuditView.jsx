@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import NightAuditDetailModal from './NightAuditDetailModal';
+import { CustomCalendar } from '../common/CustomDatePicker';
 import './night-audit.css';
 
 const NA_STORAGE_KEY = 'hotel_astha_night_audit_session_v2';
@@ -329,7 +330,7 @@ export default function NightAuditView({
   const [amendCheckOutDate, setAmendCheckOutDate] = useState('28/10/2026');
   const [showAmendToast, setShowAmendToast] = useState(false);
   const [checkoutNotice, setCheckoutNotice] = useState(null); // { type: 'failed' | 'success' | 'settled', message: '' }
-  const hiddenDateInputRef = React.useRef(null);
+  const [isAmendCalOpen, setIsAmendCalOpen] = useState(false);
 
   const [roomStatusList, setRoomStatusList] = useState(
     () =>
@@ -1527,39 +1528,35 @@ export default function NightAuditView({
                 </p>
 
                 <label className="na-amend-label">New Check-out Date</label>
-                <div className="na-amend-input-wrapper">
+                <div className="na-amend-input-wrapper" style={{ position: 'relative' }}>
                   <input
                     type="text"
                     className="na-amend-input"
                     value={amendCheckOutDate}
                     onChange={(e) => setAmendCheckOutDate(e.target.value)}
+                    onClick={() => setIsAmendCalOpen((prev) => !prev)}
                     placeholder="DD/MM/YYYY"
-                  />
-                  <input
-                    type="date"
-                    ref={hiddenDateInputRef}
-                    style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        const [y, m, d] = e.target.value.split('-');
-                        setAmendCheckOutDate(`${d}/${m}/${y}`);
-                      }
-                    }}
                   />
                   <button
                     type="button"
                     className="na-amend-input-icon-btn"
-                    onClick={() => {
-                      try {
-                        hiddenDateInputRef.current?.showPicker();
-                      } catch (err) {
-                        // ignore
-                      }
-                    }}
+                    onClick={() => setIsAmendCalOpen((prev) => !prev)}
                     title="Choose Date"
                   >
                     <Calendar size={18} />
                   </button>
+
+                  {isAmendCalOpen && (
+                    <CustomCalendar
+                      value={amendCheckOutDate}
+                      outputFormat="dmy"
+                      onChange={(newDmy) => {
+                        setAmendCheckOutDate(newDmy);
+                        setIsAmendCalOpen(false);
+                      }}
+                      onClose={() => setIsAmendCalOpen(false)}
+                    />
+                  )}
                 </div>
 
                 <div className="na-amend-actions">

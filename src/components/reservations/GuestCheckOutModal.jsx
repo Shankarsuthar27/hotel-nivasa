@@ -19,30 +19,28 @@ export default function GuestCheckOutModal({
   onSettleFolio,
   onConfirmCheckOut
 }) {
-  if (!isOpen || !reservation) return null;
-
   const [paymentMode, setPaymentMode] = useState('UPI');
   const [settlementRef, setSettlementRef] = useState('');
   const [isSettling, setIsSettling] = useState(false);
 
-  const guestName = reservation.primaryGuest?.name || 'Guest';
-  const roomNumber = reservation.roomNumber || '102';
-  const roomType = reservation.roomTypeName || 'Delux Room';
-  const checkInDate = reservation.checkInDate || '24/10/2026';
-  const checkOutDate = reservation.checkOutDate || '26/10/2026';
-  const nights = reservation.nights || 2;
+  const guestName = reservation?.primaryGuest?.name || 'Guest';
+  const roomNumber = reservation?.roomNumber || '102';
+  const roomType = reservation?.roomTypeName || 'Delux Room';
+  const checkInDate = reservation?.checkInDate || '24/10/2026';
+  const checkOutDate = reservation?.checkOutDate || '26/10/2026';
+  const nights = reservation?.nights || 2;
 
-  const totalAmount = Number(reservation.totalAmount || 0).toFixed(2);
-  const paidAmount = Number(reservation.paidAmount || 0).toFixed(2);
+  const totalAmount = Number(reservation?.totalAmount || 0).toFixed(2);
+  const paidAmount = Number(reservation?.paidAmount || 0).toFixed(2);
   const balanceDue = Number(
-    reservation.balanceDue !== undefined ? reservation.balanceDue : (totalAmount - paidAmount)
+    reservation?.balanceDue !== undefined ? reservation.balanceDue : (totalAmount - paidAmount)
   );
 
   const isSettled = balanceDue <= 0.01;
 
   // Handle Quick Settlement directly in the modal
   const handleQuickSettle = () => {
-    if (balanceDue <= 0) return;
+    if (balanceDue <= 0 || !reservation) return;
     setIsSettling(true);
     if (onSettleFolio) {
       onSettleFolio(reservation.id, paymentMode, settlementRef || 'Front Desk Checkout Settlement');
@@ -54,6 +52,7 @@ export default function GuestCheckOutModal({
 
   // Handle Check-Out Submission
   const handleCheckOutSubmit = () => {
+    if (!reservation) return;
     if (!isSettled) {
       alert(`Cannot check out: Outstanding balance of ₹${balanceDue.toFixed(2)} must be settled first.`);
       return;
@@ -76,6 +75,8 @@ export default function GuestCheckOutModal({
       };
     }
   }, [isOpen]);
+
+  if (!isOpen || !reservation) return null;
 
   const modalElement = (
     <div className="modal-overlay" onClick={onClose}>

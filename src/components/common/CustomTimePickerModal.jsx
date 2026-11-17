@@ -9,20 +9,24 @@ export default function CustomTimePickerModal({
   isOpen,
   onClose,
   value = '12:00',
+  initialTime,
   onSave,
-  label = 'Select time'
+  label = 'Select time',
+  placement = 'left'
 }) {
+  const effectiveValue = initialTime || value || '12:00';
+
   // Parse initial hour and minute
   const parsedTime = useMemo(() => {
-    if (!value || !value.includes(':')) {
+    if (!effectiveValue || !effectiveValue.includes(':')) {
       return { hour: '12', minute: '00' };
     }
-    const [h, m] = value.split(':');
+    const [h, m] = effectiveValue.split(':');
     return {
       hour: String(h || '12').padStart(2, '0'),
       minute: String(m || '00').padStart(2, '0')
     };
-  }, [value]);
+  }, [effectiveValue]);
 
   const [selectedHour, setSelectedHour] = useState(parsedTime.hour);
   const [selectedMinute, setSelectedMinute] = useState(parsedTime.minute);
@@ -131,7 +135,7 @@ export default function CustomTimePickerModal({
   return (
     <div
       ref={containerRef}
-      className="custom-time-popover"
+      className={`custom-time-popover ${placement === 'right' ? 'placement-right' : ''}`}
       onClick={(e) => e.stopPropagation()}
     >
       {/* 1. Header: "Select time" and big display "12 : 30" */}

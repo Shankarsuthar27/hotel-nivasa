@@ -372,6 +372,30 @@ export default function Sidebar({
                     </div>
                   );
                 })}
+
+              {/* Divider & Sign Out */}
+              <div style={{ height: '1px', backgroundColor: '#E2E8F0', margin: '6px 0' }} />
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '7px 10px',
+                  borderRadius: '6px',
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                  backgroundColor: '#FEF2F2',
+                  color: '#DC2626',
+                  fontWeight: 600
+                }}
+                onClick={() => {
+                  setIsUserSwitcherOpen(false);
+                  if (onLogout) onLogout();
+                }}
+              >
+                <LogOut size={14} color="#DC2626" />
+                <span>Sign Out of Terminal</span>
+              </div>
             </div>
           )}
         </div>

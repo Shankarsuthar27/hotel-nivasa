@@ -25,7 +25,7 @@ export const initialProperty = {
   checkOutTime: '11:00',
   createdAt: '22 Oct 2026',
   status: 'ACTIVE',
-  businessDate: '2026-11-12', // System operational date
+  businessDate: '2026-11-17', // System operational date
   gstin: '',
   legalName: 'HOTEL ASTHA',
   tradeName: 'HOTEL ASTHA',

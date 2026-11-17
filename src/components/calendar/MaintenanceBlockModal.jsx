@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Wrench, X, Trash2, Calendar, AlertTriangle } from 'lucide-react';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 export default function MaintenanceBlockModal({
   isOpen,
@@ -9,14 +10,14 @@ export default function MaintenanceBlockModal({
   onSubmit,
   onDelete
 }) {
-  if (!isOpen) return null;
-
   const isExisting = !!initialData?.id;
 
-  const [roomId, setRoomId] = useState(initialData?.roomId || (initialData?.room?.id || rooms[0]?.id));
+  const [roomId, setRoomId] = useState(initialData?.roomId || (initialData?.room?.id || rooms?.[0]?.id));
   const [startDate, setStartDate] = useState(initialData?.startDate || initialData?.date || '2026-10-24');
   const [endDate, setEndDate] = useState(initialData?.endDate || '2026-10-27');
   const [reason, setReason] = useState(initialData?.reason || 'Air conditioning maintenance & filter replacement');
+
+  if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -72,24 +73,24 @@ export default function MaintenanceBlockModal({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <div className="form-group">
                 <label className="form-label">Block Start Date</label>
-                <input
-                  type="date"
-                  className="form-input"
+                <CustomDatePicker
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  onChange={(val) => setStartDate(val)}
                   disabled={isExisting}
-                  required
+                  outputFormat="iso"
+                  displayFormat="dmy"
                 />
               </div>
               <div className="form-group">
                 <label className="form-label">Estimated End Date</label>
-                <input
-                  type="date"
-                  className="form-input"
+                <CustomDatePicker
                   value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
+                  minDate={startDate}
+                  highlightDate={startDate}
+                  onChange={(val) => setEndDate(val)}
                   disabled={isExisting}
-                  required
+                  outputFormat="iso"
+                  displayFormat="dmy"
                 />
               </div>
             </div>

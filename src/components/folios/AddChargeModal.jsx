@@ -6,6 +6,8 @@ import {
   ChevronDown,
   Search
 } from 'lucide-react';
+import CustomDatePicker from '../common/CustomDatePicker';
+import { getTodayIsoDate } from '../../services/dateUtils';
 
 const CHARGE_CATEGORIES = [
   'Room (Room Rent / Accommodation)',
@@ -31,20 +33,19 @@ export default function AddChargeModal({
   folio = {},
   onConfirmCharge
 }) {
-  if (!isOpen) return null;
-
-  const guestTitle = reservation.primaryGuest?.title || '';
-  const firstName = reservation.primaryGuest?.firstName || '';
-  const lastName = reservation.primaryGuest?.lastName || '';
-  const rawGuestName = reservation.primaryGuest?.name || `${guestTitle} ${firstName} ${lastName}`.trim() || reservation.guestName || 'mr shankar suthar';
+  const guestTitle = reservation?.primaryGuest?.title || '';
+  const firstName = reservation?.primaryGuest?.firstName || '';
+  const lastName = reservation?.primaryGuest?.lastName || '';
+  const rawGuestName = reservation?.primaryGuest?.name || `${guestTitle} ${firstName} ${lastName}`.trim() || reservation?.guestName || 'mr shankar suthar';
 
   const guestFullNameLower = rawGuestName.toLowerCase();
-  const folioNumber = folio.folioNumber || reservation.folioId || 'FOL_1';
-  const roomNumber = reservation.roomNumber || (reservation.assignedRoomId ? reservation.assignedRoomId.replace('rm_', '') : '102');
+  const folioNumber = folio?.folioNumber || reservation?.folioId || 'FOL_1';
+  const roomNumber = reservation?.roomNumber || (reservation?.assignedRoomId ? reservation.assignedRoomId.replace('rm_', '') : '102');
 
   // Form State
   const [selectedFolio, setSelectedFolio] = useState(folioNumber);
   const [selectedRoomNumber, setSelectedRoomNumber] = useState(roomNumber);
+  const [chargeDate, setChargeDate] = useState(getTodayIsoDate());
   const [receiptNumber, setReceiptNumber] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
@@ -70,6 +71,7 @@ export default function AddChargeModal({
     if (isOpen) {
       setSelectedFolio(folioNumber);
       setSelectedRoomNumber(roomNumber);
+      setChargeDate(getTodayIsoDate());
       setReceiptNumber('');
       setSelectedCategory('');
       setIsCategoryDropdownOpen(false);
@@ -78,6 +80,8 @@ export default function AddChargeModal({
       setDescription('');
     }
   }, [isOpen, folioNumber, roomNumber]);
+
+  if (!isOpen) return null;
 
   const filteredCategories = CHARGE_CATEGORIES.filter((cat) =>
     cat.toLowerCase().includes(categorySearch.toLowerCase().trim())
@@ -99,6 +103,7 @@ export default function AddChargeModal({
       onConfirmCharge({
         folioId: selectedFolio,
         roomNumber: selectedRoomNumber,
+        date: chargeDate || getTodayIsoDate(),
         receiptNumber: receiptNumber.trim(),
         reference: receiptNumber.trim() || '-',
         category: selectedCategory,
@@ -175,6 +180,20 @@ export default function AddChargeModal({
               </select>
               <ChevronDown size={16} className="add-charge-chevron" />
             </div>
+          </div>
+
+          {/* Field: Date (Current Date of Making Charge) */}
+          <div className="add-charge-field-group">
+            <label className="add-charge-label">
+              Date<span className="add-charge-required">*</span>
+            </label>
+            <CustomDatePicker
+              value={chargeDate}
+              onChange={(val) => setChargeDate(val)}
+              placeholder="Select date"
+              displayFormat="dmy"
+              outputFormat="iso"
+            />
           </div>
 
           {/* Field 3: Rec/Vou # */}

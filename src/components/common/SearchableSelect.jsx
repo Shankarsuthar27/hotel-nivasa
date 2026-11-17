@@ -10,7 +10,7 @@ export default function SearchableSelect({
   searchPlaceholder = 'Search...',
   disabled = false,
   allowCustom = true,
-  placement = 'auto'
+  placement = 'bottom'
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,11 +49,10 @@ export default function SearchableSelect({
     }
     const rect = containerRef.current.getBoundingClientRect();
     const viewportHeight = window.innerHeight || 800;
-    const popoverHeight = 260;
     const spaceBelow = viewportHeight - rect.bottom;
     const spaceAbove = rect.top;
 
-    if (spaceBelow < popoverHeight && spaceAbove > spaceBelow) {
+    if (spaceBelow < 100 && spaceAbove > 320) {
       setComputedPlacement('top');
     } else {
       setComputedPlacement('bottom');

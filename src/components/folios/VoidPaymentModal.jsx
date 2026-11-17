@@ -14,15 +14,15 @@ export default function VoidPaymentModal({
   transaction,
   onConfirmVoid
 }) {
-  if (!isOpen || !transaction) return null;
-
   const [voidReason, setVoidReason] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const amount = Math.abs(Number(transaction.amount || 0)).toFixed(2);
-  const paymentMethod = transaction.paymentMethod || transaction.particulars || 'Payment';
-  const txDate = transaction.date || '-';
-  const desc = transaction.desc || transaction.description || '-';
+  if (!isOpen || !transaction) return null;
+
+  const amount = Math.abs(Number(transaction?.amount || 0)).toFixed(2);
+  const paymentMethod = transaction?.paymentMethod || transaction?.particulars || 'Payment';
+  const txDate = transaction?.date || '-';
+  const desc = transaction?.desc || transaction?.description || '-';
 
   const handleConfirm = (e) => {
     e.preventDefault();

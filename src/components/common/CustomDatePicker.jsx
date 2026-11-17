@@ -1,189 +1,177 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, ChevronDown, Calendar } from 'lucide-react';
+import ReactDOM from 'react-dom';
+import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import './custom-picker.css';
 
-const MONTH_NAMES = [
+export const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-const WEEKDAY_NAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+export const WEEKDAY_NAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
 /**
- * Parses YYYY-MM-DD, DD/MM/YYYY, or Date object into { day, month (0-11), year }
+ * Parses YYYY-MM-DD, DD/MM/YYYY, or Date object into { year, month (0-11), day }
  */
-function parseDateValue(val) {
-  if (!val) {
-    const today = new Date();
-    return { day: today.getDate(), month: today.getMonth(), year: today.getFullYear(), isEmpty: true };
+export function parseDateValue(val) {
+  if (!val) return null;
+
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return null;
+    return {
+      year: val.getFullYear(),
+      month: val.getMonth(),
+      day: val.getDate()
+    };
   }
 
   if (typeof val === 'string') {
     const clean = val.trim();
-    if (clean.includes('-')) {
-      const parts = clean.split('-').map(Number);
-      if (parts[0] > 1000) {
-        // YYYY-MM-DD
-        return {
-          year: parts[0],
-          month: Math.max(0, Math.min(11, parts[1] - 1)),
-          day: parts[2] || 1,
-          isEmpty: false
-        };
-      }
+    if (!clean) return null;
+
+    // YYYY-MM-DD or YYYY/MM/DD
+    if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(clean)) {
+      const parts = clean.split(/[-/T ]/).map(Number);
+      return {
+        year: parts[0],
+        month: Math.max(0, Math.min(11, parts[1] - 1)),
+        day: parts[2] || 1
+      };
     }
-    if (clean.includes('/')) {
-      const parts = clean.split('/').map(Number);
-      if (parts[0] > 1000) {
-        // YYYY/MM/DD
-        return {
-          year: parts[0],
-          month: Math.max(0, Math.min(11, parts[1] - 1)),
-          day: parts[2] || 1,
-          isEmpty: false
-        };
-      }
-      // DD/MM/YYYY
+
+    // DD/MM/YYYY or DD-MM-YYYY
+    if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(clean)) {
+      const parts = clean.split(/[-/ ]/).map(Number);
       return {
         day: parts[0] || 1,
         month: Math.max(0, Math.min(11, parts[1] - 1)),
-        year: parts[2] || new Date().getFullYear(),
-        isEmpty: false
+        year: parts[2] || new Date().getFullYear()
+      };
+    }
+
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      return {
+        year: d.getFullYear(),
+        month: d.getMonth(),
+        day: d.getDate()
       };
     }
   }
 
-  const d = new Date(val);
-  if (!isNaN(d.getTime())) {
-    return { day: d.getDate(), month: d.getMonth(), year: d.getFullYear(), isEmpty: false };
-  }
-
-  const today = new Date();
-  return { day: today.getDate(), month: today.getMonth(), year: today.getFullYear(), isEmpty: true };
+  return null;
 }
 
 /**
- * Formats day, month (0-11), year to ISO string "YYYY-MM-DD"
+ * Format helpers
  */
-function toIsoDate(day, month, year) {
+export function toIsoDate(year, month, day) {
   const mm = String(month + 1).padStart(2, '0');
   const dd = String(day).padStart(2, '0');
   return `${year}-${mm}-${dd}`;
 }
 
-export default function CustomDatePicker({
+export function toDmyDate(year, month, day) {
+  const mm = String(month + 1).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  return `${dd}/${mm}/${year}`;
+}
+
+/**
+ * Compare two { year, month, day }
+ * < 0 if d1 < d2, 0 if equal, > 0 if d1 > d2
+ */
+export function compareDates(d1, d2) {
+  if (!d1 || !d2) return 0;
+  if (d1.year !== d2.year) return d1.year - d2.year;
+  if (d1.month !== d2.month) return d1.month - d2.month;
+  return d1.day - d2.day;
+}
+
+/**
+ * CustomCalendar Popover Component
+ * Exactly matches the visual design in the reference screenshot
+ */
+export function CustomCalendar({
   value,
   onChange,
-  placeholder = 'Select date',
-  disabled = false,
-  minYear = 1920,
-  maxYear = 2035,
-  placement = 'auto'
+  minDate,
+  maxDate,
+  highlightDate,
+  outputFormat = 'iso', // 'iso' ('YYYY-MM-DD') or 'dmy' ('DD/MM/YYYY')
+  onClose,
+  className = '',
+  style = {},
+  placement = 'bottom'
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [showMonthMenu, setShowMonthMenu] = useState(false);
-  const [showYearMenu, setShowYearMenu] = useState(false);
-  const [computedPlacement, setComputedPlacement] = useState('bottom');
-
-  const containerRef = useRef(null);
   const popoverRef = useRef(null);
-  const activeYearRef = useRef(null);
 
-  // Parse currently selected date
-  const parsed = useMemo(() => parseDateValue(value), [value]);
+  // Parse current values
+  const parsedValue = useMemo(() => parseDateValue(value), [value]);
+  const parsedMin = useMemo(() => parseDateValue(minDate), [minDate]);
+  const parsedMax = useMemo(() => parseDateValue(maxDate), [maxDate]);
+  const parsedHighlight = useMemo(() => parseDateValue(highlightDate), [highlightDate]);
+
+  // Today
+  const today = useMemo(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
+  }, []);
 
   // Calendar View month & year
-  const [viewYear, setViewYear] = useState(parsed.year);
-  const [viewMonth, setViewMonth] = useState(parsed.month);
+  const [viewYear, setViewYear] = useState(() => {
+    if (parsedValue) return parsedValue.year;
+    if (parsedMin) return parsedMin.year;
+    return today.year;
+  });
 
-  // Sync view when value changes externally
+  const [viewMonth, setViewMonth] = useState(() => {
+    if (parsedValue) return parsedValue.month;
+    if (parsedMin) return parsedMin.month;
+    return today.month;
+  });
+
+  // Quick picker view for fast Month / Year jumps
+  const [quickViewMode, setQuickViewMode] = useState('days'); // 'days' | 'months' | 'years'
+  const [autoPlacement, setAutoPlacement] = useState(placement);
+
+  // Auto detect viewport boundary overflow to keep calendar fully on screen (for inline/non-portal popovers)
   useEffect(() => {
-    setViewYear(parsed.year);
-    setViewMonth(parsed.month);
-  }, [parsed.year, parsed.month]);
+    if (placement === 'portal' || className?.includes('portal-popover')) return;
+    if (!popoverRef.current) return;
+    const rect = popoverRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
 
-  // Calculate placement (top or bottom)
-  const calculatePlacement = () => {
-    if (!containerRef.current) return;
-    if (placement !== 'auto') {
-      setComputedPlacement(placement);
-      return;
-    }
-    const rect = containerRef.current.getBoundingClientRect();
-    const viewportHeight = window.innerHeight || 800;
-    const popoverHeight = 340;
-    const spaceBelow = viewportHeight - rect.bottom;
-    const spaceAbove = rect.top;
+    const isRight = placement.includes('right') || rect.right > viewportWidth - 12;
+    const isTop = placement.includes('top') || (rect.bottom > viewportHeight - 12 && rect.top > 350);
 
-    if (spaceBelow < popoverHeight && spaceAbove > spaceBelow) {
-      setComputedPlacement('top');
-    } else {
-      setComputedPlacement('bottom');
-    }
-  };
+    const calculated = `${isTop ? 'top' : 'bottom'}-${isRight ? 'right' : 'left'}`;
+    setAutoPlacement(calculated);
+  }, [placement, className]);
 
-  const toggleOpen = () => {
-    if (disabled) return;
-    if (!isOpen) {
-      calculatePlacement();
-      setViewYear(parsed.year);
-      setViewMonth(parsed.month);
-      setIsOpen(true);
-      setShowMonthMenu(false);
-      setShowYearMenu(false);
-    } else {
-      setIsOpen(false);
-      setShowMonthMenu(false);
-      setShowYearMenu(false);
-    }
-  };
-
-  // Close on outside click
+  // Sync view when external value changes
   useEffect(() => {
-    function handleClickOutside(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-        setShowMonthMenu(false);
-        setShowYearMenu(false);
+    if (parsedValue) {
+      setViewYear(parsedValue.year);
+      setViewMonth(parsedValue.month);
+    }
+  }, [parsedValue?.year, parsedValue?.month]);
+
+  // Outside click listener
+  useEffect(() => {
+    function handleDocClick(e) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target)) {
+        if (onClose) onClose();
       }
     }
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
-
-  // Close on Escape
-  useEffect(() => {
-    function handleKeyDown(e) {
-      if (e.key === 'Escape') {
-        setIsOpen(false);
-        setShowMonthMenu(false);
-        setShowYearMenu(false);
-      }
-    }
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-    }
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen]);
-
-  // Scroll active year into view when year menu opens
-  useEffect(() => {
-    if (showYearMenu && activeYearRef.current) {
-      activeYearRef.current.scrollIntoView({ block: 'center' });
-    }
-  }, [showYearMenu]);
+    document.addEventListener('mousedown', handleDocClick);
+    return () => document.removeEventListener('mousedown', handleDocClick);
+  }, [onClose]);
 
   // Navigation handlers
   const handlePrevMonth = (e) => {
     e.stopPropagation();
-    setShowMonthMenu(false);
-    setShowYearMenu(false);
     if (viewMonth === 0) {
       setViewMonth(11);
       setViewYear((y) => y - 1);
@@ -194,8 +182,6 @@ export default function CustomDatePicker({
 
   const handleNextMonth = (e) => {
     e.stopPropagation();
-    setShowMonthMenu(false);
-    setShowYearMenu(false);
     if (viewMonth === 11) {
       setViewMonth(0);
       setViewYear((y) => y + 1);
@@ -204,24 +190,26 @@ export default function CustomDatePicker({
     }
   };
 
-  const handleSelectDay = (day, month = viewMonth, year = viewYear) => {
-    const iso = toIsoDate(day, month, year);
-    if (onChange) {
-      onChange(iso);
-    }
-    setIsOpen(false);
-    setShowMonthMenu(false);
-    setShowYearMenu(false);
-  };
+  // Select day handler
+  const handleDaySelect = (day, month = viewMonth, year = viewYear, e) => {
+    if (e) e.stopPropagation();
 
-  // Generate Year options
-  const yearOptions = useMemo(() => {
-    const list = [];
-    for (let y = minYear; y <= maxYear; y++) {
-      list.push(y);
+    // Check min/max disabled
+    const targetDate = { year, month, day };
+    if (parsedMin && compareDates(targetDate, parsedMin) < 0) return;
+    if (parsedMax && compareDates(targetDate, parsedMax) > 0) return;
+
+    const isoStr = toIsoDate(year, month, day);
+    const dmyStr = toDmyDate(year, month, day);
+    const result = outputFormat === 'dmy' ? dmyStr : isoStr;
+
+    if (onChange) {
+      onChange(result, { year, month, day, iso: isoStr, dmy: dmyStr });
     }
-    return list;
-  }, [minYear, maxYear]);
+    if (onClose) {
+      onClose();
+    }
+  };
 
   // Calendar Day Grid calculations
   const daysInCurrentMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
@@ -248,182 +236,423 @@ export default function CustomDatePicker({
     nextDays.push(i);
   }
 
-  // Display text in the trigger
-  const displayText = !parsed.isEmpty ? toIsoDate(parsed.day, parsed.month, parsed.year) : '';
+  // Year options for quick jump (around viewYear)
+  const yearOptions = useMemo(() => {
+    const list = [];
+    const base = Math.floor(viewYear / 12) * 12;
+    for (let y = base - 2; y <= base + 15; y++) {
+      list.push(y);
+    }
+    return list;
+  }, [viewYear]);
 
   return (
-    <div className="custom-picker-wrap" ref={containerRef}>
+    <div
+      ref={popoverRef}
+      className={`custom-calendar-popover placement-${autoPlacement || placement} ${className}`}
+      style={style}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Header Bar matching Reference Image */}
+      <div className="custom-cal-header">
+        {/* Previous Month Button (Boxed rounded button) */}
+        <button
+          type="button"
+          className="custom-cal-nav-btn"
+          onClick={handlePrevMonth}
+          aria-label="Previous month"
+        >
+          <ChevronLeft size={16} strokeWidth={2.4} />
+        </button>
+
+        {/* Center Title (Bold "Month Year", click to toggle quick jump) */}
+        <div
+          className="custom-cal-title"
+          onClick={() => {
+            setQuickViewMode((prev) => (prev === 'days' ? 'months' : 'days'));
+          }}
+          title="Click to jump month or year"
+        >
+          {MONTH_NAMES[viewMonth]} {viewYear}
+        </div>
+
+        {/* Next Month Button (Boxed rounded button) */}
+        <button
+          type="button"
+          className="custom-cal-nav-btn"
+          onClick={handleNextMonth}
+          aria-label="Next month"
+        >
+          <ChevronRight size={16} strokeWidth={2.4} />
+        </button>
+      </div>
+
+      {/* Quick Month Selector View */}
+      {quickViewMode === 'months' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b' }}>Select Month</span>
+            <button
+              type="button"
+              className="custom-cal-switch-btn"
+              onClick={() => setQuickViewMode('years')}
+            >
+              {viewYear} ▾
+            </button>
+          </div>
+          <div className="custom-cal-quick-picker">
+            {MONTH_NAMES.map((name, idx) => {
+              const isCurrent = viewMonth === idx;
+              return (
+                <div
+                  key={name}
+                  className={`custom-cal-quick-item ${isCurrent ? 'active' : ''}`}
+                  onClick={() => {
+                    setViewMonth(idx);
+                    setQuickViewMode('days');
+                  }}
+                >
+                  {name.substring(0, 3)}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Quick Year Selector View */}
+      {quickViewMode === 'years' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b' }}>Select Year</span>
+            <button
+              type="button"
+              className="custom-cal-switch-btn"
+              onClick={() => setQuickViewMode('months')}
+            >
+              Back to Months
+            </button>
+          </div>
+          <div className="custom-cal-quick-picker">
+            {yearOptions.map((y) => {
+              const isCurrent = viewYear === y;
+              return (
+                <div
+                  key={y}
+                  className={`custom-cal-quick-item ${isCurrent ? 'active' : ''}`}
+                  onClick={() => {
+                    setViewYear(y);
+                    setQuickViewMode('months');
+                  }}
+                >
+                  {y}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Standard Days View */}
+      {quickViewMode === 'days' && (
+        <>
+          {/* Weekday Row (Su Mo Tu We Th Fr Sa) */}
+          <div className="custom-cal-weekdays">
+            {WEEKDAY_NAMES.map((w) => (
+              <span key={w} className="custom-cal-weekday">
+                {w}
+              </span>
+            ))}
+          </div>
+
+          {/* Days Grid */}
+          <div className="custom-cal-grid">
+            {/* Trailing Days of Previous Month */}
+            {prevDays.map((d) => {
+              const prevMonthIdx = viewMonth === 0 ? 11 : viewMonth - 1;
+              const prevYearVal = viewMonth === 0 ? viewYear - 1 : viewYear;
+              const targetDate = { year: prevYearVal, month: prevMonthIdx, day: d };
+              const isDisabled =
+                (parsedMin && compareDates(targetDate, parsedMin) < 0) ||
+                (parsedMax && compareDates(targetDate, parsedMax) > 0);
+
+              return (
+                <div key={`prev-${d}`} className="custom-cal-day-cell">
+                  <button
+                    type="button"
+                    className={`custom-cal-day-btn other-month ${isDisabled ? 'disabled' : ''}`}
+                    onClick={(e) => handleDaySelect(d, prevMonthIdx, prevYearVal, e)}
+                    disabled={isDisabled}
+                  >
+                    {d}
+                  </button>
+                </div>
+              );
+            })}
+
+            {/* Current Month Days */}
+            {currentDays.map((d) => {
+              const targetDate = { year: viewYear, month: viewMonth, day: d };
+
+              // Check if selected
+              const isSelected =
+                parsedValue &&
+                parsedValue.year === viewYear &&
+                parsedValue.month === viewMonth &&
+                parsedValue.day === d;
+
+              // Check if highlighted (e.g. 17 in screenshot or arrival / today)
+              const isHighlighted =
+                parsedHighlight &&
+                parsedHighlight.year === viewYear &&
+                parsedHighlight.month === viewMonth &&
+                parsedHighlight.day === d;
+
+              // Check disabled
+              const isDisabled =
+                (parsedMin && compareDates(targetDate, parsedMin) < 0) ||
+                (parsedMax && compareDates(targetDate, parsedMax) > 0);
+
+              return (
+                <div key={`curr-${d}`} className="custom-cal-day-cell">
+                  <button
+                    type="button"
+                    className={`custom-cal-day-btn ${
+                      isSelected ? 'selected' : ''
+                    } ${isHighlighted && !isSelected ? 'highlighted' : ''} ${
+                      isDisabled ? 'disabled' : ''
+                    }`}
+                    onClick={(e) => handleDaySelect(d, viewMonth, viewYear, e)}
+                    disabled={isDisabled}
+                  >
+                    {d}
+                  </button>
+                </div>
+              );
+            })}
+
+            {/* Leading Days of Next Month */}
+            {nextDays.map((d) => {
+              const nextMonthIdx = viewMonth === 11 ? 0 : viewMonth + 1;
+              const nextYearVal = viewMonth === 11 ? viewYear + 1 : viewYear;
+              const targetDate = { year: nextYearVal, month: nextMonthIdx, day: d };
+              const isDisabled =
+                (parsedMin && compareDates(targetDate, parsedMin) < 0) ||
+                (parsedMax && compareDates(targetDate, parsedMax) > 0);
+
+              return (
+                <div key={`next-${d}`} className="custom-cal-day-cell">
+                  <button
+                    type="button"
+                    className={`custom-cal-day-btn other-month ${isDisabled ? 'disabled' : ''}`}
+                    onClick={(e) => handleDaySelect(d, nextMonthIdx, nextYearVal, e)}
+                    disabled={isDisabled}
+                  >
+                    {d}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * CustomDatePicker Field Component
+ * Supports trigger input box with calendar popover dropdown
+ */
+export default function CustomDatePicker({
+  value,
+  onChange,
+  placeholder = 'Select date',
+  disabled = false,
+  readOnly = false,
+  minDate,
+  maxDate,
+  highlightDate,
+  outputFormat = 'iso', // 'iso' ('YYYY-MM-DD') or 'dmy' ('DD/MM/YYYY')
+  displayFormat = 'dmy', // 'dmy' ('DD/MM/YYYY') or 'iso' ('YYYY-MM-DD')
+  label,
+  required = false,
+  className = '',
+  inputClassName = '',
+  placement = 'auto',
+  style = {}
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 });
+  const containerRef = useRef(null);
+  const popoverPortalRef = useRef(null);
+
+  const parsed = useMemo(() => parseDateValue(value), [value]);
+
+  // Formatted display text
+  const displayText = useMemo(() => {
+    if (!parsed) return '';
+    if (displayFormat === 'iso') {
+      return toIsoDate(parsed.year, parsed.month, parsed.day);
+    }
+    return toDmyDate(parsed.year, parsed.month, parsed.day);
+  }, [parsed, displayFormat]);
+
+  // Dynamic placement calculation
+  const updatePopoverPos = () => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 800;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1200;
+    const popoverHeight = 330;
+    const popoverWidth = 320;
+
+    let top = rect.bottom + 6;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // Prefer opening below; only flip to top if space below is too small AND ample space above exists
+    if (placement === 'top' || (placement === 'auto' && spaceBelow < popoverHeight && spaceAbove >= popoverHeight + 20)) {
+      top = rect.top - popoverHeight - 6;
+    } else if (spaceBelow < popoverHeight && spaceAbove < popoverHeight + 20) {
+      // If neither side has enough clearance, clamp so top is never cut off
+      top = Math.max(16, viewportHeight - popoverHeight - 16);
+    }
+
+    // Horizontal alignment: align with left of trigger, clamp to screen width
+    let left = rect.left;
+    if (placement.includes('right') || left + popoverWidth > viewportWidth - 16) {
+      left = Math.max(16, rect.right - popoverWidth);
+    }
+    if (left < 16) {
+      left = 16;
+    }
+
+    setPopoverPos({ top, left });
+  };
+
+  const toggleOpen = () => {
+    if (disabled || readOnly) return;
+    if (!isOpen) {
+      updatePopoverPos();
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  };
+
+  // Keep popover position synchronized on scroll and resize
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePopoverPos();
+
+    const handleScroll = (e) => {
+      // Don't reposition if scroll event happened inside calendar dropdown
+      if (popoverPortalRef.current && popoverPortalRef.current.contains(e.target)) return;
+      updatePopoverPos();
+    };
+    const handleResize = () => updatePopoverPos();
+
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isOpen]);
+
+  // Click outside listener
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleDocClick(e) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target) &&
+        popoverPortalRef.current &&
+        !popoverPortalRef.current.contains(e.target)
+      ) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleDocClick);
+    return () => document.removeEventListener('mousedown', handleDocClick);
+  }, [isOpen]);
+
+  // Close on Escape
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
+
+  const handleDateChange = (val) => {
+    if (onChange) {
+      onChange(val);
+    }
+    setIsOpen(false);
+  };
+
+  return (
+    <div className={`custom-picker-wrap custom-datetime-control ${className}`} ref={containerRef} style={style}>
+      {label && (
+        <label className="custom-cal-label custom-picker-label">
+          {label} {required && <span className="custom-cal-star custom-picker-star">*</span>}
+        </label>
+      )}
+
       {/* Input Trigger Button */}
       <div
-        className={`custom-picker-trigger ${isOpen ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
+        className={`custom-date-box custom-picker-trigger ${isOpen ? 'active' : ''} ${
+          disabled ? 'disabled' : ''
+        } ${inputClassName}`}
         onClick={toggleOpen}
       >
         {displayText ? (
-          <span className="custom-picker-value">{displayText}</span>
+          <span className="custom-date-text custom-picker-value">{displayText}</span>
         ) : (
           <span className="custom-picker-placeholder">{placeholder}</span>
         )}
         <Calendar size={16} color="#64748b" style={{ flexShrink: 0 }} />
       </div>
 
-      {/* Floating Calendar Popover */}
-      {isOpen && (
-        <div
-          ref={popoverRef}
-          className={`custom-calendar-popover placement-${computedPlacement}`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header Bar */}
-          <div className="custom-cal-header">
-            {/* Prev Month */}
-            <button
-              type="button"
-              className="custom-cal-nav-btn"
-              onClick={handlePrevMonth}
-              aria-label="Previous month"
+      {/* Calendar Popover - Portal rendered at document body with clamped position */}
+      {isOpen && typeof document !== 'undefined'
+        ? ReactDOM.createPortal(
+            <div
+              ref={popoverPortalRef}
+              className="custom-calendar-portal-wrapper"
+              style={{
+                position: 'fixed',
+                top: `${popoverPos.top}px`,
+                left: `${popoverPos.left}px`,
+                zIndex: 9999999,
+                width: '320px'
+              }}
+              onClick={(e) => e.stopPropagation()}
             >
-              <ChevronLeft size={16} strokeWidth={2.2} />
-            </button>
-
-            {/* Selectors: Month & Year */}
-            <div className="custom-cal-selectors">
-              {/* Month Dropdown */}
-              <div
-                className="custom-cal-pill"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowMonthMenu((prev) => !prev);
-                  setShowYearMenu(false);
-                }}
-              >
-                <span>{MONTH_NAMES[viewMonth]}</span>
-                <ChevronDown size={14} color="#64748b" />
-
-                {showMonthMenu && (
-                  <div className="custom-cal-pill-menu month-menu" onClick={(e) => e.stopPropagation()}>
-                    {MONTH_NAMES.map((name, idx) => (
-                      <div
-                        key={name}
-                        className={`custom-cal-menu-item ${viewMonth === idx ? 'active' : ''}`}
-                        onClick={() => {
-                          setViewMonth(idx);
-                          setShowMonthMenu(false);
-                        }}
-                      >
-                        {name.substring(0, 3)}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Year Dropdown */}
-              <div
-                className="custom-cal-pill"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowYearMenu((prev) => !prev);
-                  setShowMonthMenu(false);
-                }}
-              >
-                <span>{viewYear}</span>
-                <ChevronDown size={14} color="#64748b" />
-
-                {showYearMenu && (
-                  <div className="custom-cal-pill-menu year-menu" onClick={(e) => e.stopPropagation()}>
-                    {yearOptions.map((y) => {
-                      const isSelected = viewYear === y;
-                      return (
-                        <div
-                          key={y}
-                          ref={isSelected ? activeYearRef : null}
-                          className={`custom-cal-menu-item ${isSelected ? 'active' : ''}`}
-                          onClick={() => {
-                            setViewYear(y);
-                            setShowYearMenu(false);
-                          }}
-                        >
-                          {y}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Next Month */}
-            <button
-              type="button"
-              className="custom-cal-nav-btn"
-              onClick={handleNextMonth}
-              aria-label="Next month"
-            >
-              <ChevronRight size={16} strokeWidth={2.2} />
-            </button>
-          </div>
-
-          {/* Weekday Row */}
-          <div className="custom-cal-weekdays">
-            {WEEKDAY_NAMES.map((w) => (
-              <span key={w}>{w}</span>
-            ))}
-          </div>
-
-          {/* Day Numbers Grid */}
-          <div className="custom-cal-grid">
-            {/* Previous month trailing days */}
-            {prevDays.map((d) => (
-              <div
-                key={`prev-${d}`}
-                className="custom-cal-day other-month"
-                onClick={() => {
-                  const m = viewMonth === 0 ? 11 : viewMonth - 1;
-                  const y = viewMonth === 0 ? viewYear - 1 : viewYear;
-                  handleSelectDay(d, m, y);
-                }}
-              >
-                {d}
-              </div>
-            ))}
-
-            {/* Current month days */}
-            {currentDays.map((d) => {
-              const isSelected =
-                !parsed.isEmpty &&
-                parsed.year === viewYear &&
-                parsed.month === viewMonth &&
-                parsed.day === d;
-
-              return (
-                <div
-                  key={`curr-${d}`}
-                  className={`custom-cal-day current-month ${isSelected ? 'selected' : ''}`}
-                  onClick={() => handleSelectDay(d, viewMonth, viewYear)}
-                >
-                  {d}
-                </div>
-              );
-            })}
-
-            {/* Next month leading days */}
-            {nextDays.map((d) => (
-              <div
-                key={`next-${d}`}
-                className="custom-cal-day other-month"
-                onClick={() => {
-                  const m = viewMonth === 11 ? 0 : viewMonth + 1;
-                  const y = viewMonth === 11 ? viewYear + 1 : viewYear;
-                  handleSelectDay(d, m, y);
-                }}
-              >
-                {d}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+              <CustomCalendar
+                value={value}
+                onChange={handleDateChange}
+                minDate={minDate}
+                maxDate={maxDate}
+                highlightDate={highlightDate}
+                outputFormat={outputFormat}
+                onClose={() => setIsOpen(false)}
+                className="portal-popover"
+                placement="portal"
+              />
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }
-

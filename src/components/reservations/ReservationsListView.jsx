@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Smile } from 'lucide-react';
+import { User, Smile, MoreVertical } from 'lucide-react';
 import './reservations-list.css';
 import './reservation-card.css';
 
@@ -22,7 +22,7 @@ const BedIcon = ({ size = 18, color = '#2563eb' }) => (
   </svg>
 );
 
-// Date formatter matching image: "Mon 26, Oct 2026"
+// Date formatter matching image: "Fri 13, Nov 2026"
 export const formatStayDate = (dateStr) => {
   if (!dateStr) return '';
   const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
@@ -30,6 +30,31 @@ export const formatStayDate = (dateStr) => {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${days[d.getDay()]} ${d.getDate()}, ${months[d.getMonth()]} ${d.getFullYear()}`;
+};
+
+// Date formatter for Booking Date matching image: "16 Nov 2026, 12:03 PM"
+export const formatBookingDateTime = (val, res) => {
+  if (res?.bookingDateFormatted) return res.bookingDateFormatted;
+  const target = val || res?.createdAt || res?.bookingDate;
+  if (!target) return '';
+  if (
+    typeof target === 'string' &&
+    /^\d{1,2}\s+[A-Za-z]{3}\s+\d{4},\s+\d{1,2}:\d{2}\s+(AM|PM)$/i.test(target.trim())
+  ) {
+    return target.trim();
+  }
+  const d = new Date(target);
+  if (isNaN(d.getTime())) return String(target);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = d.getDate();
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  return `${day} ${month} ${year}, ${hours}:${minutes} ${ampm}`;
 };
 
 export default function ReservationsListView({
@@ -44,7 +69,9 @@ export default function ReservationsListView({
   onCancelReservation,
   onNoShowReservation,
   onOpenDetailsDrawer,
-  onGroupList
+  onGroupList,
+  onAmendStay,
+  onToggleViewMode
 }) {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [showPrintSubmenu, setShowPrintSubmenu] = useState(false);
@@ -129,8 +156,7 @@ export default function ReservationsListView({
                   res.bookingReference ||
                   (res.id ? `#${res.id.toUpperCase()}` : '#RES_5');
 
-                const bookingDate =
-                  res.bookingDateFormatted || res.createdAt || '26 Oct 2026, 1:08 PM';
+                const bookingDate = formatBookingDateTime(res.bookingDate || res.createdAt, res);
 
                 const nights =
                   res.nights !== undefined
@@ -164,7 +190,15 @@ export default function ReservationsListView({
                 const openUpwards = reservations.length > 2 && idx >= reservations.length - 2;
 
                 return (
-                  <tr key={res.id} className={`res-list-tbody-row ${isMenuOpen ? 'row-menu-open' : ''}`}>
+                  <tr
+                    key={res.id}
+                    className={`res-list-tbody-row ${isMenuOpen ? 'row-menu-open' : ''}`}
+                    onClick={() => {
+                      if (onOpenDetailsDrawer) {
+                        onOpenDetailsDrawer(res);
+                      }
+                    }}
+                  >
                     {/* 1. Guest Column */}
                     <td className="res-td-guest">
                       <div className="res-guest-cell">
@@ -174,7 +208,10 @@ export default function ReservationsListView({
                         <div className="res-guest-info">
                           <span
                             className="res-guest-name"
-                            onClick={() => onOpenDetailsDrawer && onOpenDetailsDrawer(res)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onOpenDetailsDrawer) onOpenDetailsDrawer(res);
+                            }}
                             title="Click to view booking details"
                           >
                             {guestName}
@@ -197,7 +234,10 @@ export default function ReservationsListView({
                     <td className="res-td-code">
                       <span
                         className="res-code-cell"
-                        onClick={() => onOpenDetailsDrawer && onOpenDetailsDrawer(res)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onOpenDetailsDrawer) onOpenDetailsDrawer(res);
+                        }}
                         title="Click to view details"
                       >
                         {bookingRef}
@@ -245,9 +285,7 @@ export default function ReservationsListView({
                           setShowPrintSubmenu(false);
                         }}
                       >
-                        <span className="material-symbols-outlined select-none text-slate-500" style={{ fontSize: '20px' }}>
-                          more_vert
-                        </span>
+                        <MoreVertical size={16} color="#64748b" />
                       </button>
 
                       {/* Radix Menu Dropdown - Matching exact OTAL PMS specification */}
@@ -282,7 +320,8 @@ export default function ReservationsListView({
                                   e.stopPropagation();
                                   setOpenMenuId(null);
                                   setShowPrintSubmenu(false);
-                                  if (onEditReservation) onEditReservation(res);
+                                  if (onAmendStay) onAmendStay(res);
+                                  else if (onEditReservation) onEditReservation(res);
                                   else if (onSelectReservation) onSelectReservation(res);
                                 }}
                               >
@@ -575,7 +614,8 @@ export default function ReservationsListView({
                                   e.stopPropagation();
                                   setOpenMenuId(null);
                                   setShowPrintSubmenu(false);
-                                  if (onEditReservation) onEditReservation(res);
+                                  if (onAmendStay) onAmendStay(res);
+                                  else if (onEditReservation) onEditReservation(res);
                                   else if (onSelectReservation) onSelectReservation(res);
                                 }}
                               >
@@ -712,6 +752,25 @@ export default function ReservationsListView({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination Footer matching exact reference image */}
+      <div className="res-table-pagination">
+        <div className="pagination-results-text">
+          Showing <strong>1–{reservations.length}</strong> of <strong>{reservations.length}</strong> results
+        </div>
+
+        <div className="pagination-controls">
+          <button className="pagination-nav-btn" disabled title="Previous page">
+            &lt;
+          </button>
+          <button className="pagination-page-btn active">
+            1
+          </button>
+          <button className="pagination-nav-btn" disabled title="Next page">
+            &gt;
+          </button>
+        </div>
       </div>
     </div>
   );

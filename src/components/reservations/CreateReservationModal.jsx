@@ -11,18 +11,17 @@ import {
   DollarSign
 } from 'lucide-react';
 import { calculateRoomTax } from '../../services/taxEngine';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 export default function CreateReservationModal({
   isOpen,
   onClose,
   initialData, // { room, date } if clicked from tape chart slot
-  roomTypes,
-  rooms,
-  ratePlans,
+  roomTypes = [],
+  rooms = [],
+  ratePlans = [],
   onSubmit
 }) {
-  if (!isOpen) return null;
-
   // Form State
   const [checkInDate, setCheckInDate] = useState(initialData?.date || '2026-10-24');
   const [checkOutDate, setCheckOutDate] = useState('2026-10-26');
@@ -156,6 +155,8 @@ export default function CreateReservationModal({
 
   const balanceDue = Math.max(0, grandTotal - (collectAdvance ? Number(advanceAmount) || 0 : 0));
 
+  if (!isOpen) return null;
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!guestName.trim()) {
@@ -240,22 +241,22 @@ export default function CreateReservationModal({
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
                   <div className="form-group" style={{ marginBottom: '0.5rem' }}>
                     <label className="form-label">Check-In Date</label>
-                    <input
-                      type="date"
-                      className="form-input"
+                    <CustomDatePicker
                       value={checkInDate}
-                      onChange={(e) => setCheckInDate(e.target.value)}
-                      required
+                      onChange={(val) => setCheckInDate(val)}
+                      outputFormat="iso"
+                      displayFormat="dmy"
                     />
                   </div>
                   <div className="form-group" style={{ marginBottom: '0.5rem' }}>
                     <label className="form-label">Check-Out Date</label>
-                    <input
-                      type="date"
-                      className="form-input"
+                    <CustomDatePicker
                       value={checkOutDate}
-                      onChange={(e) => setCheckOutDate(e.target.value)}
-                      required
+                      minDate={checkInDate}
+                      highlightDate={checkInDate}
+                      onChange={(val) => setCheckOutDate(val)}
+                      outputFormat="iso"
+                      displayFormat="dmy"
                     />
                   </div>
                 </div>

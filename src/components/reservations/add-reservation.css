@@ -28,16 +28,140 @@ html.has-res-modal-open {
   overflow: hidden !important;
 }
 
+/* Frosted Background Blur when Confirmation/Notification Modal is Open (Matching Reference) */
+.add-res-fullscreen-overlay.has-modal-open .add-res-page,
+body.has-res-modal-open .add-res-page {
+  filter: blur(5px) !important;
+  -webkit-filter: blur(5px) !important;
+  transition: filter 0.25s ease !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
 .add-res-page {
   display: flex;
   flex-direction: column;
   background-color: #f8fafc;
   min-height: 100%;
   width: 100%;
-  padding: 1.25rem 2rem 3.5rem;
+  padding: 0;
   font-family: var(--font-sans);
   color: #0f172a;
   box-sizing: border-box;
+}
+
+/* Header banner matching OTAL PMS Add Reservation Specification */
+.otal-add-res-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 56px;
+  min-height: 56px;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 24px;
+  color: #020817;
+  background-color: var(--color-white, #ffffff);
+  border-bottom: 0.8px solid oklch(0.967 0.003 264.542);
+  padding: 0 16px;
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+@media (max-width: 1370px) {
+  .otal-add-res-header {
+    height: 48px;
+    min-height: 48px;
+    padding: 0 16px;
+  }
+}
+
+.otal-header-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.otal-header-crumb-home {
+  font-size: 18px !important;
+  color: #6b7280;
+  user-select: none;
+  line-height: 1;
+}
+
+.otal-header-crumb-pms {
+  color: #4b5563;
+  user-select: none;
+}
+
+.otal-header-crumb-chevron {
+  font-size: 16px !important;
+  color: #9ca3af;
+  user-select: none;
+  line-height: 1;
+}
+
+.otal-header-crumb-link {
+  color: #4b5563;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.otal-header-crumb-link:hover {
+  color: #3b82f6;
+}
+
+.otal-header-crumb-active {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.otal-header-spacer {
+  flex: 1;
+  max-width: 28rem;
+  padding: 0 2rem;
+}
+
+.otal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-otal-cash-drawer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  border-radius: 9999px;
+  border: 1px solid #fde68a;
+  background-color: #fffbeb;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  font-family: inherit;
+}
+
+.btn-otal-cash-drawer:hover {
+  background-color: #fef3c7;
+  color: #78350f;
+  border-color: #fcd34d;
+}
+
+.btn-otal-cash-drawer .material-symbols-outlined {
+  font-size: 16px !important;
+  color: #d97706;
+  line-height: 1;
 }
 
 /* 1. Breadcrumbs */
@@ -222,6 +346,15 @@ html.has-res-modal-open {
   background-size: 1rem;
   padding-right: 2.25rem;
   cursor: pointer;
+}
+
+.add-res-select:disabled,
+.add-res-input:disabled {
+  background-color: #f8fafc;
+  color: #334155;
+  cursor: not-allowed;
+  opacity: 0.95;
+  border-color: #e2e8f0;
 }
 
 .add-res-textarea {
@@ -612,6 +745,15 @@ html.has-res-modal-open {
   display: block;
 }
 
+.room-config-rooms-input:disabled,
+.room-config-rooms-input[readonly] {
+  background-color: #f8fafc;
+  color: #0f172a;
+  cursor: not-allowed;
+  user-select: none;
+  border-color: #e2e8f0;
+}
+
 .room-config-rooms-input:focus {
   border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
@@ -855,6 +997,104 @@ html.has-res-modal-open {
   border-top: 1px dashed #e2e8f0;
 }
 
+/* Custom Dropdown & Bill To matching OTAL (Image 1 & Image 2) */
+.add-res-billto-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.add-res-billto-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #020817;
+  white-space: nowrap;
+  min-width: 50px;
+}
+
+.add-res-custom-dropdown-container {
+  position: relative;
+  flex: 1;
+  width: 100%;
+}
+
+.add-res-custom-select-btn {
+  width: 100%;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #020817;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.add-res-custom-select-btn:hover {
+  border-color: #cbd5e1;
+}
+
+.add-res-custom-select-btn.open {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.add-res-custom-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  padding: 4px;
+  z-index: 100;
+  animation: fadeInCustomDropdown 0.15s ease-out;
+}
+
+@keyframes fadeInCustomDropdown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.add-res-custom-popover-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: #020817;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+  user-select: none;
+}
+
+.add-res-custom-popover-item:hover {
+  background-color: #f8fafc;
+}
+
+.add-res-custom-popover-item.selected {
+  font-weight: 600;
+}
+
 /* Bottom Amount & Submit */
 .billing-total-row {
   display: flex;
@@ -899,6 +1139,99 @@ html.has-res-modal-open {
 }
 
 .btn-confirm-booking-full:active {
+  transform: translateY(0);
+}
+
+/* Send Confirmation Mail Checkbox */
+.billing-confirmation-checkbox-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+  font-weight: 500;
+  margin-bottom: 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.billing-confirmation-checkbox-wrap input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid #cbd5e1;
+  cursor: pointer;
+  accent-color: #2563eb;
+}
+
+/* Dual Billing Action Buttons: Check-In & Confirm Booking */
+.add-res-billing-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.btn-billing-checkin {
+  flex: 1;
+  height: 42px;
+  border-radius: 8px;
+  border: none;
+  background-color: #059669;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(5, 150, 105, 0.2);
+}
+
+.btn-billing-checkin.active:hover {
+  background-color: #047857;
+  transform: translateY(-1px);
+}
+
+.btn-billing-checkin.active:active {
+  transform: translateY(0);
+}
+
+.btn-billing-checkin.disabled,
+.btn-billing-checkin:disabled {
+  background-color: #71c29b;
+  color: #ffffff;
+  cursor: not-allowed;
+  opacity: 0.75;
+  box-shadow: none;
+  transform: none;
+}
+
+.btn-billing-confirm-outline {
+  flex: 1;
+  height: 42px;
+  border-radius: 8px;
+  border: 1px solid #3b82f6;
+  background-color: #ffffff;
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.btn-billing-confirm-outline:hover {
+  background-color: #eff6ff;
+  border-color: #2563eb;
+  color: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.btn-billing-confirm-outline:active {
   transform: translateY(0);
 }
 

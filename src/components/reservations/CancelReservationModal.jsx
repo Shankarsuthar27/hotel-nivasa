@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom';
 
 export default function CancelReservationModal({
@@ -7,6 +7,14 @@ export default function CancelReservationModal({
   onConfirm,
   reservation
 }) {
+  useEffect(() => {
+    if (!isOpen) return;
+    document.body.classList.add('has-res-modal-open');
+    return () => {
+      document.body.classList.remove('has-res-modal-open');
+    };
+  }, [isOpen]);
+
   if (!isOpen || !reservation) return null;
 
   const modalContent = (
@@ -22,8 +30,9 @@ export default function CancelReservationModal({
         width: '100vw',
         height: '100vh',
         backgroundColor: 'rgba(15, 23, 42, 0.45)',
-        backdropFilter: 'blur(2px)',
-        zIndex: 99999,
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        zIndex: 100000,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

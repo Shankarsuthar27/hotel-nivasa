@@ -38,7 +38,8 @@ export default function ReportsView({
   rooms = [],
   reservations = [],
   nightAudits = [],
-  folios = {}
+  folios = {},
+  showToast: propShowToast
 }) {
   // Navigation Tabs: 'directory' | 'ota'
   const [activeTab, setActiveTab] = useState('directory');
@@ -99,11 +100,15 @@ export default function ReportsView({
   // Toast Notification
   const [toastMessage, setToastMessage] = useState(null);
 
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 4000);
+  const showToast = (msg, type = null) => {
+    if (propShowToast) {
+      propShowToast(msg, type);
+    } else {
+      setToastMessage(msg);
+      setTimeout(() => {
+        setToastMessage(null);
+      }, 4000);
+    }
   };
 
   // 1. Generate Manager Report

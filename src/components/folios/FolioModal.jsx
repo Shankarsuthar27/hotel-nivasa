@@ -17,6 +17,7 @@ import {
 
 import AddPaymentModal from './AddPaymentModal';
 import AddChargeModal from './AddChargeModal';
+import { getTodayIsoDate } from '../../services/dateUtils';
 
 export default function FolioModal({
   isOpen,
@@ -69,6 +70,7 @@ export default function FolioModal({
     const tax = Math.round(amt * 0.05 * 100) / 100; // 5% GST on F&B/service
 
     onAddTransaction(reservation.id, {
+      date: getTodayIsoDate(),
       type: chargeType,
       desc: chargeDesc || 'Extra Room Service / F&B',
       amount: amt,
@@ -86,6 +88,7 @@ export default function FolioModal({
     if (!paymentAmount || Number(paymentAmount) <= 0) return;
 
     onAddTransaction(reservation.id, {
+      date: getTodayIsoDate(),
       type: 'PAYMENT',
       desc: `Guest Payment (${paymentMode}) Ref: ${paymentRef || 'Front Desk Cashier'}`,
       amount: -Number(paymentAmount),
@@ -513,6 +516,7 @@ export default function FolioModal({
             if (onAddTransaction) {
               onAddTransaction(reservation.id, {
                 folioId: chargeData.folioId,
+                date: chargeData.date || getTodayIsoDate(),
                 type: 'CHARGE',
                 category: chargeData.category,
                 particulars: chargeData.particulars,
@@ -535,6 +539,7 @@ export default function FolioModal({
             if (onAddTransaction) {
               onAddTransaction(reservation.id, {
                 folioId: paymentData.folioId,
+                date: paymentData.date || getTodayIsoDate(),
                 type: 'PAYMENT',
                 mode: paymentData.paymentMethod,
                 amount: Number(paymentData.amount),

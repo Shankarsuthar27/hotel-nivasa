@@ -23,7 +23,18 @@ import {
 } from 'lucide-react';
 import { calculateRoomTax } from '../../services/taxEngine';
 import ReservationConfirmationModal from './ReservationConfirmationModal';
+import CashDrawerModal from './CashDrawerModal';
+import CustomTimePickerModal from '../common/CustomTimePickerModal';
+import CustomDatePicker from '../common/CustomDatePicker';
 import { navigate } from '../../services/router';
+import { pmsStore } from '../../services/pmsStore';
+import {
+  normalizeDateStr,
+  getTodayIsoDate,
+  getNextDayIsoDate,
+  doDateRangesOverlap,
+  isResMatchingRoom
+} from '../../services/dateUtils';
 
 // Venus / Female Icon matching OTAL
 const VenusIcon = ({ size = 15, color = '#c026d3' }) => (
@@ -75,338 +86,24 @@ const ChevronDownCustom = ({ size = 13, color = '#334155', isOpen = false }) => 
   </svg>
 );
 
-// Custom Date Picker matching screenshot DD/MM/YYYY
-function CustomDatePicker({ value, onChange, label = 'Check-in', required = true }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [showMonthMenu, setShowMonthMenu] = useState(false);
-  const [showYearMenu, setShowYearMenu] = useState(false);
-  const containerRef = useRef(null);
-
-  // Parse YYYY-MM-DD
-  const dateObj = useMemo(() => {
-    if (!value) return new Date();
-    const parts = String(value).split('-');
-    if (parts.length === 3) {
-      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-    }
-    const d = new Date(value);
-    return isNaN(d.getTime()) ? new Date() : d;
-  }, [value]);
-
-  const [viewYear, setViewYear] = useState(() => dateObj.getFullYear() || 2026);
-  const [viewMonth, setViewMonth] = useState(() => dateObj.getMonth() ?? 9); // 0-indexed
-
-  useEffect(() => {
-    if (dateObj && !isNaN(dateObj.getTime())) {
-      setViewYear(dateObj.getFullYear());
-      setViewMonth(dateObj.getMonth());
-    }
-  }, [value]);
-
-  // Format as DD/MM/YYYY
-  const displayFormatted = useMemo(() => {
-    if (!value) return '';
-    const parts = String(value).split('-');
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-    return value;
-  }, [value]);
-
-  // Click outside listener
-  useEffect(() => {
-    const handleOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-        setShowMonthMenu(false);
-        setShowYearMenu(false);
-      }
-    };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleOutside);
-  }, [isOpen]);
-
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  const yearOptions = useMemo(() => {
-    const years = [];
-    const current = new Date().getFullYear();
-    for (let y = current - 5; y <= current + 10; y++) {
-      years.push(y);
-    }
-    return years;
-  }, []);
-
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const firstDayIndex = new Date(viewYear, viewMonth, 1).getDay(); // 0 is Sunday
-  const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
-
-  // Trailing previous month days
-  const prevDays = [];
-  for (let i = firstDayIndex - 1; i >= 0; i--) {
-    prevDays.push(daysInPrevMonth - i);
-  }
-
-  // Current month days
-  const currentDays = [];
-  for (let i = 1; i <= daysInMonth; i++) {
-    currentDays.push(i);
-  }
-
-  // Next month leading days
-  const totalCells = prevDays.length + currentDays.length > 35 ? 42 : 35;
-  const nextDays = [];
-  const remaining = totalCells - (prevDays.length + currentDays.length);
-  for (let i = 1; i <= remaining; i++) {
-    nextDays.push(i);
-  }
-
-  const prevMonth = (e) => {
-    e.stopPropagation();
-    setShowMonthMenu(false);
-    setShowYearMenu(false);
-    if (viewMonth === 0) {
-      setViewMonth(11);
-      setViewYear(viewYear - 1);
-    } else {
-      setViewMonth(viewMonth - 1);
-    }
-  };
-
-  const nextMonth = (e) => {
-    e.stopPropagation();
-    setShowMonthMenu(false);
-    setShowYearMenu(false);
-    if (viewMonth === 11) {
-      setViewMonth(0);
-      setViewYear(viewYear + 1);
-    } else {
-      setViewMonth(viewMonth + 1);
-    }
-  };
-
-  const selectDay = (day, m = viewMonth, y = viewYear) => {
-    const mm = String(m + 1).padStart(2, '0');
-    const dd = String(day).padStart(2, '0');
-    onChange(`${y}-${mm}-${dd}`);
-    setIsOpen(false);
-    setShowMonthMenu(false);
-    setShowYearMenu(false);
-  };
-
-  const isSelected = (day) => {
-    if (!value) return false;
-    const parts = String(value).split('-');
-    if (parts.length === 3) {
-      return (
-        parseInt(parts[0], 10) === viewYear &&
-        parseInt(parts[1], 10) === viewMonth + 1 &&
-        parseInt(parts[2], 10) === day
-      );
-    }
-    return false;
-  };
-
-  return (
-    <div className="custom-datetime-control" ref={containerRef}>
-      <label className="custom-cal-label">
-        {label} {required && <span className="custom-cal-star">*</span>}
-      </label>
-      <div
-        className={`custom-date-box ${isOpen ? 'active' : ''}`}
-        onClick={() => {
-          setIsOpen(!isOpen);
-          setShowMonthMenu(false);
-          setShowYearMenu(false);
-        }}
-      >
-        <span className="custom-date-text">{displayFormatted || 'Select Date'}</span>
-        <CalendarIconCustom />
-      </div>
-
-      {isOpen && (
-        <div className="custom-calendar-popover placement-bottom" style={{ width: '310px', padding: '16px' }}>
-          {/* Header Bar matching Image 1 */}
-          <div className="custom-cal-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '12px' }}>
-            <button
-              type="button"
-              className="custom-cal-nav-btn"
-              onClick={prevMonth}
-              aria-label="Previous month"
-            >
-              <ChevronLeft size={16} strokeWidth={2.2} />
-            </button>
-
-            <div className="custom-cal-selectors" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'center' }}>
-              {/* Month Dropdown Pill */}
-              <div
-                className="custom-cal-pill"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowMonthMenu((prev) => !prev);
-                  setShowYearMenu(false);
-                }}
-              >
-                <span>{monthNames[viewMonth]}</span>
-                <ChevronDown size={14} color="#64748b" />
-
-                {showMonthMenu && (
-                  <div className="custom-cal-pill-menu month-menu" onClick={(e) => e.stopPropagation()}>
-                    {monthNames.map((name, idx) => (
-                      <div
-                        key={name}
-                        className={`custom-cal-menu-item ${viewMonth === idx ? 'active' : ''}`}
-                        onClick={() => {
-                          setViewMonth(idx);
-                          setShowMonthMenu(false);
-                        }}
-                      >
-                        {name.substring(0, 3)}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Year Dropdown Pill */}
-              <div
-                className="custom-cal-pill"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowYearMenu((prev) => !prev);
-                  setShowMonthMenu(false);
-                }}
-              >
-                <span>{viewYear}</span>
-                <ChevronDown size={14} color="#64748b" />
-
-                {showYearMenu && (
-                  <div className="custom-cal-pill-menu year-menu" onClick={(e) => e.stopPropagation()}>
-                    {yearOptions.map((y) => (
-                      <div
-                        key={y}
-                        className={`custom-cal-menu-item ${viewYear === y ? 'active' : ''}`}
-                        onClick={() => {
-                          setViewYear(y);
-                          setShowYearMenu(false);
-                        }}
-                      >
-                        {y}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              className="custom-cal-nav-btn"
-              onClick={nextMonth}
-              aria-label="Next month"
-            >
-              <ChevronRight size={16} strokeWidth={2.2} />
-            </button>
-          </div>
-
-          <div className="custom-cal-weekdays">
-            <span>Su</span>
-            <span>Mo</span>
-            <span>Tu</span>
-            <span>We</span>
-            <span>Th</span>
-            <span>Fr</span>
-            <span>Sa</span>
-          </div>
-
-          <div className="custom-cal-grid">
-            {/* Trailing previous month days */}
-            {prevDays.map((d) => (
-              <div
-                key={`prev-${d}`}
-                className="custom-cal-day other-month"
-                onClick={() => {
-                  const m = viewMonth === 0 ? 11 : viewMonth - 1;
-                  const y = viewMonth === 0 ? viewYear - 1 : viewYear;
-                  selectDay(d, m, y);
-                }}
-              >
-                {d}
-              </div>
-            ))}
-
-            {/* Current month days */}
-            {currentDays.map((d) => {
-              const selected = isSelected(d);
-              return (
-                <div
-                  key={`curr-${d}`}
-                  className={`custom-cal-day current-month ${selected ? 'selected' : ''}`}
-                  onClick={() => selectDay(d, viewMonth, viewYear)}
-                >
-                  {d}
-                </div>
-              );
-            })}
-
-            {/* Next month leading days */}
-            {nextDays.map((d) => (
-              <div
-                key={`next-${d}`}
-                className="custom-cal-day other-month"
-                onClick={() => {
-                  const m = viewMonth === 11 ? 0 : viewMonth + 1;
-                  const y = viewMonth === 11 ? viewYear + 1 : viewYear;
-                  selectDay(d, m, y);
-                }}
-              >
-                {d}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Custom Time Picker matching screenshot
-function CustomTimePicker({ value, onChange, label = 'Time', required = true }) {
+// Custom Time Picker matching screenshot using CustomTimePickerModal
+function CustomTimePicker({ value, onChange, label = 'Time', required = true, placement = 'left' }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
 
-  const times = [
-    '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '11:30',
-    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00',
-    '15:30', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'
-  ];
-
-  // Click outside listener
-  useEffect(() => {
-    const handleOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleOutside);
-  }, [isOpen]);
-
   return (
-    <div className="custom-datetime-control" ref={containerRef}>
+    <div
+      className={`custom-datetime-control ${isOpen ? 'has-open-picker' : ''}`}
+      ref={containerRef}
+      style={{ position: 'relative', zIndex: isOpen ? 1300 : undefined }}
+    >
       <label className="custom-cal-label">
         {label} {required && <span className="custom-cal-star">*</span>}
       </label>
       <div
         className={`custom-time-box ${isOpen ? 'active' : ''}`}
         onClick={() => setIsOpen(!isOpen)}
+        style={{ cursor: 'pointer' }}
       >
         <div className="custom-time-left">
           <ClockIconCustom />
@@ -415,54 +112,28 @@ function CustomTimePicker({ value, onChange, label = 'Time', required = true }) 
         <ChevronDownCustom isOpen={isOpen} />
       </div>
 
-      {isOpen && (
-        <div className="time-dropdown-menu">
-          {times.map((t) => (
-            <div
-              key={t}
-              className={`time-dropdown-item ${t === value ? 'selected' : ''}`}
-              onClick={() => {
-                onChange(t);
-                setIsOpen(false);
-              }}
-            >
-              <span>{t}</span>
-              {t === value && <CheckCircle2 size={14} color="#2563eb" />}
-            </div>
-          ))}
-        </div>
-      )}
+      <CustomTimePickerModal
+        isOpen={isOpen}
+        value={value || '14:00'}
+        onClose={() => setIsOpen(false)}
+        onSave={(newTime) => {
+          onChange(newTime);
+          setIsOpen(false);
+        }}
+        label="Select time"
+        placement={placement}
+      />
     </div>
   );
 }
 
-// Helper to get formatted YYYY-MM-DD for today in local time
-function getTodayIsoDate() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-// Helper to get next day (YYYY-MM-DD) from a given YYYY-MM-DD string
-function getNextDayIsoDate(dateStr) {
-  if (!dateStr) return getTodayIsoDate();
-  const parts = String(dateStr).split('-');
-  if (parts.length === 3) {
-    const dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-    dt.setDate(dt.getDate() + 1);
-    const y = dt.getFullYear();
-    const m = String(dt.getMonth() + 1).padStart(2, '0');
-    const d = String(dt.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
-  const dt = new Date(dateStr);
-  dt.setDate(dt.getDate() + 1);
-  const y = dt.getFullYear();
-  const m = String(dt.getMonth() + 1).padStart(2, '0');
-  const d = String(dt.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+// Helper to check if a room belongs to a given room type
+function isMatchingRoomType(room, targetRoomTypeId) {
+  if (!room || !targetRoomTypeId) return false;
+  if (room.roomTypeId === targetRoomTypeId) return true;
+  if (targetRoomTypeId === 'rt_standard' && (room.roomTypeId === 'rt_normal' || room.roomTypeId === 'rt_standard')) return true;
+  if (targetRoomTypeId === 'rt_normal' && (room.roomTypeId === 'rt_normal' || room.roomTypeId === 'rt_standard')) return true;
+  return false;
 }
 
 export default function AddReservationView({
@@ -470,6 +141,8 @@ export default function AddReservationView({
   rooms = [],
   roomTypes = [],
   ratePlans = [],
+  reservations = [],
+  maintenanceBlocks = [],
   initialData = null,
   onBack,
   onNavigate,
@@ -478,6 +151,59 @@ export default function AddReservationView({
   const todayStr = useMemo(() => getTodayIsoDate(), []);
   const initialCheckIn = initialData?.date || initialData?.checkInDate || todayStr;
   const initialCheckOut = initialData?.checkOutDate || getNextDayIsoDate(initialCheckIn);
+
+  // Live subscription to pmsStore for immediate reaction to state updates
+  const [storeState, setStoreState] = useState(() => pmsStore?.getState() || {});
+
+  useEffect(() => {
+    if (!pmsStore?.subscribe) return;
+    const unsub = pmsStore.subscribe((newState) => {
+      setStoreState(newState);
+    });
+    return unsub;
+  }, []);
+
+  // Merge reservations from props and store
+  const allReservations = useMemo(() => {
+    const listProps = Array.isArray(reservations) ? reservations : [];
+    const listStore = Array.isArray(storeState.reservations)
+      ? storeState.reservations
+      : (pmsStore?.getState()?.reservations || []);
+    const map = new Map();
+    [...listProps, ...listStore].forEach((r) => {
+      if (r && (r.id || r.bookingReference)) {
+        map.set(String(r.id || r.bookingReference), r);
+      }
+    });
+    return Array.from(map.values());
+  }, [reservations, storeState.reservations]);
+
+  // Merge rooms from props and store (deduplicated by physical room number)
+  const allRooms = useMemo(() => {
+    const listProps = Array.isArray(rooms) ? rooms : [];
+    const listStore = Array.isArray(storeState.rooms)
+      ? storeState.rooms
+      : (pmsStore?.getState()?.rooms || []);
+    const map = new Map();
+    [...listProps, ...listStore].forEach((rm) => {
+      if (rm && (rm.id || rm.roomNumber)) {
+        const key = String(rm.roomNumber || rm.id).trim().toLowerCase().replace(/^rm_/, '');
+        if (!map.has(key)) {
+          map.set(key, rm);
+        }
+      }
+    });
+    return Array.from(map.values());
+  }, [rooms, storeState.rooms]);
+
+  // Merge maintenance blocks
+  const allMaintenanceBlocks = useMemo(() => {
+    const listProps = Array.isArray(maintenanceBlocks) ? maintenanceBlocks : [];
+    const listStore = Array.isArray(storeState.maintenanceBlocks)
+      ? storeState.maintenanceBlocks
+      : (pmsStore?.getState()?.maintenanceBlocks || []);
+    return [...listProps, ...listStore];
+  }, [maintenanceBlocks, storeState.maintenanceBlocks]);
 
   // Stay Details State - defaults to today's date and next day
   const [checkInDate, setCheckInDate] = useState(initialCheckIn);
@@ -489,6 +215,7 @@ export default function AddReservationView({
   const [bookingSource, setBookingSource] = useState('walk-in');
   const [sendConfirmationMail, setSendConfirmationMail] = useState(true);
   const [createdReservation, setCreatedReservation] = useState(null);
+  const [isCashDrawerOpen, setIsCashDrawerOpen] = useState(false);
 
   // Sync dates when explicit initialData is passed (e.g. clicking a specific cell on calendar)
   useEffect(() => {
@@ -591,7 +318,10 @@ export default function AddReservationView({
   // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(e) {
-      if (!e.target.closest('.room-config-dropdown-container')) {
+      if (
+        !e.target.closest('.room-config-dropdown-container') &&
+        !e.target.closest('.add-res-custom-dropdown-container')
+      ) {
         setActiveDropdown(null);
       }
     }
@@ -683,9 +413,146 @@ export default function AddReservationView({
     setActiveDropdown(null);
   };
 
-  const handleSelectRoomNo = (rmId, roomIdVal) => {
+  // Room availability check: Exclude any room that is booked or occupied for the reservation dates,
+  // in maintenance, or already chosen in another row of this multi-room configuration
+  const isRoomAvailableForRow = (room, forRowId) => {
+    if (!room || !room.id) return false;
+
+    const thisRoomNum = String(room.roomNumber || room.id).trim().toLowerCase().replace(/^rm_/, '');
+
+    // 1. Prevent selecting the exact same room across different rows in this form
+    const isSelectedInOtherRow = configuredRooms.some((other) => {
+      if (other.id === forRowId) return false;
+      if (!other.roomId || other.roomId === 'unassigned') return false;
+      const otherNum = String(other.roomNumber || other.roomId).trim().toLowerCase().replace(/^rm_/, '');
+      if (otherNum === thisRoomNum) return true;
+      return isResMatchingRoom({ roomId: other.roomId, roomNumber: other.roomId }, room);
+    });
+    if (isSelectedInOtherRow) return false;
+
+    // 2. Exclude rooms under maintenance or out of order
+    if (
+      room.status === 'maintenance' ||
+      room.operational === 'maintenance' ||
+      room.operational === 'out_of_order'
+    ) {
+      return false;
+    }
+
+    const reqIn = normalizeDateStr(checkInDate);
+    const reqOut = normalizeDateStr(checkOutDate);
+
+    // 3. Exclude rooms with maintenance blocks overlapping stay dates
+    const hasConflictingBlock = allMaintenanceBlocks.some((mb) => {
+      const match = isResMatchingRoom({ roomId: mb.roomId, roomNumber: mb.roomNumber }, room);
+      if (!match) return false;
+      const mbStart = normalizeDateStr(mb.startDate);
+      const mbEnd = normalizeDateStr(mb.endDate);
+      return reqIn <= mbEnd && reqOut >= mbStart;
+    });
+    if (hasConflictingBlock) return false;
+
+    // 4. Exclude rooms currently marked as occupied in inventory
+    if (
+      room.operational === 'occupied' ||
+      room.status === 'occupied'
+    ) {
+      // Find the holding reservation if any
+      const holdingRes = room.currentReservationId
+        ? allReservations.find(
+            (r) =>
+              r.id === room.currentReservationId ||
+              r.bookingReference === room.currentReservationId
+          )
+        : null;
+
+      if (holdingRes) {
+        const hIn = normalizeDateStr(holdingRes.checkInDate);
+        const hOut = normalizeDateStr(holdingRes.checkOutDate);
+        if (doDateRangesOverlap(reqIn, reqOut, hIn, hOut)) {
+          return false;
+        }
+      }
+      const today = getTodayIsoDate();
+      if (reqIn <= today && reqOut >= today) {
+        return false;
+      }
+    }
+
+    // 5. Exclude rooms with conflicting active bookings in the system
+    const hasConflictingRes = allReservations.some((res) => {
+      if (!res) return false;
+      const statusNorm = (res.status || '').toLowerCase().replace(/[\s-]/g, '_');
+      if (statusNorm === 'cancelled' || statusNorm === 'no_show') return false;
+
+      // Check if this reservation is for this room
+      if (!isResMatchingRoom(res, room)) return false;
+
+      const resIn = normalizeDateStr(res.checkInDate);
+      const resOut = normalizeDateStr(res.checkOutDate);
+
+      if (statusNorm === 'in_house') {
+        const today = getTodayIsoDate();
+        const effectiveResOut = resOut < today ? getNextDayIsoDate(today) : resOut;
+        return doDateRangesOverlap(reqIn, reqOut, resIn, effectiveResOut);
+      }
+
+      return doDateRangesOverlap(reqIn, reqOut, resIn, resOut);
+    });
+    if (hasConflictingRes) return false;
+
+    return true;
+  };
+
+  // Auto-sanitize configured rooms if stay dates change or if an assigned room is no longer available
+  useEffect(() => {
     setConfiguredRooms((prev) =>
-      prev.map((r) => (r.id === rmId ? { ...r, roomId: roomIdVal } : r))
+      prev.map((rm) => {
+        if (!rm.roomId || rm.roomId === 'unassigned') return rm;
+        const targetRoom = allRooms.find((r) =>
+          isResMatchingRoom({ roomId: rm.roomId, roomNumber: rm.roomId }, r)
+        );
+        if (!targetRoom || !isRoomAvailableForRow(targetRoom, rm.id)) {
+          return { ...rm, roomId: 'unassigned', roomNumber: '' };
+        }
+        return rm;
+      })
+    );
+  }, [checkInDate, checkOutDate, allReservations, allMaintenanceBlocks, allRooms]);
+
+  const handleSelectRoomNo = (rmId, roomIdVal) => {
+    const selectedObj = allRooms.find((r) => r.id === roomIdVal || r.roomNumber === roomIdVal);
+    const selNum = String(selectedObj?.roomNumber || roomIdVal).trim().toLowerCase().replace(/^rm_/, '');
+    const selectedRt = selectedObj
+      ? roomTypes.find((rt) => rt.id === selectedObj.roomTypeId || rt.name?.toLowerCase() === String(selectedObj.roomTypeId).toLowerCase())
+      : null;
+
+    setConfiguredRooms((prev) =>
+      prev.map((r) => {
+        if (r.id === rmId) {
+          return {
+            ...r,
+            roomId: roomIdVal,
+            roomNumber: selectedObj?.roomNumber || (roomIdVal !== 'unassigned' ? roomIdVal : ''),
+            roomTypeId: selectedObj?.roomTypeId || r.roomTypeId,
+            roomTypeName: selectedRt?.name || r.roomTypeName
+          };
+        }
+        // If another row already had this room assigned, clear it to avoid duplicate room assignment
+        if (roomIdVal !== 'unassigned') {
+          const rNum = String(r.roomNumber || r.roomId).trim().toLowerCase().replace(/^rm_/, '');
+          if (
+            rNum === selNum ||
+            isResMatchingRoom(
+              { roomId: r.roomId, roomNumber: r.roomId },
+              selectedObj || { id: roomIdVal, roomNumber: roomIdVal }
+            )
+          ) {
+            return { ...r, roomId: 'unassigned', roomNumber: '' };
+          }
+        }
+        return r;
+      })
     );
     setActiveDropdown(null);
   };
@@ -706,14 +573,16 @@ export default function AddReservationView({
 
   const handleAddRoomRow = () => {
     const defaultRt = roomTypes.find((rt) => rt.id === defaultRoomTypeId);
+    const nextId = (configuredRooms.reduce((max, r) => Math.max(max, r.id), 0) || 0) + 1;
     setConfiguredRooms((prev) => [
       ...prev,
       {
-        id: prev.length + 1,
+        id: nextId,
         roomTypeId: defaultRoomTypeId,
         ratePlanCode: '',
         ratePlanName: '',
         roomId: 'unassigned',
+        roomNumber: '',
         roomsCount: 1,
         adults: defaultRt?.baseAdults || 1,
         children: defaultRt?.baseChildren ?? 0,
@@ -733,6 +602,7 @@ export default function AddReservationView({
             ratePlanCode: '',
             ratePlanName: '',
             roomId: 'unassigned',
+            roomNumber: '',
             roomsCount: 1,
             adults: defaultRt?.baseAdults || 1,
             children: defaultRt?.baseChildren ?? 0,
@@ -776,7 +646,7 @@ export default function AddReservationView({
   const [billTo, setBillTo] = useState('Guest');
   const [collectAdvance, setCollectAdvance] = useState(false);
   const [advanceAmount, setAdvanceAmount] = useState('');
-  const [paymentMode, setPaymentMode] = useState('UPI');
+  const [paymentMode, setPaymentMode] = useState('CASH');
   const [paymentReference, setPaymentReference] = useState('');
 
   // Calculations: Nights
@@ -827,8 +697,21 @@ export default function AddReservationView({
   const advanceVal = collectAdvance ? Number(advanceAmount) || 0 : 0;
   const balanceDue = Math.max(0, grandTotal - advanceVal);
 
-  // Handle Form Submit
-  const handleConfirmBooking = async (e) => {
+  // Check if all configured rooms are specifically assigned to an available room
+  const isRoomAssignedAndAvailable = useMemo(() => {
+    if (!configuredRooms || configuredRooms.length === 0) return false;
+    return configuredRooms.every((cr) => {
+      if (!cr.roomId || cr.roomId === 'unassigned') return false;
+      const targetRoom = allRooms.find((r) =>
+        isResMatchingRoom({ roomId: cr.roomId, roomNumber: cr.roomId }, r)
+      );
+      if (!targetRoom) return false;
+      return isRoomAvailableForRow(targetRoom, cr.id);
+    });
+  }, [configuredRooms, allRooms, isRoomAvailableForRow]);
+
+  // Handle Form Submit (Supports 'in_house' direct check-in or 'confirmed')
+  const handleConfirmBooking = async (e, overrideStatus = null) => {
     e?.preventDefault();
     if (!firstName.trim()) {
       alert('Please enter guest First Name');
@@ -848,8 +731,19 @@ export default function AddReservationView({
       return;
     }
 
+    if (overrideStatus === 'in_house' && !isRoomAssignedAndAvailable) {
+      alert('Please assign an available room in Room Configuration to check-in directly.');
+      return;
+    }
+
     const primaryRoom = configuredRooms[0] || {};
     const fullGuestName = `${guestTitle} ${firstName.trim()} ${lastName.trim()}`.trim();
+    const targetStatus = overrideStatus || (reservationType ? reservationType.toLowerCase() : 'confirmed');
+
+    const primaryAssignedRm = allRooms.find((r) => isResMatchingRoom({ roomId: primaryRoom.roomId, roomNumber: primaryRoom.roomId }, r));
+    const effectiveRtId = primaryAssignedRm?.roomTypeId || primaryRoom.roomTypeId;
+    const matchedRtObj = roomTypes.find((rt) => rt.id === effectiveRtId || rt.name?.toLowerCase() === String(effectiveRtId).toLowerCase());
+    const primaryRoomTypeName = matchedRtObj?.name || primaryRoom.roomTypeName || 'Normal';
 
     const bookingPayload = {
       guestName: fullGuestName,
@@ -863,12 +757,38 @@ export default function AddReservationView({
       nights,
       roomsCount: configuredRooms.length || 1,
       roomId: primaryRoom.roomId === 'unassigned' ? '' : primaryRoom.roomId,
-      roomTypeId: primaryRoom.roomTypeId,
+      roomNumber: primaryRoom.roomId && primaryRoom.roomId !== 'unassigned'
+        ? (primaryAssignedRm?.roomNumber || '')
+        : '',
+      roomTypeId: effectiveRtId,
+      roomTypeName: primaryRoomTypeName,
       ratePlanCode: primaryRoom.ratePlanCode || 'BAR_EP',
       baseRatePerNight: Number(primaryRoom.rate) || 2500,
+      totalRoomCharges,
+      taxAmount: totalTaxes,
+      totalAmount: grandTotal,
+      paidAmount: advanceVal,
+      balanceDue,
       adults: Number(primaryRoom.adults) || 1,
       children: Number(primaryRoom.children) || 0,
-      status: reservationType.toLowerCase(),
+      configuredRooms: configuredRooms.map((cr) => {
+        const rowRm = allRooms.find((r) => isResMatchingRoom({ roomId: cr.roomId, roomNumber: cr.roomId }, r));
+        const rowRtId = rowRm?.roomTypeId || cr.roomTypeId;
+        const rowRt = roomTypes.find((rt) => rt.id === rowRtId || rt.name?.toLowerCase() === String(rowRtId).toLowerCase());
+        return {
+          roomId: cr.roomId === 'unassigned' ? '' : cr.roomId,
+          roomNumber: cr.roomId && cr.roomId !== 'unassigned'
+            ? (rowRm?.roomNumber || '')
+            : '',
+          roomTypeId: rowRtId,
+          roomTypeName: rowRt?.name || cr.roomTypeName || 'Normal',
+          ratePlanCode: cr.ratePlanCode,
+          rate: Number(cr.rate) || 0,
+          adults: cr.adults,
+          children: cr.children
+        };
+      }),
+      status: targetStatus,
       bookingSource: bookingSource.toUpperCase().replace('-', '_'),
       marketSegment: marketSegment || 'corporate',
       isVIP,
@@ -877,7 +797,7 @@ export default function AddReservationView({
       isComplimentary,
       isTaxExempt: taxExempt,
       notes: specialRequests,
-      sendConfirmationMail,
+      sendConfirmationMail: !!sendConfirmationMail,
       advanceAmount: advanceVal,
       paymentMethod: paymentMode,
       paymentReference: paymentReference || 'Direct',
@@ -908,42 +828,46 @@ export default function AddReservationView({
   };
 
   return (
-    <div className="add-res-page">
-      {/* 1. Breadcrumbs */}
-      <div className="add-res-breadcrumb">
-        <Home size={14} />
-        <span className="crumb-link" onClick={() => onNavigate ? onNavigate('dashboard') : onBack ? onBack() : null}>
-          PMS
-        </span>
-        <span className="crumb-sep">&gt;</span>
-        <span className="crumb-link" onClick={() => onNavigate ? onNavigate('reservations') : onBack ? onBack() : null}>
-          Reservations
-        </span>
-        <span className="crumb-sep">&gt;</span>
-        <span className="crumb-active">Add Reservation</span>
+    <div className="add-res-page" style={{ padding: 0 }}>
+      {/* Header Banner - Exact OTAL PMS Specification */}
+      <header className="max-[1370px]:h-12 h-14 border-b border-gray-100 bg-white flex items-center justify-between max-[1370px]:px-4 px-4 shrink-0 otal-add-res-header">
+        <div className="flex items-center gap-2 small-title-4 font-medium otal-header-breadcrumbs">
+          <span className="material-symbols-outlined select-none text-gray-500 otal-header-crumb-home" style={{ fontSize: '18px' }}>home</span>
+          <span
+            className="text-gray-600 otal-header-crumb-pms"
+            onClick={() => onNavigate ? onNavigate('dashboard') : onBack ? onBack() : null}
+            style={{ cursor: 'pointer' }}
+          >
+            PMS
+          </span>
+          <span className="material-symbols-outlined select-none text-gray-400 otal-header-crumb-chevron" style={{ fontSize: '16px' }}>chevron_right</span>
+          <span
+            className="transition-colors text-gray-600 hover:text-[#3B82F6] cursor-pointer otal-header-crumb-link"
+            onClick={() => onNavigate ? onNavigate('reservations') : onBack ? onBack() : null}
+          >
+            Reservations
+          </span>
+          <span className="material-symbols-outlined select-none text-gray-400 otal-header-crumb-chevron" style={{ fontSize: '16px' }}>chevron_right</span>
+          <span className="transition-colors text-gray-900 font-bold otal-header-crumb-active">Add Reservation</span>
+        </div>
+        <div className="flex-1 max-w-md px-8 otal-header-spacer" />
+        <div className="flex items-center gap-3 otal-header-actions">
+          <button
+            type="button"
+            className="justify-center whitespace-nowrap small-title-4 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed border hover:text-accent-foreground h-8 rounded-full border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold flex items-center gap-1.5 px-3 cursor-pointer shadow-2xs btn-otal-cash-drawer"
+            onClick={() => setIsCashDrawerOpen(true)}
+            title="Open Cash Drawer"
+          >
+            <span className="material-symbols-outlined select-none text-amber-600" style={{ fontSize: '16px' }}>point_of_sale</span>
+            <span>Open Cash Drawer</span>
+          </button>
+        </div>
+      </header>
 
-        <button
-          className="edit-res-back-btn"
-          style={{ marginLeft: '1rem', height: '28px', padding: '0 0.6rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-          onClick={() => onNavigate ? onNavigate('reservations') : onBack ? onBack() : null}
-          title="Back to Reservations"
-        >
-          <ArrowLeft size={14} />
-          <span>Back to Reservations</span>
-        </button>
-
-        <button
-          className="edit-res-fs-btn"
-          style={{ marginLeft: 'auto' }}
-          onClick={toggleBrowserFullscreen}
-          title={isBrowserFullscreen ? 'Exit Full Screen' : 'Full Screen'}
-        >
-          {isBrowserFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-        </button>
-      </div>
-
-      {/* 2. Main 2-Column Grid */}
-      <div className="add-res-layout">
+      {/* Main page content wrapper */}
+      <div className="add-res-content-wrap" style={{ padding: '1.25rem 2rem 3.5rem' }}>
+        {/* 2. Main 2-Column Grid */}
+        <div className="add-res-layout">
         {/* Left Form Column */}
         <div className="add-res-form-column">
           {/* Card 1: Stay Details */}
@@ -969,6 +893,7 @@ export default function AddReservationView({
                 required={true}
                 value={checkInTime}
                 onChange={(t) => setCheckInTime(t)}
+                placement="left"
               />
 
               <div className="add-res-night-pill-center">
@@ -988,6 +913,7 @@ export default function AddReservationView({
                 required={true}
                 value={checkOutTime}
                 onChange={(t) => setCheckOutTime(t)}
+                placement="right"
               />
             </div>
 
@@ -999,12 +925,17 @@ export default function AddReservationView({
                 </label>
                 <select
                   className="add-res-select"
-                  value={reservationType}
-                  onChange={(e) => setReservationType(e.target.value)}
+                  value="CONFIRMED"
+                  disabled
+                  style={{
+                    backgroundColor: '#f8fafc',
+                    color: '#0f172a',
+                    cursor: 'not-allowed',
+                    opacity: 0.95
+                  }}
+                  title="Reservation Type is fixed as CONFIRMED and cannot be changed"
                 >
                   <option value="CONFIRMED">CONFIRMED</option>
-                  <option value="TENTATIVE">TENTATIVE</option>
-                  <option value="WAITLIST">WAITLIST</option>
                 </select>
               </div>
 
@@ -1165,13 +1096,14 @@ export default function AddReservationView({
                 <tbody>
                   {configuredRooms.map((rm) => {
                     const currentRoomType = roomTypes.find((rt) => rt.id === rm.roomTypeId);
-                    const matchingRooms = rooms.filter(
-                      (r) =>
-                        r.roomTypeId === rm.roomTypeId ||
-                        (rm.roomTypeId === 'rt_standard' && r.roomTypeId === 'rt_normal') ||
-                        (rm.roomTypeId === 'rt_normal' && r.roomTypeId === 'rt_standard')
+                    const matchingRooms = allRooms.filter(
+                      (r) => isMatchingRoomType(r, rm.roomTypeId) && isRoomAvailableForRow(r, rm.id)
                     );
-                    const selectedRoom = rooms.find((r) => r.id === rm.roomId);
+                    const selectedRoom = (rm.roomId && rm.roomId !== 'unassigned')
+                      ? allRooms.find((r) =>
+                          isResMatchingRoom({ roomId: rm.roomId, roomNumber: rm.roomId }, r)
+                        )
+                      : null;
                     const selectedRatePlan = ratePlans.find((rp) => rp.code === rm.ratePlanCode || rp.id === rm.ratePlanCode);
                     const availableRatePlans = ratePlans.filter((rp) => isRoomTypeActiveInRatePlan(rp, rm.roomTypeId));
 
@@ -1262,14 +1194,21 @@ export default function AddReservationView({
                           </div>
                         </td>
 
-                        {/* 3. Rooms (Aligned Center) */}
+                        {/* 3. Rooms (Aligned Center - Fixed to 1 / Non-changeable) */}
                         <td style={{ textAlign: 'center' }}>
                           <input
-                            type="number"
-                            min="1"
+                            type="text"
+                            readOnly
+                            disabled
                             className="room-config-rooms-input"
-                            value={rm.roomsCount || 1}
-                            onChange={(e) => handleUpdateRoomRow(rm.id, 'roomsCount', Number(e.target.value) || 1)}
+                            value="1"
+                            title="Rooms count is fixed to 1 and cannot be changed"
+                            style={{
+                              backgroundColor: '#f8fafc',
+                              color: '#0f172a',
+                              cursor: 'not-allowed',
+                              userSelect: 'none'
+                            }}
                           />
                         </td>
 
@@ -1311,19 +1250,28 @@ export default function AddReservationView({
                                 </div>
 
                                 {/* Available Rooms of Selected Room Type */}
-                                {matchingRooms.map((r) => {
-                                  const isSelected = rm.roomId === r.id;
-                                  return (
-                                    <div
-                                      key={r.id}
-                                      className="room-config-popover-item"
-                                      onClick={() => handleSelectRoomNo(rm.id, r.id)}
-                                    >
-                                      <span style={{ fontWeight: isSelected ? 600 : 400 }}>{r.roomNumber}</span>
-                                      {isSelected && <Check size={14} color="#2563EB" />}
-                                    </div>
-                                  );
-                                })}
+                                {matchingRooms.length > 0 ? (
+                                  matchingRooms.map((r) => {
+                                    const isSelected = rm.roomId === r.id;
+                                    return (
+                                      <div
+                                        key={r.id}
+                                        className="room-config-popover-item"
+                                        onClick={() => handleSelectRoomNo(rm.id, r.id)}
+                                      >
+                                        <span style={{ fontWeight: isSelected ? 600 : 400 }}>{r.roomNumber}</span>
+                                        {isSelected && <Check size={14} color="#2563EB" />}
+                                      </div>
+                                    );
+                                  })
+                                ) : (
+                                  <div
+                                    className="room-config-popover-item"
+                                    style={{ color: '#94a3b8', cursor: 'default', fontSize: '0.82rem', padding: '8px 12px' }}
+                                  >
+                                    <span>No available rooms</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1556,7 +1504,7 @@ export default function AddReservationView({
             <button
               type="button"
               className="btn-billing-top-confirm"
-              onClick={handleConfirmBooking}
+              onClick={(e) => handleConfirmBooking(e, 'confirmed')}
             >
               Confirm Booking
             </button>
@@ -1621,16 +1569,38 @@ export default function AddReservationView({
             <span style={{ fontSize: '1.05rem' }}>₹{balanceDue.toFixed(2)}</span>
           </div>
 
-          <div className="add-res-field-group" style={{ marginTop: '0.85rem' }}>
-            <label className="add-res-field-label">Bill To</label>
-            <select
-              className="add-res-select"
-              value={billTo}
-              onChange={(e) => setBillTo(e.target.value)}
-            >
-              <option value="Guest">Guest</option>
-              <option value="Company">Company</option>
-            </select>
+          {/* Bill To matching Image 1 */}
+          <div className="add-res-billto-row">
+            <span className="add-res-billto-label">Bill To</span>
+            <div className="add-res-custom-dropdown-container">
+              <button
+                type="button"
+                className={`add-res-custom-select-btn ${activeDropdown === 'billTo' ? 'open' : ''}`}
+                onClick={() => setActiveDropdown(activeDropdown === 'billTo' ? null : 'billTo')}
+              >
+                <span>{billTo || 'Guest'}</span>
+                {activeDropdown === 'billTo' ? (
+                  <ChevronUp size={15} color="#475569" />
+                ) : (
+                  <ChevronDown size={15} color="#475569" />
+                )}
+              </button>
+
+              {activeDropdown === 'billTo' && (
+                <div className="add-res-custom-popover">
+                  <div
+                    className={`add-res-custom-popover-item ${billTo === 'Guest' ? 'selected' : ''}`}
+                    onClick={() => {
+                      setBillTo('Guest');
+                      setActiveDropdown(null);
+                    }}
+                  >
+                    <span>Guest</span>
+                    {billTo === 'Guest' && <Check size={15} color="#3b82f6" strokeWidth={2.5} />}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Advance Payment Card */}
@@ -1662,18 +1632,46 @@ export default function AddReservationView({
                   />
                 </div>
 
+                {/* Payment Method matching Image 2 */}
                 <div className="add-res-field-group">
-                  <label className="add-res-field-label">Payment Method</label>
-                  <select
-                    className="add-res-select"
-                    value={paymentMode}
-                    onChange={(e) => setPaymentMode(e.target.value)}
-                  >
-                    <option value="UPI">UPI / QR Code</option>
-                    <option value="CASH">Cash</option>
-                    <option value="CARD">Credit / Debit Card</option>
-                    <option value="BANK_TRANSFER">NEFT / Bank Transfer</option>
-                  </select>
+                  <label className="add-res-field-label">
+                    Payment Method <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <div className="add-res-custom-dropdown-container">
+                    <button
+                      type="button"
+                      className={`add-res-custom-select-btn ${activeDropdown === 'paymentMethod' ? 'open' : ''}`}
+                      onClick={() => setActiveDropdown(activeDropdown === 'paymentMethod' ? null : 'paymentMethod')}
+                    >
+                      <span>{paymentMode || 'CASH'}</span>
+                      {activeDropdown === 'paymentMethod' ? (
+                        <ChevronUp size={15} color="#475569" />
+                      ) : (
+                        <ChevronDown size={15} color="#475569" />
+                      )}
+                    </button>
+
+                    {activeDropdown === 'paymentMethod' && (
+                      <div className="add-res-custom-popover">
+                        {['CARD', 'CASH', 'UPI', 'BANK', 'TDS'].map((method) => {
+                          const isSelected = (paymentMode || 'CASH') === method;
+                          return (
+                            <div
+                              key={method}
+                              className={`add-res-custom-popover-item ${isSelected ? 'selected' : ''}`}
+                              onClick={() => {
+                                setPaymentMode(method);
+                                setActiveDropdown(null);
+                              }}
+                            >
+                              <span>{method}</span>
+                              {isSelected && <Check size={15} color="#3b82f6" strokeWidth={2.5} />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="add-res-field-group">
@@ -1690,21 +1688,56 @@ export default function AddReservationView({
             )}
           </div>
 
-          {/* Total Amount & Big Confirm Button */}
+          {/* Total Amount */}
           <div className="billing-total-row">
             <span className="billing-total-label">Total Amount</span>
             <span className="billing-total-amount">INR {grandTotal.toFixed(2)}</span>
           </div>
 
-          <button
-            type="button"
-            className="btn-confirm-booking-full"
-            onClick={handleConfirmBooking}
-          >
-            Confirm Booking
-          </button>
+          {/* Send Confirmation Mail Checkbox */}
+          <label className="billing-confirmation-checkbox-wrap">
+            <input
+              type="checkbox"
+              checked={sendConfirmationMail}
+              onChange={(e) => setSendConfirmationMail(e.target.checked)}
+            />
+            <span>Send Confirmation Mail</span>
+          </label>
+
+          {/* Dual Action Buttons: Check-In & Confirm Booking */}
+          <div className="add-res-billing-actions">
+            <button
+              type="button"
+              className={`btn-billing-checkin ${isRoomAssignedAndAvailable ? 'active' : 'disabled'}`}
+              onClick={(e) => handleConfirmBooking(e, 'in_house')}
+              disabled={!isRoomAssignedAndAvailable}
+              title={
+                isRoomAssignedAndAvailable
+                  ? 'Direct Check-In (In-House)'
+                  : 'Assign an available room to enable Check-In'
+              }
+            >
+              Check-In
+            </button>
+            <button
+              type="button"
+              className="btn-billing-confirm-outline"
+              onClick={(e) => handleConfirmBooking(e, 'confirmed')}
+            >
+              Confirm Booking
+            </button>
+          </div>
         </div>
       </div>
+      </div>
+
+      {/* Cash Drawer Management Modal */}
+      {isCashDrawerOpen && (
+        <CashDrawerModal
+          isOpen={isCashDrawerOpen}
+          onClose={() => setIsCashDrawerOpen(false)}
+        />
+      )}
 
       {/* Reservation Confirmation Pop-up with Reservation Number & Summary Card (Step 1.7) */}
       {createdReservation && (

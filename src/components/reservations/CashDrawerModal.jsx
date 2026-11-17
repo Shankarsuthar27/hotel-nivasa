@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, DollarSign, ArrowDownRight, ArrowUpRight, CheckCircle2, History, Printer } from 'lucide-react';
 
 export default function CashDrawerModal({ isOpen, onClose }) {
@@ -13,6 +13,14 @@ export default function CashDrawerModal({ isOpen, onClose }) {
     { id: 'tx_2', type: 'in', label: 'Folio Settlement (RES_4 - Walk-in)', amount: 2625, time: '26 Oct 2026, 01:02 PM', staff: 'Astha FrontDesk' },
     { id: 'tx_3', type: 'in', label: 'Folio Settlement (RES_5 - Walk-in)', amount: 2625, time: '26 Oct 2026, 01:08 PM', staff: 'Astha FrontDesk' }
   ]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    document.body.classList.add('has-res-modal-open');
+    return () => {
+      document.body.classList.remove('has-res-modal-open');
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -55,11 +63,12 @@ export default function CashDrawerModal({ isOpen, onClose }) {
       position: 'fixed',
       inset: 0,
       backgroundColor: 'rgba(15, 23, 42, 0.45)',
-      backdropFilter: 'blur(3px)',
+      backdropFilter: 'blur(8px)',
+      WebkitBackdropFilter: 'blur(8px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 9999,
+      zIndex: 100000,
       padding: '1rem',
       animation: 'fadeIn 0.2s ease-out'
     }} onClick={onClose}>

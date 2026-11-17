@@ -1,4 +1,24 @@
 import React from 'react';
+import {
+  Hotel,
+  MoreVertical,
+  User,
+  Baby,
+  Edit3,
+  Calendar,
+  BedDouble,
+  Users,
+  Printer,
+  Receipt,
+  FileText,
+  LogIn,
+  LogOut,
+  X,
+  Ban,
+  Trash2,
+  Eye,
+  ChevronRight
+} from 'lucide-react';
 import './reservation-card.css';
 
 /**
@@ -21,7 +41,8 @@ export default function ReservationCard({
   onNoShow,
   onVoucher,
   onInvoice,
-  onGroupList
+  onGroupList,
+  onAmendStay
 }) {
   const statusNormalized = (reservation.status || '').toLowerCase().replace(/[\s-]/g, '_');
   const isCheckedOut = statusNormalized === 'checked_out';
@@ -114,10 +135,8 @@ export default function ReservationCard({
         {/* Header Row: Hotel Icon, Guest Name, Ref, Status Badge, More Button */}
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-2 min-w-0 flex-1">
-            <div className="bg-blue-100 flex p-2 rounded-sm shrink-0">
-              <span className="material-symbols-outlined select-none text-blue-500" style={{ fontSize: '20px' }}>
-                hotel
-              </span>
+            <div className="bg-blue-100 flex p-2 rounded-sm shrink-0 items-center justify-center">
+              <Hotel size={20} className="text-blue-500 shrink-0" />
             </div>
             <div className="flex flex-col gap-1 flex-1 min-w-0">
               <div className="cursor-pointer group/name inline-block w-fit">
@@ -150,9 +169,7 @@ export default function ReservationCard({
               data-state={isMenuOpen ? "open" : "closed"}
               onClick={onToggleMenu}
             >
-              <span className="material-symbols-outlined select-none text-slate-500" style={{ fontSize: '20px' }}>
-                more_vert
-              </span>
+              <MoreVertical size={18} className="text-slate-500 shrink-0" />
             </button>
 
             {/* Radix Menu Dropdown */}
@@ -171,7 +188,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">edit_square</span>
+                      <Edit3 size={16} className="shrink-0" />
                       <span>Edit</span>
                     </button>
                     <button
@@ -179,12 +196,13 @@ export default function ReservationCard({
                       role="menuitem"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (onEdit) onEdit(reservation);
+                        if (onAmendStay) onAmendStay(reservation);
+                        else if (onEdit) onEdit(reservation);
                         else if (onSelect) onSelect(reservation);
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">calendar_today</span>
+                      <Calendar size={16} className="shrink-0" />
                       <span>Amend Stay</span>
                     </button>
                     <button
@@ -196,7 +214,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">bed</span>
+                      <BedDouble size={16} className="shrink-0" />
                       <span>Room Move</span>
                     </button>
                     <button
@@ -210,7 +228,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">group</span>
+                      <Users size={16} className="shrink-0" />
                       <span>Group List</span>
                     </button>
                     <div
@@ -228,9 +246,9 @@ export default function ReservationCard({
                           setShowPrintSubmenu((prev) => !prev);
                         }}
                       >
-                        <span className="material-symbols-outlined">print</span>
+                        <Printer size={16} className="shrink-0" />
                         <span>Print</span>
-                        <span className="material-symbols-outlined chevron-icon">chevron_right</span>
+                        <ChevronRight size={14} className="chevron-icon ml-auto shrink-0" />
                       </button>
 
                       {showPrintSubmenu && (
@@ -245,7 +263,7 @@ export default function ReservationCard({
                               if (onToggleMenu) onToggleMenu(e);
                             }}
                           >
-                            <span className="material-symbols-outlined">receipt_long</span>
+                            <Receipt size={16} className="shrink-0" />
                             <span>Print Voucher</span>
                           </button>
                           <button
@@ -258,7 +276,7 @@ export default function ReservationCard({
                               if (onToggleMenu) onToggleMenu(e);
                             }}
                           >
-                            <span className="material-symbols-outlined">description</span>
+                            <FileText size={16} className="shrink-0" />
                             <span>Print Invoice</span>
                           </button>
                         </div>
@@ -273,7 +291,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">logout</span>
+                      <LogOut size={16} className="shrink-0" />
                       <span>Check-out</span>
                     </button>
                   </>
@@ -291,7 +309,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">visibility</span>
+                      <Eye size={16} className="shrink-0" />
                       <span>View</span>
                     </button>
                     <button
@@ -305,7 +323,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">group</span>
+                      <Users size={16} className="shrink-0" />
                       <span>Group List</span>
                     </button>
                     <div
@@ -323,9 +341,9 @@ export default function ReservationCard({
                           setShowPrintSubmenu((prev) => !prev);
                         }}
                       >
-                        <span className="material-symbols-outlined">print</span>
+                        <Printer size={16} className="shrink-0" />
                         <span>Print</span>
-                        <span className="material-symbols-outlined chevron-icon">chevron_right</span>
+                        <ChevronRight size={14} className="chevron-icon ml-auto shrink-0" />
                       </button>
 
                       {showPrintSubmenu && (
@@ -340,7 +358,7 @@ export default function ReservationCard({
                               if (onToggleMenu) onToggleMenu(e);
                             }}
                           >
-                            <span className="material-symbols-outlined">receipt_long</span>
+                            <Receipt size={16} className="shrink-0" />
                             <span>Print Voucher</span>
                           </button>
                           <button
@@ -353,7 +371,7 @@ export default function ReservationCard({
                               if (onToggleMenu) onToggleMenu(e);
                             }}
                           >
-                            <span className="material-symbols-outlined">description</span>
+                            <FileText size={16} className="shrink-0" />
                             <span>Print Invoice</span>
                           </button>
                         </div>
@@ -373,7 +391,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">visibility</span>
+                      <Eye size={16} className="shrink-0" />
                       <span>View</span>
                     </button>
                     <button
@@ -387,7 +405,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">group</span>
+                      <Users size={16} className="shrink-0" />
                       <span>Group List</span>
                     </button>
                     <div
@@ -405,9 +423,9 @@ export default function ReservationCard({
                           setShowPrintSubmenu((prev) => !prev);
                         }}
                       >
-                        <span className="material-symbols-outlined">print</span>
+                        <Printer size={16} className="shrink-0" />
                         <span>Print</span>
-                        <span className="material-symbols-outlined chevron-icon">chevron_right</span>
+                        <ChevronRight size={14} className="chevron-icon ml-auto shrink-0" />
                       </button>
 
                       {showPrintSubmenu && (
@@ -422,7 +440,7 @@ export default function ReservationCard({
                               if (onToggleMenu) onToggleMenu(e);
                             }}
                           >
-                            <span className="material-symbols-outlined">receipt_long</span>
+                            <Receipt size={16} className="shrink-0" />
                             <span>Print Voucher</span>
                           </button>
                           <button
@@ -435,7 +453,7 @@ export default function ReservationCard({
                               if (onToggleMenu) onToggleMenu(e);
                             }}
                           >
-                            <span className="material-symbols-outlined">description</span>
+                            <FileText size={16} className="shrink-0" />
                             <span>Print Invoice</span>
                           </button>
                         </div>
@@ -455,7 +473,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">edit_square</span>
+                      <Edit3 size={16} className="shrink-0" />
                       <span>Edit</span>
                     </button>
                     <button
@@ -463,12 +481,13 @@ export default function ReservationCard({
                       role="menuitem"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (onEdit) onEdit(reservation);
+                        if (onAmendStay) onAmendStay(reservation);
+                        else if (onEdit) onEdit(reservation);
                         else if (onSelect) onSelect(reservation);
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">calendar_today</span>
+                      <Calendar size={16} className="shrink-0" />
                       <span>Amend Stay</span>
                     </button>
                     <button
@@ -480,7 +499,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">bed</span>
+                      <BedDouble size={16} className="shrink-0" />
                       <span>Room Move</span>
                     </button>
                     <button
@@ -494,7 +513,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">group</span>
+                      <Users size={16} className="shrink-0" />
                       <span>Group List</span>
                     </button>
                     <button
@@ -506,7 +525,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">close</span>
+                      <X size={16} className="shrink-0" />
                       <span>Cancel Reservation</span>
                     </button>
                     <button
@@ -519,7 +538,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">block</span>
+                      <Ban size={16} className="shrink-0" />
                       <span>No-Show</span>
                     </button>
                     <div
@@ -537,9 +556,9 @@ export default function ReservationCard({
                           setShowPrintSubmenu((prev) => !prev);
                         }}
                       >
-                        <span className="material-symbols-outlined">print</span>
+                        <Printer size={16} className="shrink-0" />
                         <span>Print</span>
-                        <span className="material-symbols-outlined chevron-icon">chevron_right</span>
+                        <ChevronRight size={14} className="chevron-icon ml-auto shrink-0" />
                       </button>
 
                       {showPrintSubmenu && (
@@ -554,7 +573,7 @@ export default function ReservationCard({
                               if (onToggleMenu) onToggleMenu(e);
                             }}
                           >
-                            <span className="material-symbols-outlined">receipt_long</span>
+                            <Receipt size={16} className="shrink-0" />
                             <span>Print Voucher</span>
                           </button>
                           <button
@@ -567,7 +586,7 @@ export default function ReservationCard({
                               if (onToggleMenu) onToggleMenu(e);
                             }}
                           >
-                            <span className="material-symbols-outlined">description</span>
+                            <FileText size={16} className="shrink-0" />
                             <span>Print Invoice</span>
                           </button>
                         </div>
@@ -582,7 +601,7 @@ export default function ReservationCard({
                         if (onToggleMenu) onToggleMenu(e);
                       }}
                     >
-                      <span className="material-symbols-outlined">login</span>
+                      <LogIn size={16} className="shrink-0" />
                       <span>Check-in</span>
                     </button>
                   </>
@@ -628,22 +647,14 @@ export default function ReservationCard({
                 <span className="small-title-2 text-black font-semibold">Rooms</span>
                 <span className="small-title-2 text-gray-700 font-medium">{roomsCount}</span>
               </div>
-              <div className="w-[30%] flex items-center justify-end gap-2">
-                <div className="flex items-end gap-0.5 cursor-pointer" data-state="closed">
-                  <div className="h-5.75">
-                    <span className="material-symbols-outlined select-none text-gray-600" style={{ fontSize: '20px' }}>
-                      man
-                    </span>
-                  </div>
-                  <span className="small-title-2 text-gray-500 font-medium -ml-1">{adultsCount}</span>
+              <div className="w-[30%] flex items-center justify-end gap-3">
+                <div className="flex items-center gap-1 cursor-pointer" data-state="closed" title={`${adultsCount} Adult(s)`}>
+                  <User size={16} className="text-gray-600 shrink-0" />
+                  <span className="small-title-2 text-gray-500 font-medium">{adultsCount}</span>
                 </div>
-                <div className="flex items-end gap-0.5 cursor-pointer" data-state="closed">
-                  <div className="h-4.75">
-                    <span className="material-symbols-outlined select-none text-gray-600" style={{ fontSize: '17px' }}>
-                      child_care
-                    </span>
-                  </div>
-                  <span className="small-title-2 text-gray-500 font-medium -ml-px">{childrenCount}</span>
+                <div className="flex items-center gap-1 cursor-pointer" data-state="closed" title={`${childrenCount} Child(ren)`}>
+                  <Baby size={15} className="text-gray-600 shrink-0" />
+                  <span className="small-title-2 text-gray-500 font-medium">{childrenCount}</span>
                 </div>
               </div>
             </div>

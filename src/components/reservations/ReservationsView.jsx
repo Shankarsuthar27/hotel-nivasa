@@ -25,6 +25,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { exportReservationsToExcel } from '../../services/exportService';
+import { pmsStore } from '../../services/pmsStore';
 import ReservationCard from './ReservationCard';
 import EditReservationView from './EditReservationView';
 import GuestCheckInModal from './GuestCheckInModal';
@@ -35,6 +36,7 @@ import CancelReservationModal from './CancelReservationModal';
 import ReservationsToolbar from './ReservationsToolbar';
 import ReservationsListView from './ReservationsListView';
 import CashDrawerModal from './CashDrawerModal';
+import AmendStayDrawer from './AmendStayDrawer';
 
 // Custom Icons for exact pixel match
 const VenusIcon = ({ size = 15, color = "#db2777" }) => (
@@ -83,7 +85,7 @@ export default function ReservationsView({
 }) {
   // Navigation & View Mode
   const [activeTab, setActiveTab] = useState(initialTab || 'all'); // 'all' | 'arrivals' | 'in_house' | 'departures'
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' (Default Card View) | 'list'
+  const [viewMode, setViewMode] = useState('list'); // 'list' (Table View matching screenshot) | 'grid'
   const [bookingType, setBookingType] = useState('ALL'); // 'ALL' | 'GROUP'
   const [editingReservation, setEditingReservation] = useState(null);
   const [isCashDrawerOpen, setIsCashDrawerOpen] = useState(false);
@@ -96,6 +98,7 @@ export default function ReservationsView({
   const [drawerReservation, setDrawerReservation] = useState(null);
   const [groupListReservation, setGroupListReservation] = useState(null);
   const [cancellingRes, setCancellingRes] = useState(null);
+  const [amendStayReservation, setAmendStayReservation] = useState(null);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter || 'all_active');
@@ -401,6 +404,7 @@ export default function ReservationsView({
               onVoucher={onOpenVoucher}
               onInvoice={onOpenInvoice}
               onGroupList={(r) => setGroupListReservation(r)}
+              onAmendStay={(r) => setAmendStayReservation(r)}
             />
           ))}
         </div>
@@ -428,27 +432,31 @@ export default function ReservationsView({
           onOpenInvoice={onOpenInvoice}
           onOpenDetailsDrawer={(r) => setDrawerReservation(r)}
           onGroupList={(r) => setGroupListReservation(r)}
+          onAmendStay={(r) => setAmendStayReservation(r)}
+          onToggleViewMode={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
         />
       )}
 
-      {/* 6. Pagination Footer */}
-      <div className="res-pagination-footer">
-        <div className="pagination-results-text">
-          Showing <strong>1–{filteredReservations.length}</strong> of <strong>{filteredReservations.length}</strong> results
-        </div>
+      {/* 6. Pagination Footer (For Grid View only; List View includes its own seamless footer) */}
+      {viewMode === 'grid' && (
+        <div className="res-pagination-footer">
+          <div className="pagination-results-text">
+            Showing <strong>1–{filteredReservations.length}</strong> of <strong>{filteredReservations.length}</strong> results
+          </div>
 
-        <div className="pagination-controls">
-          <button className="pagination-nav-btn" disabled title="Previous page">
-            &lt;
-          </button>
-          <button className="pagination-page-btn active">
-            1
-          </button>
-          <button className="pagination-nav-btn" disabled title="Next page">
-            &gt;
-          </button>
+          <div className="pagination-controls">
+            <button className="pagination-nav-btn" disabled title="Previous page">
+              &lt;
+            </button>
+            <button className="pagination-page-btn active">
+              1
+            </button>
+            <button className="pagination-nav-btn" disabled title="Next page">
+              &gt;
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Step 2: Guest Check-In Details Modal (OTAL PMS Spec) */}
       {checkInModalRes && (
@@ -458,6 +466,7 @@ export default function ReservationsView({
           reservation={reservations.find((r) => r.id === checkInModalRes.id) || checkInModalRes}
           rooms={rooms}
           roomTypes={roomTypes}
+          reservations={reservations}
           onAssignRoom={(resId, roomId) => {
             if (onAssignRoom) onAssignRoom(resId, roomId);
           }}
@@ -532,6 +541,23 @@ export default function ReservationsView({
       <CashDrawerModal
         isOpen={isCashDrawerOpen}
         onClose={() => setIsCashDrawerOpen(false)}
+      />
+
+      {/* Step 8: Amend Stay Slide-Over Drawer (Exact OTAL PMS Match) */}
+      <AmendStayDrawer
+        isOpen={!!amendStayReservation}
+        onClose={() => setAmendStayReservation(null)}
+        reservation={
+          amendStayReservation
+            ? (reservations.find((r) => r.id === amendStayReservation.id) || amendStayReservation)
+            : null
+        }
+        rooms={rooms}
+        roomTypes={roomTypes}
+        onSave={async (resId, payload) => {
+          await pmsStore.amendStay(resId, payload);
+          setAmendStayReservation(null);
+        }}
       />
     </div>
   );

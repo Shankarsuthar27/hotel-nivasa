@@ -21,13 +21,17 @@ import GroupRoomMoveModal from './components/reservations/GroupRoomMoveModal';
 import BookingVoucherModal from './components/reservations/BookingVoucherModal';
 import GstInvoiceModal from './components/folios/GstInvoiceModal';
 import MaintenanceBlockModal from './components/calendar/MaintenanceBlockModal';
+import CashDrawerModal from './components/reservations/CashDrawerModal';
 import DashboardView from './components/dashboard/DashboardView';
 import EditReservationView from './components/reservations/EditReservationView';
 import AddReservationView from './components/reservations/AddReservationView';
+import LoginView from './components/auth/LoginView';
+import ToastNotification from './components/common/ToastNotification';
 
 import { pmsStore } from './services/pmsStore';
 import { useRouter, navigate, ROUTES } from './services/router';
 import { createReservationViaApi } from './services/reservationApi';
+import { logoutStaff, subscribeToStaffAuth } from './services/firebaseAuth';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function App() {
@@ -92,14 +96,36 @@ export default function App() {
 
   const [isMaintenanceOpen, setIsMaintenanceOpen] = useState(false);
   const [maintenanceInitialData, setMaintenanceInitialData] = useState(null);
+  const [isCashDrawerOpen, setIsCashDrawerOpen] = useState(false);
 
   // Toast Notification
   const [toastMessage, setToastMessage] = useState(null);
 
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3800);
+  const showToast = (msg, type = null) => {
+    if (typeof msg === 'object' && msg !== null) {
+      setToastMessage(msg);
+    } else if (type) {
+      setToastMessage({ message: msg, type });
+    } else {
+      setToastMessage(msg);
+    }
   };
+
+  // Blur page background whenever operational modals are open
+  useEffect(() => {
+    const isAnyModalOpen =
+      isRoomMoveOpen ||
+      isVoucherOpen ||
+      isInvoiceOpen ||
+      isMaintenanceOpen ||
+      isCashDrawerOpen;
+
+    if (isAnyModalOpen) {
+      document.body.classList.add('has-res-modal-open');
+    } else {
+      document.body.classList.remove('has-res-modal-open');
+    }
+  }, [isRoomMoveOpen, isVoucherOpen, isInvoiceOpen, isMaintenanceOpen, isCashDrawerOpen]);
 
   useEffect(() => {
     const unsubscribe = pmsStore.subscribe((newState) => {
@@ -107,6 +133,71 @@ export default function App() {
     });
     return unsubscribe;
   }, []);
+
+  // Listen to live Firebase Auth state
+  useEffect(() => {
+    const unsubscribeAuth = subscribeToStaffAuth((firebaseUser) => {
+      if (firebaseUser && !pmsStore.isAuthenticated) {
+        pmsStore.loginUser({
+          id: firebaseUser.uid,
+          email: firebaseUser.email,
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Staff Member'
+        });
+      }
+    });
+    return () => {
+      if (typeof unsubscribeAuth === 'function') unsubscribeAuth();
+    };
+  }, []);
+
+  // Staff Sign In / Sign Out Handlers
+  const handleLoginSuccess = (staffProfile) => {
+    pmsStore.loginUser(staffProfile);
+    showToast(`👋 Welcome back, ${staffProfile.name || 'Staff'}! Terminal active.`, 'success');
+    let dest = '/dashboard';
+    try {
+      const intended = sessionStorage.getItem('pms_intended_dest');
+      if (intended && intended !== '/login' && intended !== '/') {
+        dest = intended;
+        sessionStorage.removeItem('pms_intended_dest');
+      }
+    } catch (e) {}
+    navigate(dest);
+  };
+
+  const handleLogout = async () => {
+    await logoutStaff();
+    pmsStore.logoutUser();
+    showToast('Staff member signed out of terminal.');
+    navigate('/login');
+  };
+
+  // Route Protection Guard: Require authentication for PMS routes
+  useEffect(() => {
+    if (!state.isAuthenticated) {
+      if (activeTab !== 'login' && activeTab !== 'accept-invite') {
+        try {
+          const intended = window.location.pathname + window.location.search;
+          if (intended && intended !== '/' && intended !== '/login') {
+            sessionStorage.setItem('pms_intended_dest', intended);
+          }
+        } catch (e) {}
+        navigate('/login', { replace: true });
+      }
+    } else {
+      if (activeTab === 'login') {
+        let dest = '/dashboard';
+        try {
+          const intended = sessionStorage.getItem('pms_intended_dest');
+          if (intended && intended !== '/login' && intended !== '/') {
+            dest = intended;
+            sessionStorage.removeItem('pms_intended_dest');
+          }
+        } catch (e) {}
+        navigate(dest, { replace: true });
+      }
+    }
+  }, [state.isAuthenticated, activeTab]);
 
   // Update browser document title based on endpoint URL
   useEffect(() => {
@@ -116,6 +207,7 @@ export default function App() {
       document.title = `Edit Reservation ${editingReservation.bookingReference || ''} | Hotel Astha PMS`;
     } else {
       const titles = {
+        login: 'Staff Sign In | Hotel Astha PMS',
         dashboard: 'Dashboard | Hotel Astha PMS',
         reservations: 'Reservations Management | Hotel Astha PMS',
         calendar: 'Calendar Tape Chart | Hotel Astha PMS',
@@ -267,15 +359,20 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Toast Notification with Spring Animation */}
+      {/* Global Toast Notification - Portal rendered at root with frosted backdrop & guaranteed visibility */}
       {toastMessage && (
-        <div className="pms-toast-notification">
-          <span>{toastMessage}</span>
-        </div>
+        <ToastNotification
+          toast={toastMessage}
+          onClose={() => setToastMessage(null)}
+        />
       )}
 
-      {/* Full-Screen Edit Reservation View - Edge-to-Edge with NO Sidebar */}
-      {editingReservation && !['cancelled', 'no_show'].includes((((state.reservations.find((r) => r.id === editingReservation.id) || editingReservation).status || '').toLowerCase().replace('-', '_').replace(' ', '_'))) ? (
+      {/* Auth Gate: If not authenticated and not on public accept-invite, show Staff Sign In */}
+      {!state.isAuthenticated && activeTab !== 'accept-invite' ? (
+        <LoginView onLoginSuccess={handleLoginSuccess} />
+      ) : activeTab === 'login' ? (
+        <LoginView onLoginSuccess={handleLoginSuccess} />
+      ) : editingReservation && !['cancelled', 'no_show'].includes((((state.reservations.find((r) => r.id === editingReservation.id) || editingReservation).status || '').toLowerCase().replace('-', '_').replace(' ', '_'))) ? (
         <div className="edit-res-fullscreen-overlay">
           <EditReservationView
             reservation={state.reservations.find((r) => r.id === editingReservation.id) || editingReservation}
@@ -338,6 +435,8 @@ export default function App() {
             rooms={state.rooms}
             roomTypes={state.roomTypes}
             ratePlans={state.ratePlans}
+            reservations={state.reservations}
+            maintenanceBlocks={state.maintenanceBlocks}
             initialData={effectivePrefillData}
             onBack={() => {
               setSlotPrefillData(null);
@@ -357,9 +456,10 @@ export default function App() {
         </div>
       ) : activeTab === 'accept-invite' ? (
         <AcceptInviteView
-          token={currentRoute.queryParams?.token}
+          token={router.queryParams?.token}
           pmsStore={pmsStore}
           onAcceptSuccess={(member) => {
+            pmsStore.loginUser(member);
             showToast(`🎉 Welcome ${member.name}! Account activated.`);
             navigate('/dashboard');
           }}
@@ -392,6 +492,7 @@ export default function App() {
             teamMembers={state.teamMembers}
             onSwitchUser={(uId) => pmsStore.switchUser(uId)}
             hasPermission={(path) => pmsStore.hasPermission(path)}
+            onLogout={handleLogout}
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
           />
@@ -405,6 +506,8 @@ export default function App() {
                 activeTab={activeTab}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
+                currentUser={state.currentUser}
+                onLogout={handleLogout}
                 onNewReservation={() => {
                   setSlotPrefillData(null);
                   navigate('/reservations/create');
@@ -416,7 +519,7 @@ export default function App() {
             )}
 
         {/* Dynamic Viewport with Page Transitions */}
-        <main className={`content-viewport ${activeTab === 'reservations' || activeTab === 'dashboard' || activeTab === 'rates' || activeTab === 'guests' || activeTab === 'myteam' || activeTab === 'permissions' || activeTab === 'properties' || activeTab === 'calendar' ? 'no-pad-viewport' : ''}`}>
+        <main className={`content-viewport ${activeTab === 'reservations' || activeTab === 'dashboard' || activeTab === 'rates' || activeTab === 'guests' || activeTab === 'myteam' || activeTab === 'permissions' || activeTab === 'properties' || activeTab === 'calendar' ? 'no-pad-viewport' : ''} ${activeTab === 'calendar' ? 'calendar-viewport' : ''} ${activeTab === 'rates' ? 'rates-viewport' : ''} ${activeTab === 'reservations' ? 'reservations-viewport' : ''}`}>
           <div key={activeTab} className="pms-page-view">
             {activeTab === 'dashboard' && (
             <DashboardView
@@ -617,6 +720,7 @@ export default function App() {
               reservations={state.reservations}
               nightAudits={state.nightAudits}
               folios={state.folios}
+              showToast={showToast}
             />
           )}
 
@@ -630,7 +734,7 @@ export default function App() {
           {activeTab === 'myteam' && (
             <MyTeamView
               teamMembers={state.teamMembers}
-              propertiesList={state.propertiesList || ['HOTEL ASTHA', 'HOTEL ASTHA RESORT']}
+              propertiesList={state.propertiesList || ['HOTEL ASTHA']}
               currentProperty={state.property?.name || 'HOTEL ASTHA'}
               onInviteMembers={({ emails, assignments }) => {
                 pmsStore.inviteTeamMembers({
@@ -657,7 +761,7 @@ export default function App() {
             <TeamPermissionsView
               teamMembers={state.teamMembers}
               currentUser={state.currentUser}
-              propertiesList={state.propertiesList || ['HOTEL ASTHA', 'HOTEL ASTHA RESORT']}
+              propertiesList={state.propertiesList || ['HOTEL ASTHA']}
               currentProperty={state.property?.name || 'HOTEL ASTHA'}
               initialMemberId={router.queryParams?.memberId}
               initialSubtab={router.queryParams?.subtab}
@@ -674,7 +778,7 @@ export default function App() {
             <PropertiesView
               subtab={router.subtab || 'all'}
               property={state.property}
-              propertiesList={state.propertiesList || ['HOTEL ASTHA', 'HOTEL ASTHA RESORT']}
+              propertiesList={state.propertiesList || ['HOTEL ASTHA']}
               mealPlans={state.mealPlans || []}
               roomTypes={state.roomTypes || []}
               rooms={state.rooms || []}
@@ -699,7 +803,12 @@ export default function App() {
                 pmsStore.updateRoomType(id, patch);
               }}
               onDeleteRoomType={(id) => {
-                pmsStore.deleteRoomType(id);
+                const res = pmsStore.deleteRoomType(id);
+                if (res && res.success === false) {
+                  showToast(res.message, 'error');
+                  return res;
+                }
+                return { success: true };
               }}
               onAddRooms={(roomsList) => {
                 pmsStore.addRooms(roomsList);
@@ -811,6 +920,12 @@ export default function App() {
         rooms={state.rooms}
         onSubmit={handleAddMaintenanceBlock}
         onDelete={handleDeleteMaintenanceBlock}
+      />
+
+      {/* 7. Cash Drawer Management Modal */}
+      <CashDrawerModal
+        isOpen={isCashDrawerOpen}
+        onClose={() => setIsCashDrawerOpen(false)}
       />
     </div>
   );

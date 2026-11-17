@@ -4,19 +4,46 @@
 
 .res-list-container {
   width: 100%;
-  background-color: #ffffff;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  overflow: visible;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  background-color: transparent;
+  border-radius: 0;
+  border: none;
+  overflow: hidden;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
 .res-table-wrap {
   width: 100%;
+  overflow-y: auto;
   overflow-x: auto;
-  border-radius: 12px;
-  min-height: 420px;
-  padding-bottom: 30px;
+  border-radius: 0;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 0;
+  position: relative;
+}
+
+/* Custom scrollbar only on reservations table */
+.res-table-wrap::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.res-table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.res-table-wrap::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+.res-table-wrap::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
 }
 
 .res-list-table {
@@ -30,11 +57,17 @@
 /* Table Header */
 .res-list-thead-row {
   background-color: #f8fafc;
+  border-top: 1px solid #e2e8f0;
   border-bottom: 1px solid #e2e8f0;
 }
 
 .res-list-thead-row th {
-  padding: 13px 18px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #f8fafc;
+  box-shadow: 0 1px 0 #e2e8f0;
+  padding: 12px 16px;
   font-size: 13px;
   font-weight: 600;
   color: #475569;
@@ -42,9 +75,42 @@
   white-space: nowrap;
 }
 
+.res-list-thead-row th:first-child {
+  padding-left: 8px;
+}
+
 .res-list-thead-row th.th-actions {
   text-align: right;
-  padding-right: 24px;
+  padding-right: 8px;
+}
+
+/* Table View Header Pill Button matching screenshot */
+.res-table-view-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  padding: 6px 18px;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.res-table-view-pill-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #1d4ed8;
+  transform: translateY(-0.5px);
+}
+
+.res-table-view-pill-btn:active {
+  transform: translateY(0);
 }
 
 /* Table Body Rows */
@@ -52,6 +118,7 @@
   border-bottom: 1px solid #f1f5f9;
   transition: background-color 0.15s ease;
   background-color: #ffffff;
+  cursor: pointer;
 }
 
 .res-list-tbody-row:last-child {
@@ -63,10 +130,18 @@
 }
 
 .res-list-tbody-row td {
-  padding: 14px 18px;
+  padding: 14px 16px;
   vertical-align: middle;
   color: #334155;
   white-space: nowrap;
+}
+
+.res-list-tbody-row td:first-child {
+  padding-left: 8px;
+}
+
+.res-list-tbody-row td:last-child {
+  padding-right: 8px;
 }
 
 /* Guest Column */
@@ -136,7 +211,7 @@
 
 /* Number / Code Column */
 .res-code-cell {
-  color: #2563eb;
+  color: #475569;
   font-weight: 600;
   font-size: 13.5px;
   cursor: pointer;
@@ -144,14 +219,14 @@
 }
 
 .res-code-cell:hover {
-  color: #1d4ed8;
+  color: #2563eb;
   text-decoration: underline;
 }
 
 /* Booking Date Column */
 .res-date-cell {
-  color: #334155;
-  font-size: 13px;
+  color: #1e293b;
+  font-size: 13.5px;
   font-weight: 500;
 }
 
@@ -164,18 +239,18 @@
 
 /* Stay Dates Column */
 .res-stay-dates-cell {
-  font-size: 13px;
+  font-size: 13.5px;
   color: #0f172a;
-  font-weight: 700;
+  font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .res-stay-dates-arrow {
-  color: #64748b;
+  color: #94a3b8;
   font-weight: 400;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 /* Status Pill Badges */
@@ -276,4 +351,69 @@
 .res-actions-cell .radix-card-menu.open-upwards .radix-card-submenu {
   top: auto;
   bottom: 0;
+}
+
+/* Integrated Table Pagination matching exact screenshot */
+.res-table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 4px 2px;
+  background-color: #ffffff;
+  border-radius: 0;
+  margin-top: auto;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.res-table-pagination .pagination-results-text {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.res-table-pagination .pagination-results-text strong {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.res-table-pagination .pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.res-table-pagination .pagination-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  transition: all 0.12s ease;
+}
+
+.res-table-pagination .pagination-nav-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.res-table-pagination .pagination-page-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

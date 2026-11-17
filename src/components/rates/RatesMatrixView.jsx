@@ -710,9 +710,6 @@ export default function RatesMatrixView({
             })}
           </div>
 
-          {/* Large Clean Middle Space */}
-          <div style={{ flex: 1, minHeight: '180px' }} />
-
           {/* 4. Bottom Summary Rows: Sold Rooms, Available Rooms, Total Rooms */}
           <div className="rates-summary-section">
             {/* Row 1: Sold Rooms */}

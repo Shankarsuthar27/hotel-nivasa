@@ -25,7 +25,8 @@ export const ROUTES = {
   PROPERTIES_BUSINESS_ACCOUNT: '/properties/business-account',
   PROPERTIES_MARKET_SEGMENT: '/properties/market-segment',
   PROPERTIES_TAX_SERVICES: '/properties/tax-services',
-  SETTINGS: '/settings'
+  SETTINGS: '/settings',
+  LOGIN: '/login'
 };
 
 /**
@@ -40,6 +41,18 @@ export function parseRoute(pathname = window.location.pathname, search = window.
   const queryParams = {};
   for (const [key, value] of searchParams.entries()) {
     queryParams[key] = value;
+  }
+
+  // 0. Login: /login or /signin
+  if (cleanPath === '/login' || cleanPath === '/signin') {
+    return {
+      type: 'LOGIN',
+      tab: 'login',
+      pathname: cleanPath,
+      search,
+      queryParams,
+      params: {}
+    };
   }
 
   // 1. Create Reservation: /reservations/create or /reservations/new

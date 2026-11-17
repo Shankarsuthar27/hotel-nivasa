@@ -1,8 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 @import './components/reservations/reservation-card.css';
 @import './components/reservations/booking-details-drawer.css';
 @import './components/rates/rates-inventory.css';
 @import './components/housekeeping/room-card.css';
 @import './components/housekeeping/block-room-drawer.css';
+
+/* Global Material Symbols fallback definition */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined' !important;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
 
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
@@ -30,6 +48,9 @@
   --color-white: #ffffff;
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --spacing: 4px;
+  --color-gray-50: oklab(0.985 -0.00075442 -0.00185226);
+  --color-red-50: oklch(0.971 0.013 17.38);
+  --color-red-500: oklch(0.637 0.237 25.331);
   --color-amber-50: oklch(0.987 0.022 95.277);
   --color-amber-200: oklch(0.924 0.12 95.746);
   --color-amber-600: oklch(0.666 0.179 58.318);
@@ -224,6 +245,46 @@ h1, h2, h3, h4, h5, h6,
   color: #ffffff;
 }
 
+/* ==========================================================================
+   OTAL PMS Schedule Calendar - Category Availability Cell & Badge Specification
+   Authoritative Reference: https://app.otalpms.com/schedule-calendar
+   ========================================================================== */
+.schedule-cal-avail-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 69.1429px;
+  height: 100%;
+  font-family: var(--font-serif, ui-serif, Georgia, Cambria, "Times New Roman", Times, serif);
+  font-size: 16px;
+  line-height: 24px;
+  color: #020817;
+  background-color: color-mix(in oklab, var(--color-gray-50, oklab(0.985 -0.00075442 -0.00185226)) 20%, transparent);
+  border-right: 0.8px solid oklch(0.967 0.003 264.542);
+  padding: 4px 0px;
+  cursor: crosshair;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.schedule-cal-avail-badge {
+  display: block;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 13.5px;
+  color: var(--color-red-500, oklch(0.637 0.237 25.331));
+  background-color: var(--color-red-50, oklch(0.971 0.013 17.38));
+  border: 0.8px solid oklab(0.936 0.0304823 0.0097381 / 0.5);
+  border-radius: 12px;
+  padding: 0px 6px 0px 6px;
+  margin: 0px 0px 2px 0px;
+  cursor: crosshair;
+  transition: all;
+  box-sizing: border-box;
+}
+
 .nav-item.active {
   background-color: var(--primary);
   color: #ffffff;
@@ -400,6 +461,45 @@ h1, h2, h3, h4, h5, h6,
   padding: 1.5rem 1.75rem;
 }
 
+/* Calendar & Rates Viewport: Fills 100% available viewport height with no double scrollbars */
+.calendar-viewport,
+.rates-viewport {
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: calc(100vh - 64px) !important;
+  max-height: calc(100vh - 64px) !important;
+}
+
+.calendar-viewport .pms-page-view,
+.rates-viewport .pms-page-view {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+}
+
+/* Reservations Viewport: Takes full height down to bottom of screen (TopNav is hidden on reservations) */
+.reservations-viewport {
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  flex: 1 !important;
+}
+
+.reservations-viewport .pms-page-view {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+}
+
 /* Tape Chart Matrix */
 .tape-chart-container {
   background-color: #ffffff;
@@ -411,6 +511,7 @@ h1, h2, h3, h4, h5, h6,
   overflow: hidden;
   width: 100%;
   flex: 1;
+  height: 100%;
   min-height: 100%;
 }
 
@@ -421,19 +522,75 @@ h1, h2, h3, h4, h5, h6,
   align-items: center;
   justify-content: space-between;
   background-color: #ffffff;
+  flex-shrink: 0;
 }
 
 .tape-chart-scroll {
   overflow-x: auto;
   overflow-y: auto;
-  max-height: calc(100vh - 220px);
   position: relative;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  scroll-behavior: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  user-select: auto;
+}
+
+.tape-chart-scroll.is-dragging {
+  cursor: grabbing !important;
+  user-select: none !important;
+  scroll-behavior: auto !important;
+}
+
+.tape-chart-scroll.is-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+/* Custom Sleek Scrollbar */
+.tape-chart-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.tape-chart-scroll::-webkit-scrollbar-track {
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.tape-chart-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+
+.tape-chart-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
 }
 
 .tape-chart-table {
   border-collapse: separate;
   border-spacing: 0;
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
+  height: 100%;
+  min-height: 100%;
+  flex: 1;
+  table-layout: fixed;
+}
+
+.tape-chart-spacer-row {
+  height: 100%;
+}
+
+.tape-chart-spacer-row td {
+  border-bottom: none !important;
+  height: auto;
+  padding: 0;
 }
 
 .tape-chart-table th,
@@ -443,29 +600,78 @@ h1, h2, h3, h4, h5, h6,
   padding: 0;
 }
 
+/* Column Width Enforcement for Perfect Grid Alignment */
+.tape-chart-container.cozy .tape-chart-table th.date-col-header,
+.tape-chart-container.cozy .tape-chart-table td.timeline-slot,
+.tape-chart-container.cozy .tape-chart-table td.date-col-cell,
+.tape-chart-container.cozy .tape-chart-table td.date-col-foot {
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
+  box-sizing: border-box;
+}
+
+.tape-chart-container.wide .tape-chart-table th.date-col-header,
+.tape-chart-container.wide .tape-chart-table td.timeline-slot,
+.tape-chart-container.wide .tape-chart-table td.date-col-cell,
+.tape-chart-container.wide .tape-chart-table td.date-col-foot {
+  width: 84px;
+  min-width: 84px;
+  max-width: 84px;
+  box-sizing: border-box;
+}
+
 /* Sticky Y-Axis: Room Column */
 .sticky-room-col {
   position: sticky;
   left: 0;
-  background-color: #ffffff;
+  background-color: #ffffff !important;
   z-index: 20;
   width: 180px;
   min-width: 180px;
   max-width: 180px;
   border-right: 2px solid var(--border-light) !important;
-  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.03);
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
 }
 
 .sticky-header-row th {
   position: sticky;
   top: 0;
-  background-color: #f8fafc;
+  background-color: #ffffff;
   z-index: 25;
   border-bottom: 2px solid var(--border-light) !important;
+  box-sizing: border-box;
 }
 
 .sticky-header-row th.sticky-room-col {
-  z-index: 30;
+  z-index: 35 !important;
+  left: 0;
+  top: 0;
+  background-color: #ffffff !important;
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+/* Sticky Bottom Row: Availability Occupancy % */
+.sticky-bottom-row td,
+.sticky-bottom-foot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 25;
+  background-color: #ffffff;
+  border-top: 2px solid #e2e8f0 !important;
+  box-shadow: 0 -3px 6px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+}
+
+.sticky-bottom-row td.sticky-room-col,
+.sticky-bottom-foot td.sticky-room-col {
+  position: sticky;
+  left: 0;
+  bottom: 0;
+  z-index: 35 !important;
+  background-color: #ffffff !important;
+  box-shadow: 2px -3px 6px rgba(0, 0, 0, 0.05);
 }
 
 /* Tape Chart Collapsible Category Rows */
@@ -508,11 +714,13 @@ h1, h2, h3, h4, h5, h6,
 .tape-chart-container.cozy .timeline-slot {
   width: var(--cell-width-cozy);
   min-width: var(--cell-width-cozy);
+  max-width: var(--cell-width-cozy);
 }
 
 .tape-chart-container.wide .timeline-slot {
   width: var(--cell-width-wide);
   min-width: var(--cell-width-wide);
+  max-width: var(--cell-width-wide);
 }
 
 .timeline-slot:hover {
@@ -861,7 +1069,7 @@ h1, h2, h3, h4, h5, h6,
   border-top: 4px solid var(--primary);
 }
 
-/* Modals & Drawers */
+/* Modals & Drawers - Deep Frosted Glass Backdrop Blur (Matching Reference) */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -872,17 +1080,19 @@ h1, h2, h3, h4, h5, h6,
   width: 100vw;
   height: 100vh;
   background-color: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(1.5px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 99999;
+  z-index: 100000;
   padding: 1.5rem;
   overflow: hidden;
-  animation: fadeIn 0.15s ease;
+  animation: fadeIn 0.18s ease-out;
 }
 
 body.modal-open,
+body.has-res-modal-open,
 body.drawer-open {
   overflow: hidden !important;
 }
@@ -894,6 +1104,21 @@ body.drawer-open .main-wrapper,
 body.modal-open .content-viewport,
 body.drawer-open .content-viewport {
   overflow: hidden !important;
+}
+
+/* Background Frosted Blur for underlying page content */
+body.modal-open .app-layout,
+body.modal-open main,
+body.modal-open .content-viewport,
+body.has-res-modal-open .app-layout,
+body.has-res-modal-open main,
+body.has-res-modal-open .content-viewport,
+body.has-res-modal-open .tape-chart-container {
+  filter: blur(5px) !important;
+  -webkit-filter: blur(5px) !important;
+  transition: filter 0.25s ease !important;
+  pointer-events: none !important;
+  user-select: none !important;
 }
 
 .modal-content {
@@ -2143,12 +2368,16 @@ body.drawer-open .content-viewport {
    ======================================================== */
 
 .res-page-container {
-  padding: 1rem 1.4rem 2rem;
+  padding: 0.75rem 0.65rem 0.35rem;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  background-color: #f8fafc;
-  min-height: 100%;
+  gap: 0.35rem;
+  background-color: #ffffff;
+  height: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  flex: 1;
 }
 
 /* Header Row: Breadcrumb on left + Create Reservation button on right */
@@ -2156,6 +2385,7 @@ body.drawer-open .content-viewport {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 
 .btn-open-cash-drawer {
@@ -2209,6 +2439,7 @@ body.drawer-open .content-viewport {
   gap: 1.5rem;
   border-bottom: 1px solid #e2e8f0;
   padding-bottom: 0.05rem;
+  flex-shrink: 0;
 }
 
 .res-tab-btn {
@@ -2501,6 +2732,32 @@ body.drawer-open .content-viewport {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1rem;
   width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 0.5rem;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+/* Custom scrollbar matching design */
+.res-cards-grid::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.res-cards-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.res-cards-grid::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+.res-cards-grid::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
 }
 
 @media (min-width: 1200px) {
@@ -2998,22 +3255,35 @@ body.drawer-open .content-viewport {
 /* Toast Notifications */
 .pms-toast-notification {
   position: fixed;
-  bottom: 24px;
+  top: 24px;
   right: 24px;
-  background: #0f172a;
+  background: rgba(15, 23, 42, 0.94);
   color: #ffffff;
   padding: 0.85rem 1.35rem;
   border-radius: var(--radius-lg);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.25);
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  z-index: 99999;
+  z-index: 9999999;
   font-size: 0.88rem;
   font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  animation: toastSpringUp 0.32s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: toastSpringDown 0.32s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
   will-change: transform, opacity;
+}
+
+@keyframes toastSpringDown {
+  0% {
+    transform: translateY(-20px) scale(0.95);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
 }
 
 /* 3. Dashboard Animations & Hover Polish */

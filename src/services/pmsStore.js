@@ -18,6 +18,7 @@ import {
 } from '../data/initialPmsData';
 import { calculateRoomTax } from './taxEngine';
 import { getRoleDefaultPermissions } from '../data/rolePresets';
+import { normalizeDateStr, getNextDayIsoDate, getTodayIsoDate } from './dateUtils';
 import {
   doc,
   setDoc,
@@ -46,12 +47,25 @@ class PMSStore {
 
   load() {
     this.deletedReservationIds = new Set();
+    this.deletedRoomIds = new Set();
+    const authSaved = localStorage.getItem('pms_is_authenticated');
+    this.isAuthenticated = authSaved === 'true';
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        if (parsed.isAuthenticated !== undefined && authSaved === null) {
+          this.isAuthenticated = parsed.isAuthenticated === true;
+        }
         this.deletedReservationIds = new Set(parsed.deletedReservationIds || []);
+        this.deletedRoomIds = new Set(parsed.deletedRoomIds || []);
         this.property = parsed.property || initialProperty;
+        if (this.property) {
+          const todayStr = getTodayIsoDate();
+          if (!this.property.businessDate || this.property.businessDate < todayStr) {
+            this.property.businessDate = todayStr;
+          }
+        }
         if (!parsed.roomTypes || parsed.roomTypes.length === 0) {
           this.roomTypes = initialRoomTypes;
           const rtNormal = this.roomTypes.find(rt => rt.id === 'rt_standard' || rt.name === 'Normal' || rt.name === 'Standard Room');
@@ -104,6 +118,11 @@ class PMSStore {
           }
         } else {
           this.rooms = parsed.rooms;
+        }
+        if (this.deletedRoomIds && this.deletedRoomIds.size > 0) {
+          this.rooms = (this.rooms || []).filter(
+            r => !this.deletedRoomIds.has(String(r.id)) && !this.deletedRoomIds.has(String(r.roomNumber))
+          );
         }
         let rtUltra = this.roomTypes.find(rt => rt.id === 'rt_ultra_premium' || rt.name === 'Ultra Premium');
         if (!rtUltra) {
@@ -351,11 +370,80 @@ class PMSStore {
             });
           }
         }
+        // Ensure rooms 201, 202 are tied to rt_standard / Normal, rooms 101, 102 to rt_deluxe, and rooms 301, 302 to rt_premium
+        const r201 = this.rooms.find(r => r.roomNumber === '201' || r.id === 'rm_201');
+        if (r201) r201.roomTypeId = 'rt_standard';
+        const r202 = this.rooms.find(r => r.roomNumber === '202' || r.id === 'rm_202');
+        if (r202) r202.roomTypeId = 'rt_standard';
+
+        const r101 = this.rooms.find(r => r.roomNumber === '101' || r.id === 'rm_101');
+        if (r101) r101.roomTypeId = 'rt_deluxe';
+        const r102 = this.rooms.find(r => r.roomNumber === '102' || r.id === 'rm_102');
+        if (r102) r102.roomTypeId = 'rt_deluxe';
+
+        const r301 = this.rooms.find(r => r.roomNumber === '301' || r.id === 'rm_301');
+        if (r301) r301.roomTypeId = 'rt_premium';
+        const r302 = this.rooms.find(r => r.roomNumber === '302' || r.id === 'rm_302');
+        if (r302) r302.roomTypeId = 'rt_premium';
+
+        // Synchronize all reservations so that their roomTypeId & roomTypeName accurately reflect their assigned physical room
+        this.reservations.forEach(r => {
+          if (r.roomId || r.roomNumber) {
+            const matchedRoom = this.rooms.find(rm =>
+              (r.roomId && (rm.id === r.roomId || rm.roomNumber === r.roomId)) ||
+              (r.roomNumber && (String(rm.roomNumber) === String(r.roomNumber) || rm.id === r.roomNumber))
+            );
+            if (matchedRoom) {
+              const rt = this.roomTypes.find(t => t.id === matchedRoom.roomTypeId || t.name?.toLowerCase() === String(matchedRoom.roomTypeId).toLowerCase());
+              if (rt) {
+                r.roomTypeId = rt.id;
+                r.roomTypeName = rt.name;
+              }
+            }
+          }
+        });
+
         this.folios = parsed.folios || initialFolios;
         ['fol_3', 'fol_4', 'fol_5'].forEach(fId => {
           if (!this.folios[fId] && initialFolios[fId]) {
             this.folios[fId] = initialFolios[fId];
           }
+        });
+
+        // Retroactively heal & sanitize all folio payment transactions:
+        // Ensure accurate current date, type, category, particulars, and direction
+        const todayIso = getTodayIsoDate();
+        Object.entries(this.folios).forEach(([fId, folio]) => {
+          if (!folio || !Array.isArray(folio.transactions)) return;
+          const matchedRes = this.reservations.find(r => r.id === folio.reservationId || r.folioId === fId);
+          folio.transactions.forEach(tx => {
+            if (!tx) return;
+            const isCredit =
+              String(tx.direction || '').toUpperCase() === 'CREDIT' ||
+              tx.type === 'PAYMENT' ||
+              String(tx.category || '').toLowerCase().includes('payment') ||
+              String(tx.desc || tx.description || '').toLowerCase().includes('payment') ||
+              Number(tx.amount || 0) < 0;
+
+            if (isCredit) {
+              tx.type = 'PAYMENT';
+              tx.direction = 'CREDIT';
+              if (!tx.particulars || tx.particulars === 'Charge') {
+                tx.particulars = 'Payment';
+              }
+              if (!tx.category || tx.category === 'Charge') {
+                tx.category = 'Payment';
+              }
+              // If payment date is stale (e.g. '2026-11-03') or earlier than reservation check-in date
+              if (
+                tx.date === '2026-11-03' ||
+                !tx.date ||
+                (matchedRes?.checkInDate && tx.date < matchedRes.checkInDate)
+              ) {
+                tx.date = matchedRes?.checkInDate || todayIso;
+              }
+            }
+          });
         });
         this.announcements = parsed.announcements || initialStaffNotes || [];
         this.otaChannels = parsed.otaChannels || initialOtaChannels;
@@ -375,6 +463,18 @@ class PMSStore {
         }
         this.nightAudits = (parsed.nightAudits && parsed.nightAudits.length >= 5) ? parsed.nightAudits : initialNightAudits;
         this.auditTrail = parsed.auditTrail || initialAuditTrail;
+        if (this.auditTrail && Array.isArray(this.auditTrail)) {
+          const seenKeys = new Set();
+          this.auditTrail = this.auditTrail.filter(entry => {
+            if (!entry) return false;
+            const ref = entry.meta?.bookingReference || entry.entityId || '';
+            const act = entry.meta?.actionType || entry.action || '';
+            const key = `${act}_${ref}_${entry.timestamp}`;
+            if (seenKeys.has(key)) return false;
+            seenKeys.add(key);
+            return true;
+          });
+        }
         this.stopouts = parsed.stopouts || {};
         this.dailyRates = parsed.dailyRates || {
           base: {
@@ -391,7 +491,14 @@ class PMSStore {
         if (this.dailyRates.base['rt_deluxe_2026-11-06'] === undefined) {
           this.dailyRates.base['rt_deluxe_2026-11-06'] = 1000;
         }
-        this.propertiesList = parsed.propertiesList || ['HOTEL ASTHA', 'HOTEL ASTHA RESORT'];
+        this.propertiesList = (parsed.propertiesList || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT');
+        if (this.propertiesList.length === 0) this.propertiesList = ['HOTEL ASTHA'];
+        if (this.teamMembers && Array.isArray(this.teamMembers)) {
+          this.teamMembers = this.teamMembers.map(tm => ({
+            ...tm,
+            properties: (tm.properties || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT')
+          }));
+        }
         this.currentUser = parsed.currentUser || {
           id: 'usr_owner',
           name: 'Astha India',
@@ -443,7 +550,7 @@ class PMSStore {
 
   resetToDefaults() {
     this.deletedReservationIds = new Set();
-    this.property = { ...initialProperty };
+    this.property = { ...initialProperty, businessDate: getTodayIsoDate() };
     this.roomTypes = JSON.parse(JSON.stringify(initialRoomTypes));
     this.rooms = JSON.parse(JSON.stringify(initialRooms));
     this.mealPlans = JSON.parse(JSON.stringify(initialMealPlans));
@@ -497,10 +604,12 @@ class PMSStore {
       dailyRates: this.dailyRates,
       restrictions: this.restrictions,
       maintenanceBlocks: this.maintenanceBlocks,
-      propertiesList: this.propertiesList || ['HOTEL ASTHA', 'HOTEL ASTHA RESORT'],
+      propertiesList: (this.propertiesList || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT'),
       currentUser: this.currentUser || { id: 'usr_owner', name: 'Astha India', role: 'Owner', email: 'owner@hotelastha.com', initials: 'AI', status: 'ACTIVE' },
+      isAuthenticated: this.isAuthenticated === true,
       invitationTokens: this.invitationTokens || [],
-      deletedReservationIds: Array.from(this.deletedReservationIds || [])
+      deletedReservationIds: Array.from(this.deletedReservationIds || []),
+      deletedRoomIds: Array.from(this.deletedRoomIds || [])
     };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -554,8 +663,9 @@ class PMSStore {
       dailyRates: this.dailyRates,
       restrictions: this.restrictions,
       maintenanceBlocks: this.maintenanceBlocks,
-      propertiesList: this.propertiesList || ['HOTEL ASTHA', 'HOTEL ASTHA RESORT'],
+      propertiesList: (this.propertiesList || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT'),
       currentUser: this.currentUser || { id: 'usr_owner', name: 'Astha India', role: 'Owner', email: 'owner@hotelastha.com', initials: 'AI', status: 'ACTIVE' },
+      isAuthenticated: this.isAuthenticated === true,
       invitationTokens: this.invitationTokens || [],
       cloudStatus: this.cloudStatus,
       isCloudLive: this.cloudStatus === 'LIVE'
@@ -1013,24 +1123,32 @@ class PMSStore {
 
   // --- AUDIT TRAIL ---
 
-  logAudit(action, entity, entityId, details, actor = 'Front Desk Agent') {
+  logAudit(action, entity, entityId, details, actor = 'Astha India', meta = {}) {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
+    const resRef = entity === 'RESERVATION' ? entityId : (meta?.bookingReference || meta?.reservationId);
+
     const entry = {
       id: `at_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       timestamp,
-      actor,
+      actor: actor || 'Astha India',
+      userName: actor || 'Astha India',
       action,
       entity,
       entityId,
-      details
+      reservationId: resRef,
+      bookingReference: resRef,
+      details,
+      meta: meta || {}
     };
-    this.auditTrail = [entry, ...this.auditTrail.slice(0, 99)];
+    if (!this.auditTrail) this.auditTrail = [];
+    this.auditTrail = [entry, ...this.auditTrail.slice(0, 199)];
 
     // Async write to Firestore
     this.syncDocToFirestore('auditTrail', entry.id, entry);
+    return entry;
   }
 
   addAnnouncement(note) {
@@ -1070,9 +1188,17 @@ class PMSStore {
       this.deletedReservationIds.delete(id);
     }
     const isUnassigned = !bookingData.roomId || bookingData.roomId === 'unassigned' || bookingData.roomId === '';
-    const room = !isUnassigned ? this.rooms.find(r => r.id === bookingData.roomId) : null;
-    const roomNumber = isUnassigned ? '' : (bookingData.roomNumber || room?.roomNumber || '');
-    const finalRoomId = isUnassigned ? '' : bookingData.roomId;
+    const room = !isUnassigned
+      ? this.rooms.find(
+          r =>
+            r.id === bookingData.roomId ||
+            r.roomNumber === bookingData.roomId ||
+            (bookingData.roomNumber && String(r.roomNumber) === String(bookingData.roomNumber)) ||
+            (r.id && bookingData.roomId && r.id.replace(/^rm_/, '') === String(bookingData.roomId).replace(/^rm_/, ''))
+        )
+      : null;
+    const roomNumber = isUnassigned ? '' : (bookingData.roomNumber || room?.roomNumber || bookingData.roomId || '');
+    const finalRoomId = isUnassigned ? '' : (room?.id || bookingData.roomId);
 
     const taxCalc = calculateRoomTax(bookingData.baseRatePerNight, bookingData.nights, {
       isComplimentary: bookingData.isComplimentary,
@@ -1085,12 +1211,10 @@ class PMSStore {
     const paidAmount = Number(bookingData.advanceAmount) || 0;
     const balanceDue = Math.max(0, totalAmount - paidAmount);
 
-    const checkInIso = bookingData.checkInDate && !isNaN(new Date(bookingData.checkInDate).getTime())
-      ? bookingData.checkInDate
-      : (this.property?.businessDate || new Date().toISOString().split('T')[0]);
-    const checkOutIso = bookingData.checkOutDate && !isNaN(new Date(bookingData.checkOutDate).getTime())
-      ? bookingData.checkOutDate
-      : new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const checkInIso = normalizeDateStr(bookingData.checkInDate) ||
+      (this.property?.businessDate || getTodayIsoDate());
+    const checkOutIso = normalizeDateStr(bookingData.checkOutDate) ||
+      getNextDayIsoDate(checkInIso);
 
     const newRes = {
       ...bookingData,
@@ -1114,7 +1238,8 @@ class PMSStore {
       },
       roomId: finalRoomId,
       roomNumber,
-      roomTypeId: bookingData.roomTypeId,
+      roomTypeId: room?.roomTypeId || bookingData.roomTypeId,
+      roomTypeName: (room ? this.roomTypes.find(rt => rt.id === room.roomTypeId)?.name : null) || bookingData.roomTypeName || this.roomTypes.find(rt => rt.id === bookingData.roomTypeId)?.name || 'Normal',
       ratePlanCode: bookingData.ratePlanCode || 'BAR_CP',
       checkInDate: checkInIso,
       checkOutDate: checkOutIso,
@@ -1165,10 +1290,17 @@ class PMSStore {
 
     // Credit if advance was paid
     if (paidAmount > 0) {
+      const operationalDate = (this.property?.businessDate && this.property.businessDate >= getTodayIsoDate())
+        ? this.property.businessDate
+        : getTodayIsoDate();
       transactions.push({
         id: `tx_adv_${Date.now()}`,
-        date: this.property?.businessDate || checkInIso,
+        date: operationalDate || checkInIso,
+        particulars: 'Payment',
+        category: 'Payment',
         type: 'PAYMENT',
+        paymentMethod: bookingData.paymentMethod || 'UPI',
+        paymentReference: bookingData.paymentReference || 'Direct',
         desc: `Advance Payment (${bookingData.paymentMethod || 'UPI'}) Ref: ${bookingData.paymentReference || 'Direct'}`,
         amount: -paidAmount,
         tax: 0,
@@ -1188,25 +1320,100 @@ class PMSStore {
     this.reservations = [newRes, ...this.reservations];
 
     // Find and update the room state in inventory
-    const targetRoom = this.rooms.find(r => r.id === newRes.roomId || r.roomNumber === roomNumber);
-    let updatedRoom = null;
-    if (targetRoom) {
-      updatedRoom = {
-        ...targetRoom,
-        currentReservationId: id,
-        currentGuestName: newRes.primaryGuest.name,
-        operational: 'allocated',
-        updatedAt: new Date().toISOString()
-      };
-      this.rooms = this.rooms.map(r => r.id === targetRoom.id ? updatedRoom : r);
+    const allocatedRoomIds = new Set();
+    if (newRes.roomId && newRes.roomId !== 'unassigned') allocatedRoomIds.add(newRes.roomId);
+    if (roomNumber) allocatedRoomIds.add(roomNumber);
+    if (Array.isArray(bookingData.configuredRooms)) {
+      bookingData.configuredRooms.forEach(cr => {
+        if (cr.roomId && cr.roomId !== 'unassigned') allocatedRoomIds.add(cr.roomId);
+        if (cr.roomNumber) allocatedRoomIds.add(cr.roomNumber);
+      });
     }
 
+    const isCheckIn = (bookingData.status || '').toLowerCase() === 'in_house';
+    if (isCheckIn && !newRes.checkedInAt) {
+      newRes.checkedInAt = new Date().toISOString();
+    }
+
+    const updatedRooms = [];
+    if (allocatedRoomIds.size > 0) {
+      this.rooms = this.rooms.map(r => {
+        if (allocatedRoomIds.has(r.id) || allocatedRoomIds.has(r.roomNumber)) {
+          const up = {
+            ...r,
+            currentReservationId: id,
+            currentGuestName: newRes.primaryGuest.name,
+            operational: isCheckIn ? 'occupied' : 'allocated',
+            status: isCheckIn ? (r.status === 'dirty' ? 'clean' : r.status) : (r.status || 'clean'),
+            updatedAt: new Date().toISOString()
+          };
+          updatedRooms.push(up);
+          return up;
+        }
+        return r;
+      });
+    }
+
+    // 1. Log Reservation Created
     this.logAudit(
       'CREATE_RESERVATION',
       'RESERVATION',
       ref,
-      `Created booking for ${newRes.primaryGuest.name} in Room ${roomNumber} (${newRes.nights} Nights). Total: ₹${totalAmount}`
+      `Created booking for ${newRes.primaryGuest.name} in Room ${roomNumber || 'Unassigned'} (${newRes.nights} Nights). Total: ₹${totalAmount}`,
+      'Astha India',
+      {
+        actionType: 'RESERVATION_CREATED',
+        reservationId: id,
+        bookingReference: ref,
+        guestName: newRes.primaryGuest.name,
+        stayDates: `${newRes.checkInDate} → ${newRes.checkOutDate}`,
+        nights: newRes.nights,
+        rooms: newRes.roomsCount,
+        totalAmount: totalAmount,
+        bookingSource: newRes.bookingSource,
+        status: newRes.status.toUpperCase(),
+        affectedDates: [newRes.checkInDate]
+      }
     );
+
+    // 2. Log Room Assigned if room is allocated
+    if (roomNumber) {
+      this.logAudit(
+        'ROOM_ASSIGNED',
+        'RESERVATION',
+        ref,
+        `Room assigned: UNASSIGNED → ${roomNumber}`,
+        'Astha India',
+        {
+          actionType: 'ROOM_ASSIGNED',
+          reservationId: id,
+          bookingReference: ref,
+          oldRoom: 'UNASSIGNED',
+          newRoom: roomNumber,
+          affectedDates: [newRes.checkInDate]
+        }
+      );
+    }
+
+    // 3. Log Guest Checked In if checking in immediately
+    if (isCheckIn) {
+      this.logAudit(
+        'CHECK_IN',
+        'RESERVATION',
+        ref,
+        `Guest ${newRes.primaryGuest.name} checked in to Room ${roomNumber || 'Assigned'}.`,
+        'Astha India',
+        {
+          actionType: 'GUEST_CHECKED_IN',
+          reservationId: id,
+          bookingReference: ref,
+          oldStatus: 'RESERVED',
+          newStatus: 'CHECKED_IN',
+          roomNumber: roomNumber,
+          affectedDates: [newRes.checkInDate]
+        }
+      );
+    }
 
     this.save();
     this.notify();
@@ -1217,9 +1424,9 @@ class PMSStore {
     // 2. Store Folio in Cloud Firestore
     await this.syncDocToFirestore('folios', folioId, newFolio);
 
-    // 3. Store Updated Room in Cloud Firestore
-    if (updatedRoom) {
-      await this.syncDocToFirestore('rooms', updatedRoom.id, updatedRoom);
+    // 3. Store Updated Rooms in Cloud Firestore
+    for (const upRm of updatedRooms) {
+      await this.syncDocToFirestore('rooms', upRm.id, upRm);
     }
 
     // 4. Store Guest Profile in Cloud Firestore (CRM)
@@ -1302,6 +1509,352 @@ class PMSStore {
     return null;
   }
 
+  updateRoomTariffDetails(resId, {
+    applyMode = 'whole_stay',
+    selectedDate,
+    selectedDateIso,
+    roomId,
+    roomNumber,
+    ratePlanCode,
+    ratePlanName,
+    adults,
+    children,
+    rate,
+    baseRatePerNight,
+    overrideRate = false
+  }) {
+    if (!resId) return null;
+    const cleanId = typeof resId === 'object' ? (resId?.id || resId?.bookingReference) : resId;
+    const cleanStr = String(cleanId || '').trim();
+    const cleanNum = cleanStr.replace(/[^0-9]/g, '');
+
+    const idx = this.reservations.findIndex((r) => {
+      if (!r) return false;
+      if (r.id === cleanStr || r.bookingReference === cleanStr) return true;
+      if (String(r.id).toLowerCase() === cleanStr.toLowerCase()) return true;
+      if (String(r.bookingReference).toLowerCase() === cleanStr.toLowerCase()) return true;
+      if (cleanNum && (r.id === `res_${cleanNum}` || r.bookingReference === `#RES_${cleanNum}`)) return true;
+      return false;
+    });
+
+    if (idx === -1) return null;
+
+    const res = this.reservations[idx];
+    const statusNorm = (res.status || '').toLowerCase().replace(/[\s-]/g, '_');
+    if (statusNorm === 'cancelled' || statusNorm === 'no_show' || statusNorm === 'checked_out') {
+      console.warn(`[PMSStore] Cannot modify room charges on ${res.status} reservation ${resId}.`);
+      return null;
+    }
+
+    const nowIso = new Date().toISOString();
+    const nights = Math.max(1, Number(res.nights) || 1);
+    const newRate = Number(rate !== undefined ? rate : baseRatePerNight) >= 0
+      ? Number(rate !== undefined ? rate : baseRatePerNight)
+      : (Number(res.baseRatePerNight) || 2500);
+
+    const newAdults = Number(adults) > 0 ? Number(adults) : (res.adults || 1);
+    const newChildren = Number(children) >= 0 ? Number(children) : (res.children || 0);
+
+    let totalRoomCharges = 0;
+    let taxAmount = 0;
+
+    // Resolve room details if room changed
+    let finalRoomId = res.roomId;
+    let finalRoomNumber = res.roomNumber;
+    let finalRoomTypeId = res.roomTypeId;
+
+    if (roomId || roomNumber) {
+      const targetRoom = this.rooms.find(
+        (r) =>
+          (roomId && r.id === roomId) ||
+          (roomNumber && r.roomNumber === roomNumber) ||
+          (roomId && r.roomNumber === roomId)
+      );
+      if (targetRoom) {
+        finalRoomId = targetRoom.id;
+        finalRoomNumber = targetRoom.roomNumber;
+        finalRoomTypeId = targetRoom.roomTypeId || res.roomTypeId;
+      }
+    }
+
+    // Update Folio and Room Charges
+    if (res.folioId && this.folios[res.folioId]) {
+      const folio = this.folios[res.folioId];
+      folio.roomNumber = finalRoomNumber;
+
+      const nonRoomCharges = (folio.transactions || []).filter((t) => t.type !== 'ROOM_CHARGE');
+      let existingRoomCharges = (folio.transactions || []).filter((t) => t.type === 'ROOM_CHARGE');
+
+      const startDt = new Date(res.checkInDate || Date.now());
+
+      if (existingRoomCharges.length === 0) {
+        for (let i = 0; i < nights; i++) {
+          const d = new Date(startDt);
+          d.setDate(d.getDate() + i);
+          const iso = !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : (res.checkInDate || '');
+          const singleTax = calculateRoomTax(newRate, 1, {
+            isComplimentary: res.isComplimentary,
+            isTaxExempt: res.isTaxExempt
+          });
+          existingRoomCharges.push({
+            id: `tx_rc_${res.id}_${i}`,
+            date: iso,
+            type: 'ROOM_CHARGE',
+            category: 'Room (Room Rent / Accommodation)',
+            desc: `Room Tariff - Room ${finalRoomNumber}`,
+            amount: newRate,
+            tax: Number(singleTax.totalTax) || 0,
+            direction: 'DEBIT',
+            isVoided: false
+          });
+        }
+      }
+
+      const cleanTargetDate = selectedDateIso || (selectedDate && (selectedDate.includes('/') ? selectedDate.split('/').reverse().join('-') : selectedDate));
+
+      if (applyMode === 'selected_date' && cleanTargetDate) {
+        existingRoomCharges = existingRoomCharges.map((rc, i) => {
+          const rcIso = rc.date ? rc.date.split('T')[0] : '';
+          if (rcIso === cleanTargetDate || rc.date === selectedDate || (i === 0 && !rc.date)) {
+            const singleTax = calculateRoomTax(newRate, 1, {
+              isComplimentary: res.isComplimentary,
+              isTaxExempt: res.isTaxExempt
+            });
+            return {
+              ...rc,
+              amount: newRate,
+              tax: Number(singleTax.totalTax) || 0
+            };
+          }
+          return rc;
+        });
+      } else {
+        // whole stay
+        existingRoomCharges = existingRoomCharges.map((rc) => {
+          const singleTax = calculateRoomTax(newRate, 1, {
+            isComplimentary: res.isComplimentary,
+            isTaxExempt: res.isTaxExempt
+          });
+          return {
+            ...rc,
+            amount: newRate,
+            tax: Number(singleTax.totalTax) || 0
+          };
+        });
+      }
+
+      totalRoomCharges = existingRoomCharges.reduce((sum, rc) => sum + (Number(rc.amount) || 0), 0);
+      taxAmount = existingRoomCharges.reduce((sum, rc) => sum + (Number(rc.tax) || 0), 0);
+
+      folio.transactions = [...existingRoomCharges, ...nonRoomCharges];
+      this.folios[res.folioId] = folio;
+      this.recomputeFolioTotals(res.id);
+      this.syncDocToFirestore('folios', res.folioId, this.folios[res.folioId]);
+    } else {
+      totalRoomCharges = newRate * nights;
+      const taxCalc = calculateRoomTax(newRate, nights, {
+        isComplimentary: res.isComplimentary,
+        isTaxExempt: res.isTaxExempt
+      });
+      taxAmount = Number(taxCalc.totalTax) || 0;
+    }
+
+    const totalAmount = totalRoomCharges + taxAmount;
+    const paidAmount = Number(res.paidAmount) || 0;
+    const balanceDue = Math.max(0, totalAmount - paidAmount);
+
+    const updatedRes = {
+      ...res,
+      roomId: finalRoomId,
+      roomNumber: finalRoomNumber,
+      roomTypeId: finalRoomTypeId,
+      adults: newAdults,
+      children: newChildren,
+      baseRatePerNight: applyMode === 'whole_stay' ? newRate : (res.baseRatePerNight || newRate),
+      ratePerNight: applyMode === 'whole_stay' ? newRate : (res.ratePerNight || newRate),
+      rate: applyMode === 'whole_stay' ? newRate : (res.rate || newRate),
+      totalRoomCharges,
+      taxAmount,
+      totalAmount,
+      paidAmount,
+      balanceDue,
+      updatedAt: nowIso
+    };
+
+    this.reservations[idx] = updatedRes;
+
+    this.logAudit(
+      'UPDATE_ROOM_CHARGES',
+      'RESERVATION',
+      updatedRes.bookingReference || updatedRes.id,
+      `Updated room charges for ${updatedRes.primaryGuest?.name || 'Guest'}: ${applyMode === 'selected_date' ? `Date ${selectedDate}` : 'Whole Stay'}, Rate ₹${newRate}, Pax ${newAdults}/${newChildren}. Total ₹${totalAmount}.`,
+      'Astha India',
+      {
+        actionType: 'RATE_OVERRIDDEN',
+        reservationId: updatedRes.id,
+        bookingReference: updatedRes.bookingReference,
+        date: selectedDateIso || selectedDate || updatedRes.checkInDate,
+        oldAmount: res.baseRatePerNight,
+        newAmount: newRate,
+        oldTax: 0,
+        newTax: taxAmount,
+        affectedDates: [selectedDateIso || selectedDate || updatedRes.checkInDate].filter(Boolean)
+      }
+    );
+
+    this.save();
+    this.syncDocToFirestore('reservations', updatedRes.id, updatedRes);
+    this.notify();
+    return updatedRes;
+  }
+
+  async amendStay(resId, { checkInDate, checkOutDate, nights, roomId, roomNumber }) {
+    if (!resId) return null;
+    const cleanId = typeof resId === 'object' ? (resId?.id || resId?.bookingReference) : resId;
+    const cleanStr = String(cleanId || '').trim();
+    const cleanNum = cleanStr.replace(/[^0-9]/g, '');
+
+    const idx = this.reservations.findIndex((r) => {
+      if (!r) return false;
+      if (r.id === cleanStr || r.bookingReference === cleanStr) return true;
+      if (String(r.id).toLowerCase() === cleanStr.toLowerCase()) return true;
+      if (String(r.bookingReference).toLowerCase() === cleanStr.toLowerCase()) return true;
+      if (cleanNum && (r.id === `res_${cleanNum}` || r.bookingReference === `#RES_${cleanNum}`)) return true;
+      return false;
+    });
+
+    if (idx === -1) return null;
+
+    const res = this.reservations[idx];
+    const newNights = Number(nights) || 1;
+    const baseRate = Number(res.baseRatePerNight) || 2500;
+    const totalRoomCharges = baseRate * newNights;
+
+    // Recalculate taxes
+    const taxCalc = calculateRoomTax(baseRate, newNights, {
+      isComplimentary: res.isComplimentary,
+      isTaxExempt: res.isTaxExempt
+    });
+    const taxAmount = Number(taxCalc.totalTax) || 0;
+    const totalAmount = totalRoomCharges + taxAmount;
+    const paidAmount = Number(res.paidAmount) || 0;
+    const balanceDue = Math.max(0, totalAmount - paidAmount);
+
+    let finalRoomId = res.roomId;
+    let finalRoomNumber = res.roomNumber;
+    let finalRoomTypeId = res.roomTypeId;
+
+    if (roomId || roomNumber) {
+      const targetRoom = this.rooms.find(
+        (r) =>
+          (roomId && r.id === roomId) ||
+          (roomNumber && r.roomNumber === roomNumber) ||
+          (roomId && r.roomNumber === roomId)
+      );
+      if (targetRoom) {
+        finalRoomId = targetRoom.id;
+        finalRoomNumber = targetRoom.roomNumber;
+        finalRoomTypeId = targetRoom.roomTypeId || res.roomTypeId;
+
+        // Reallocate room status in inventory
+        const oldRoomId = res.roomId;
+        const nowIso = new Date().toISOString();
+        this.rooms = this.rooms.map((r) => {
+          if (r.id === targetRoom.id) {
+            return {
+              ...r,
+              currentReservationId: res.id,
+              currentGuestName: res.primaryGuest?.name || res.guestName,
+              operational: res.status === 'in_house' ? 'occupied' : 'allocated',
+              updatedAt: nowIso
+            };
+          }
+          if (oldRoomId && r.id === oldRoomId && r.id !== targetRoom.id) {
+            return {
+              ...r,
+              currentReservationId: null,
+              currentGuestName: '',
+              operational: 'available',
+              updatedAt: nowIso
+            };
+          }
+          return r;
+        });
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    const updatedRes = {
+      ...res,
+      checkInDate,
+      checkOutDate,
+      nights: newNights,
+      roomId: finalRoomId,
+      roomNumber: finalRoomNumber,
+      roomTypeId: finalRoomTypeId,
+      totalRoomCharges,
+      taxAmount,
+      totalAmount,
+      balanceDue,
+      updatedAt: nowIso
+    };
+
+    this.reservations[idx] = updatedRes;
+
+    // Regenerate nightly room charges on folio
+    if (res.folioId && this.folios[res.folioId]) {
+      const folio = this.folios[res.folioId];
+      const nonRoomCharges = (folio.transactions || []).filter((t) => t.type !== 'ROOM_CHARGE');
+      const newRoomCharges = [];
+      const startDt = new Date(checkInDate);
+      const dailyTax = Math.round(taxAmount / newNights);
+
+      for (let i = 0; i < newNights; i++) {
+        const d = new Date(startDt);
+        d.setDate(d.getDate() + i);
+        const iso = d.toISOString().split('T')[0];
+        newRoomCharges.push({
+          id: `tx_amend_${Date.now()}_${i}`,
+          date: iso,
+          type: 'ROOM_CHARGE',
+          category: 'Room (Room Rent / Accommodation)',
+          desc: `Room Tariff - Room ${finalRoomNumber}`,
+          amount: baseRate,
+          tax: dailyTax,
+          direction: 'DEBIT',
+          isVoided: false
+        });
+      }
+
+      folio.transactions = [...newRoomCharges, ...nonRoomCharges];
+      folio.roomNumber = finalRoomNumber;
+      this.folios[res.folioId] = folio;
+      this.recomputeFolioTotals(res.id);
+      this.syncDocToFirestore('folios', res.folioId, this.folios[res.folioId]);
+    }
+
+    this.logAudit(
+      'AMEND_STAY',
+      'RESERVATION',
+      updatedRes.bookingReference || updatedRes.id,
+      `Amended stay for ${updatedRes.primaryGuest?.name || 'Guest'} to ${checkInDate} - ${checkOutDate} (${newNights} Nights). Room ${finalRoomNumber}, Total ₹${totalAmount}.`,
+      'Astha India',
+      {
+        actionType: 'STAY_EXTENDED',
+        reservationId: updatedRes.id,
+        bookingReference: updatedRes.bookingReference,
+        oldDates: `${res.checkInDate} → ${res.checkOutDate}`,
+        newDates: `${checkInDate} → ${checkOutDate}`,
+        affectedDates: [checkInDate, checkOutDate].filter(Boolean)
+      }
+    );
+
+    this.save();
+    this.syncDocToFirestore('reservations', updatedRes.id, updatedRes);
+    this.notify();
+    return updatedRes;
+  }
+
   assignRoom(resId, targetRoomId) {
     if (!resId) return false;
     const cleanId = typeof resId === 'object' ? (resId?.id || resId?.bookingReference) : resId;
@@ -1325,13 +1878,41 @@ class PMSStore {
       return false;
     }
 
+    // Check if room is currently occupied by another in-house reservation
+    const otherInHouse = this.reservations.find(r => {
+      if (!r || r.status !== 'in_house') return false;
+      if (r.id === res.id || r.bookingReference === res.bookingReference) return false;
+      return (r.roomId && (r.roomId === room.id || r.roomId === room.roomNumber)) ||
+             (r.roomNumber && (r.roomNumber === room.roomNumber || r.roomNumber === room.id));
+    });
+
+    if (otherInHouse) {
+      const occupant = otherInHouse.primaryGuest?.name || otherInHouse.guestName || 'another guest';
+      console.warn(`[PMSStore] Cannot assign room: Room ${room.roomNumber} is full (occupied by ${occupant}).`);
+      alert(`Cannot assign: Room ${room.roomNumber} is FULL (currently occupied by ${occupant}).`);
+      return false;
+    }
+
     const nowIso = new Date().toISOString();
     const targetId = res.id;
     const targetRef = res.bookingReference || `#${targetId}`;
     const guestName = res.primaryGuest?.name || res.guestName || 'Guest';
 
+    const targetRt = this.roomTypes.find(rt => rt.id === room.roomTypeId || rt.name?.toLowerCase() === String(room.roomTypeId).toLowerCase());
+    const updatedRoomTypeId = room.roomTypeId || res.roomTypeId;
+    const updatedRoomTypeName = targetRt?.name || res.roomTypeName || 'Normal';
+
     this.reservations = this.reservations.map(r =>
-      (r.id === targetId || r.bookingReference === targetRef) ? { ...r, roomId: room.id, roomNumber: room.roomNumber, updatedAt: nowIso } : r
+      (r.id === targetId || r.bookingReference === targetRef)
+        ? {
+            ...r,
+            roomId: room.id,
+            roomNumber: room.roomNumber,
+            roomTypeId: updatedRoomTypeId,
+            roomTypeName: updatedRoomTypeName,
+            updatedAt: nowIso
+          }
+        : r
     );
 
     if (res.folioId && this.folios[res.folioId]) {
@@ -1402,6 +1983,25 @@ class PMSStore {
     const targetRef = res.bookingReference || `#${targetId}`;
     const guestName = res.primaryGuest?.name || res.guestName || 'Guest';
 
+    // Verify room is not already full (occupied by another in-house reservation)
+    const otherInHouse = this.reservations.find(r => {
+      if (!r || r.status !== 'in_house') return false;
+      if (r.id === res.id || r.bookingReference === res.bookingReference) return false;
+      return (r.roomId && (r.roomId === targetRoomId || r.roomId === roomNumber)) ||
+             (r.roomNumber && (r.roomNumber === roomNumber || r.roomNumber === targetRoomId));
+    });
+
+    if (otherInHouse) {
+      const occupant = otherInHouse.primaryGuest?.name || otherInHouse.guestName || 'another guest';
+      console.warn(`[PMSStore] Cannot check-in: Room ${roomNumber} is full (occupied by ${occupant}).`);
+      alert(`Cannot check in: Room ${roomNumber} is FULL (currently occupied by ${occupant}). Please assign an available room.`);
+      return false;
+    }
+
+    const targetRt = room ? this.roomTypes.find(rt => rt.id === room.roomTypeId || rt.name?.toLowerCase() === String(room.roomTypeId).toLowerCase()) : null;
+    const updatedRoomTypeId = room?.roomTypeId || res.roomTypeId;
+    const updatedRoomTypeName = targetRt?.name || res.roomTypeName || 'Normal';
+
     // 1. Immediately update reservation status to in_house in memory
     this.reservations = this.reservations.map(r => {
       const isMatch = r.id === targetId ||
@@ -1414,6 +2014,8 @@ class PMSStore {
         ...r,
         roomId: targetRoomId,
         roomNumber: roomNumber,
+        roomTypeId: updatedRoomTypeId,
+        roomTypeName: updatedRoomTypeName,
         status: 'in_house',
         checkedInAt: r.checkedInAt || nowIso,
         updatedAt: nowIso
@@ -1449,7 +2051,17 @@ class PMSStore {
       'CHECK_IN',
       'RESERVATION',
       targetRef,
-      `Guest ${guestName} checked in to Room ${roomNumber || 'Assigned'}.`
+      `Guest ${guestName} checked in to Room ${roomNumber || 'Assigned'}.`,
+      'Astha India',
+      {
+        actionType: 'GUEST_CHECKED_IN',
+        reservationId: targetId,
+        bookingReference: targetRef,
+        oldStatus: 'RESERVED',
+        newStatus: 'CHECKED_IN',
+        roomNumber: roomNumber,
+        affectedDates: [res.checkInDate || getTodayIsoDate()]
+      }
     );
 
     this.save();
@@ -1732,6 +2344,47 @@ class PMSStore {
     }
     this.save();
     this.notify();
+    return { success: true };
+  }
+
+
+  loginUser(userProfile) {
+    this.isAuthenticated = true;
+    if (userProfile) {
+      const rolePresets = getRoleDefaultPermissions();
+      const userRole = userProfile.role || 'Owner';
+      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
+
+      this.currentUser = {
+        id: userProfile.id || `usr_${Date.now()}`,
+        name: userProfile.name || 'Astha India',
+        email: userProfile.email || 'owner@hotelastha.com',
+        role: userRole,
+        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
+        avatar: userProfile.avatar || '👑',
+        status: 'ACTIVE',
+        properties: userProfile.properties || ['HOTEL ASTHA'],
+        permissions: userProfile.permissions || defaultPerms
+      };
+    }
+    try {
+      localStorage.setItem('pms_is_authenticated', 'true');
+    } catch (e) {}
+    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
+    this.save();
+    this.notify();
+    return { success: true, user: this.currentUser };
+  }
+
+  logoutUser() {
+    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
+    this.isAuthenticated = false;
+    try {
+      localStorage.setItem('pms_is_authenticated', 'false');
+    } catch (e) {}
+    this.save();
+    this.notify();
+    return { success: true };
   }
 
   // --- FOLIO & SETTLEMENT ENGINE ---
@@ -1792,9 +2445,11 @@ class PMSStore {
       transactions: []
     };
 
+    const effectiveDate = transaction.date ? normalizeDateStr(transaction.date) : getTodayIsoDate();
+
     const newTx = {
       id: transaction.id || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      date: transaction.date || this.property.businessDate,
+      date: effectiveDate,
       category: transaction.category || (Number(transaction.amount) < 0 ? 'Payment' : 'Room'),
       type: transaction.type || (Number(transaction.amount) < 0 ? 'PAYMENT' : 'EXTRA_SERVICE'),
       desc: transaction.desc || 'Folio Transaction',
@@ -1855,9 +2510,10 @@ class PMSStore {
       isTaxExempt: res.isTaxExempt
     });
 
+    const effectiveDate = getTodayIsoDate();
     const newTx = {
       id: `tx_nightly_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
-      date: this.property.businessDate,
+      date: effectiveDate,
       category: 'Room (Room Rent / Accommodation)',
       type: 'ROOM_CHARGE',
       desc: `Nightly Room Tariff - Room ${res.roomNumber}`,
@@ -1876,7 +2532,7 @@ class PMSStore {
       'POST_PENDING_CHARGES',
       'FOLIO',
       folio.folioNumber,
-      `Posted pending nightly tariff ₹${newTx.amount} + Tax ₹${newTx.tax} on Room ${res.roomNumber}.`
+      `Posted pending nightly tariff ₹${newTx.amount} + Tax ₹${newTx.tax} on ${effectiveDate} for Room ${res.roomNumber}.`
     );
     this.save();
 
@@ -1884,10 +2540,11 @@ class PMSStore {
     this.syncDocToFirestore('folios', res.folioId, this.folios[res.folioId]);
     this.syncDocToFirestore('reservations', reservationId, this.getReservation(reservationId));
 
+    this.notify();
     return newTx;
   }
 
-  addFolioCharge(reservationId, { category, receiptNumber, amount, description }) {
+  addFolioCharge(reservationId, { date, category, receiptNumber, amount, description }) {
     const res = this.reservations.find(r => r.id === reservationId);
     if (!res || !res.folioId) return null;
     const statusNorm = (res.status || '').toLowerCase().replace('-', '_').replace(' ', '_');
@@ -1921,10 +2578,11 @@ class PMSStore {
     this._lastChargeCall = { reservationId, amount: amt, category, timestamp: now };
 
     const tax = res.isTaxExempt || res.isComplimentary ? 0 : Math.round(amt * 0.05 * 100) / 100;
+    const effectiveDate = date ? normalizeDateStr(date) : getTodayIsoDate();
 
     const newTx = {
       id: `tx_chg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      date: this.property.businessDate,
+      date: effectiveDate,
       category: category || 'Service (General Guest Services)',
       type: 'EXTRA_SERVICE',
       desc: description || category || 'Incidental / Service Charge',
@@ -1940,10 +2598,23 @@ class PMSStore {
     this.recomputeFolioTotals(reservationId);
 
     this.logAudit(
-      'ADD_CHARGE',
-      'FOLIO',
-      folio.folioNumber,
-      `Added charge [${newTx.category}]: ₹${amt} (Receipt: ${newTx.voucherNumber}). Desc: ${newTx.desc}`
+      'CHARGE_ADDED',
+      'RESERVATION',
+      res.bookingReference || res.id,
+      `Added charge [${newTx.category}]: ₹${amt} (Receipt: ${newTx.voucherNumber}) on ${effectiveDate}. Desc: ${newTx.desc}`,
+      'Astha India',
+      {
+        actionType: 'CHARGE_ADDED',
+        reservationId,
+        bookingReference: res.bookingReference,
+        category: newTx.category,
+        amount: amt,
+        tax: tax,
+        description: newTx.desc,
+        date: effectiveDate,
+        voucherNumber: newTx.voucherNumber,
+        affectedDates: [effectiveDate]
+      }
     );
     this.save();
 
@@ -1951,10 +2622,11 @@ class PMSStore {
     this.syncDocToFirestore('folios', res.folioId, this.folios[res.folioId]);
     this.syncDocToFirestore('reservations', reservationId, this.getReservation(reservationId));
 
+    this.notify();
     return newTx;
   }
 
-  addFolioPayment(reservationId, { folioId, type, paymentMethod, amount, description, reference }) {
+  addFolioPayment(reservationId, { folioId, date, type, paymentMethod, amount, description, reference }) {
     const res = this.reservations.find(r => r.id === reservationId);
     if (!res || !res.folioId) return null;
     const statusNorm = (res.status || '').toLowerCase().replace('-', '_').replace(' ', '_');
@@ -1987,9 +2659,12 @@ class PMSStore {
     }
     this._lastPaymentCall = { reservationId, amount: amt, paymentMethod, timestamp: now };
 
+    const effectiveDate = date ? normalizeDateStr(date) : (this.property?.businessDate && this.property.businessDate >= getTodayIsoDate() ? this.property.businessDate : getTodayIsoDate());
+
     const newTx = {
       id: `tx_pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      date: this.property.businessDate,
+      date: effectiveDate,
+      particulars: 'Payment',
       category: 'Payment',
       type: 'PAYMENT',
       paymentType: type || 'Settlement',
@@ -2007,10 +2682,22 @@ class PMSStore {
     this.recomputeFolioTotals(reservationId);
 
     this.logAudit(
-      'ADD_PAYMENT',
-      'FOLIO',
-      folio.folioNumber,
-      `Processed ${newTx.paymentType} payment of ₹${amt} via ${newTx.paymentMethod}. Outstanding: ₹${this.reservations.find(r => r.id === reservationId)?.balanceDue.toFixed(2)}`
+      'PAYMENT_ADDED',
+      'RESERVATION',
+      res.bookingReference || res.id,
+      `Processed ${newTx.paymentType} payment of ₹${amt} via ${newTx.paymentMethod}. Outstanding: ₹${this.reservations.find(r => r.id === reservationId)?.balanceDue.toFixed(2)}`,
+      'Astha India',
+      {
+        actionType: 'PAYMENT_ADDED',
+        reservationId,
+        bookingReference: res.bookingReference,
+        amount: amt,
+        paymentMethod: newTx.paymentMethod,
+        paymentType: newTx.paymentType,
+        voucherNumber: newTx.voucherNumber,
+        date: effectiveDate,
+        affectedDates: [effectiveDate]
+      }
     );
     this.save();
 
@@ -2055,17 +2742,113 @@ class PMSStore {
     return true;
   }
 
-  settleFolio(reservationId, paymentMode = 'UPI', reference = 'Direct Settlement') {
-    const res = this.reservations.find(r => r.id === reservationId);
-    if (!res || res.balanceDue <= 0) return;
+  updateFolioTransaction(reservationId, transactionId, { amount, description, date }) {
+    const res = this.reservations.find(r => r.id === reservationId || r.bookingReference === reservationId);
+    if (!res || !res.folioId || !this.folios[res.folioId]) return false;
 
-    this.addFolioPayment(reservationId, {
-      type: 'Settlement',
-      paymentMethod: paymentMode,
-      amount: res.balanceDue,
-      description: `Folio Settlement (${paymentMode}) Ref: ${reference}`,
-      reference
-    });
+    const folio = this.folios[res.folioId];
+    const tx = folio.transactions.find(t => t.id === transactionId);
+    if (!tx || tx.isVoided) return false;
+
+    const isCredit = tx.direction === 'CREDIT' || tx.direction === 'Credit' || (tx.type && tx.type.toUpperCase() === 'PAYMENT');
+    const oldAmt = Math.abs(tx.amount || 0);
+    const newAmt = Number(amount);
+
+    if (!isNaN(newAmt) && newAmt >= 0) {
+      tx.amount = isCredit ? -Math.abs(newAmt) : Math.abs(newAmt);
+    }
+    if (description !== undefined) {
+      tx.desc = description;
+      tx.description = description;
+    }
+    if (date !== undefined && date) {
+      tx.date = normalizeDateStr(date);
+    }
+    tx.updatedAt = new Date().toISOString();
+
+    this.recomputeFolioTotals(res.id);
+
+    this.logAudit(
+      'UPDATE_TRANSACTION',
+      'FOLIO',
+      folio.folioNumber,
+      `Updated ${isCredit ? 'payment' : 'charge'} transaction from ₹${oldAmt} to ₹${newAmt} (Date: ${tx.date}). Description: "${description || tx.desc || ''}"`
+    );
+    this.save();
+    this.notify();
+
+    this.syncDocToFirestore('folios', res.folioId, this.folios[res.folioId]);
+    this.syncDocToFirestore('reservations', res.id, this.getReservation(res.id));
+
+    return true;
+  }
+
+  moveFolioTransaction(reservationId, transactionId, targetFolioId) {
+    const res = this.reservations.find(r => r.id === reservationId || r.bookingReference === reservationId);
+    if (!res || !res.folioId || !this.folios[res.folioId]) return false;
+
+    const sourceFolio = this.folios[res.folioId];
+    const txIndex = sourceFolio.transactions.findIndex(t => t.id === transactionId);
+    if (txIndex === -1) return false;
+
+    const [tx] = sourceFolio.transactions.splice(txIndex, 1);
+
+    if (!this.folios[targetFolioId]) {
+      this.folios[targetFolioId] = {
+        folioNumber: targetFolioId.toUpperCase(),
+        reservationId: res.id,
+        roomNumber: res.roomNumber,
+        status: 'OPEN',
+        transactions: []
+      };
+    }
+    this.folios[targetFolioId].transactions.push(tx);
+
+    this.recomputeFolioTotals(res.id);
+
+    this.logAudit(
+      'MOVE_TRANSACTION',
+      'FOLIO',
+      sourceFolio.folioNumber,
+      `Moved transaction ₹${Math.abs(tx.amount || 0)} from ${sourceFolio.folioNumber} to ${targetFolioId}.`
+    );
+    this.save();
+    this.notify();
+
+    this.syncDocToFirestore('folios', res.folioId, sourceFolio);
+    this.syncDocToFirestore('folios', targetFolioId, this.folios[targetFolioId]);
+    this.syncDocToFirestore('reservations', res.id, this.getReservation(res.id));
+
+    return true;
+  }
+
+  settleFolio(reservationId, paymentMode = 'UPI', reference = 'Direct Settlement', date) {
+    const res = this.reservations.find(r => r.id === reservationId || r.bookingReference === reservationId);
+    if (!res) return false;
+
+    if (Number(res.balanceDue) > 0) {
+      this.addFolioPayment(res.id, {
+        date: date ? normalizeDateStr(date) : getTodayIsoDate(),
+        type: 'Settlement',
+        paymentMethod: paymentMode,
+        amount: res.balanceDue,
+        description: `Folio Settlement (${paymentMode}) Ref: ${reference}`,
+        reference
+      });
+    }
+
+    if (res.folioId && this.folios[res.folioId]) {
+      this.folios[res.folioId] = {
+        ...this.folios[res.folioId],
+        status: 'SETTLED',
+        settledAt: new Date().toISOString()
+      };
+      this.syncDocToFirestore('folios', res.folioId, this.folios[res.folioId]);
+    }
+    this.logAudit('SETTLE_FOLIO', 'FOLIO', res.folioId || res.id, `Folio ${res.folioId || res.id} settled and marked CLOSED.`);
+    this.save();
+    this.notify();
+    return true;
   }
 
   // --- RATES, STOPOUTS & RESTRICTIONS ---
@@ -2263,12 +3046,33 @@ class PMSStore {
 
       roomChargesLog.push({
         room: res.roomNumber,
-        guest: res.primaryGuest.name,
+        guest: res.primaryGuest?.name || res.guestName,
         rate: res.baseRatePerNight,
         tax: taxCalc.totalTax,
         net: res.baseRatePerNight + taxCalc.totalTax,
         folio: res.folioId ? (this.folios[res.folioId]?.folioNumber || 'FOL') : 'FOL'
       });
+
+      // Log per-reservation audit entry so it shows up in Audit Trail
+      this.logAudit(
+        'NIGHT_AUDIT_PROCESSED',
+        'RESERVATION',
+        res.bookingReference || res.id,
+        `Night Audit Processed: Room charge of ₹${res.baseRatePerNight} + ₹${taxCalc.totalTax} tax posted to folio for ${curDate}.`,
+        auditorName || 'Astha India',
+        {
+          actionType: 'NIGHT_AUDIT_PROCESSED',
+          reservationId: res.id,
+          bookingReference: res.bookingReference,
+          roomNumber: res.roomNumber,
+          roomTypeName: res.roomTypeName || '',
+          date: curDate,
+          amount: res.baseRatePerNight,
+          taxAmount: taxCalc.totalTax,
+          affectedDates: [curDate],
+          status: 'POSTED_TO_FOLIO'
+        }
+      );
     });
 
     const nextDateObj = new Date(curDate);
@@ -2405,6 +3209,47 @@ class PMSStore {
     }
     this.save();
     this.notify();
+    return { success: true };
+  }
+
+
+  loginUser(userProfile) {
+    this.isAuthenticated = true;
+    if (userProfile) {
+      const rolePresets = getRoleDefaultPermissions();
+      const userRole = userProfile.role || 'Owner';
+      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
+
+      this.currentUser = {
+        id: userProfile.id || `usr_${Date.now()}`,
+        name: userProfile.name || 'Astha India',
+        email: userProfile.email || 'owner@hotelastha.com',
+        role: userRole,
+        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
+        avatar: userProfile.avatar || '👑',
+        status: 'ACTIVE',
+        properties: userProfile.properties || ['HOTEL ASTHA'],
+        permissions: userProfile.permissions || defaultPerms
+      };
+    }
+    try {
+      localStorage.setItem('pms_is_authenticated', 'true');
+    } catch (e) {}
+    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
+    this.save();
+    this.notify();
+    return { success: true, user: this.currentUser };
+  }
+
+  logoutUser() {
+    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
+    this.isAuthenticated = false;
+    try {
+      localStorage.setItem('pms_is_authenticated', 'false');
+    } catch (e) {}
+    this.save();
+    this.notify();
+    return { success: true };
   }
 
   removeTeamMember(memberId) {
@@ -2416,6 +3261,47 @@ class PMSStore {
     }
     this.save();
     this.notify();
+    return { success: true };
+  }
+
+
+  loginUser(userProfile) {
+    this.isAuthenticated = true;
+    if (userProfile) {
+      const rolePresets = getRoleDefaultPermissions();
+      const userRole = userProfile.role || 'Owner';
+      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
+
+      this.currentUser = {
+        id: userProfile.id || `usr_${Date.now()}`,
+        name: userProfile.name || 'Astha India',
+        email: userProfile.email || 'owner@hotelastha.com',
+        role: userRole,
+        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
+        avatar: userProfile.avatar || '👑',
+        status: 'ACTIVE',
+        properties: userProfile.properties || ['HOTEL ASTHA'],
+        permissions: userProfile.permissions || defaultPerms
+      };
+    }
+    try {
+      localStorage.setItem('pms_is_authenticated', 'true');
+    } catch (e) {}
+    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
+    this.save();
+    this.notify();
+    return { success: true, user: this.currentUser };
+  }
+
+  logoutUser() {
+    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
+    this.isAuthenticated = false;
+    try {
+      localStorage.setItem('pms_is_authenticated', 'false');
+    } catch (e) {}
+    this.save();
+    this.notify();
+    return { success: true };
   }
 
   updateTeamMember(memberId, patch) {
@@ -2525,6 +3411,47 @@ class PMSStore {
     }
     this.save();
     this.notify();
+    return { success: true };
+  }
+
+
+  loginUser(userProfile) {
+    this.isAuthenticated = true;
+    if (userProfile) {
+      const rolePresets = getRoleDefaultPermissions();
+      const userRole = userProfile.role || 'Owner';
+      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
+
+      this.currentUser = {
+        id: userProfile.id || `usr_${Date.now()}`,
+        name: userProfile.name || 'Astha India',
+        email: userProfile.email || 'owner@hotelastha.com',
+        role: userRole,
+        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
+        avatar: userProfile.avatar || '👑',
+        status: 'ACTIVE',
+        properties: userProfile.properties || ['HOTEL ASTHA'],
+        permissions: userProfile.permissions || defaultPerms
+      };
+    }
+    try {
+      localStorage.setItem('pms_is_authenticated', 'true');
+    } catch (e) {}
+    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
+    this.save();
+    this.notify();
+    return { success: true, user: this.currentUser };
+  }
+
+  logoutUser() {
+    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
+    this.isAuthenticated = false;
+    try {
+      localStorage.setItem('pms_is_authenticated', 'false');
+    } catch (e) {}
+    this.save();
+    this.notify();
+    return { success: true };
   }
 
   hasPermission(permissionPath) {
@@ -2567,6 +3494,47 @@ class PMSStore {
     this.logAudit('UPDATE_PERMISSIONS', 'RBAC', userId, `Updated granular operational permissions.`);
     this.save();
     this.notify();
+    return { success: true };
+  }
+
+
+  loginUser(userProfile) {
+    this.isAuthenticated = true;
+    if (userProfile) {
+      const rolePresets = getRoleDefaultPermissions();
+      const userRole = userProfile.role || 'Owner';
+      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
+
+      this.currentUser = {
+        id: userProfile.id || `usr_${Date.now()}`,
+        name: userProfile.name || 'Astha India',
+        email: userProfile.email || 'owner@hotelastha.com',
+        role: userRole,
+        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
+        avatar: userProfile.avatar || '👑',
+        status: 'ACTIVE',
+        properties: userProfile.properties || ['HOTEL ASTHA'],
+        permissions: userProfile.permissions || defaultPerms
+      };
+    }
+    try {
+      localStorage.setItem('pms_is_authenticated', 'true');
+    } catch (e) {}
+    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
+    this.save();
+    this.notify();
+    return { success: true, user: this.currentUser };
+  }
+
+  logoutUser() {
+    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
+    this.isAuthenticated = false;
+    try {
+      localStorage.setItem('pms_is_authenticated', 'false');
+    } catch (e) {}
+    this.save();
+    this.notify();
+    return { success: true };
   }
 
   updatePermissions(userId, permissions) {
@@ -2625,6 +3593,47 @@ class PMSStore {
     }
     this.save();
     this.notify();
+    return { success: true };
+  }
+
+
+  loginUser(userProfile) {
+    this.isAuthenticated = true;
+    if (userProfile) {
+      const rolePresets = getRoleDefaultPermissions();
+      const userRole = userProfile.role || 'Owner';
+      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
+
+      this.currentUser = {
+        id: userProfile.id || `usr_${Date.now()}`,
+        name: userProfile.name || 'Astha India',
+        email: userProfile.email || 'owner@hotelastha.com',
+        role: userRole,
+        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
+        avatar: userProfile.avatar || '👑',
+        status: 'ACTIVE',
+        properties: userProfile.properties || ['HOTEL ASTHA'],
+        permissions: userProfile.permissions || defaultPerms
+      };
+    }
+    try {
+      localStorage.setItem('pms_is_authenticated', 'true');
+    } catch (e) {}
+    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
+    this.save();
+    this.notify();
+    return { success: true, user: this.currentUser };
+  }
+
+  logoutUser() {
+    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
+    this.isAuthenticated = false;
+    try {
+      localStorage.setItem('pms_is_authenticated', 'false');
+    } catch (e) {}
+    this.save();
+    this.notify();
+    return { success: true };
   }
 
   addRatePlan(planData) {
@@ -2759,6 +3768,47 @@ class PMSStore {
     }
     this.save();
     this.notify();
+    return { success: true };
+  }
+
+
+  loginUser(userProfile) {
+    this.isAuthenticated = true;
+    if (userProfile) {
+      const rolePresets = getRoleDefaultPermissions();
+      const userRole = userProfile.role || 'Owner';
+      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
+
+      this.currentUser = {
+        id: userProfile.id || `usr_${Date.now()}`,
+        name: userProfile.name || 'Astha India',
+        email: userProfile.email || 'owner@hotelastha.com',
+        role: userRole,
+        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
+        avatar: userProfile.avatar || '👑',
+        status: 'ACTIVE',
+        properties: userProfile.properties || ['HOTEL ASTHA'],
+        permissions: userProfile.permissions || defaultPerms
+      };
+    }
+    try {
+      localStorage.setItem('pms_is_authenticated', 'true');
+    } catch (e) {}
+    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
+    this.save();
+    this.notify();
+    return { success: true, user: this.currentUser };
+  }
+
+  logoutUser() {
+    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
+    this.isAuthenticated = false;
+    try {
+      localStorage.setItem('pms_is_authenticated', 'false');
+    } catch (e) {}
+    this.save();
+    this.notify();
+    return { success: true };
   }
 
   addRoomType(roomTypeData) {
@@ -2849,6 +3899,14 @@ class PMSStore {
 
   deleteRoomType(roomTypeId) {
     const rt = this.roomTypes?.find(r => r.id === roomTypeId || r.code === roomTypeId);
+    const assignedRooms = (this.rooms || []).filter(
+      r => r.roomTypeId === roomTypeId ||
+           String(r.roomTypeId).toLowerCase() === String(roomTypeId).toLowerCase() ||
+           (rt && (r.roomTypeId === rt.id || r.roomTypeId === rt.code || r.roomType === rt.name || r.roomTypeName === rt.name))
+    );
+    if (assignedRooms.length > 0) {
+      return { success: false, message: 'This room type is assigned to one or more rooms and cannot be deleted.' };
+    }
     this.roomTypes = (this.roomTypes || []).filter(r => r.id !== roomTypeId && r.code !== roomTypeId);
     if (rt) {
       this.logAudit('DELETE_ROOM_TYPE', 'PROPERTIES', rt.id, `Deleted room type ${rt.name}`);
@@ -2872,6 +3930,47 @@ class PMSStore {
     }
     this.save();
     this.notify();
+    return { success: true };
+  }
+
+
+  loginUser(userProfile) {
+    this.isAuthenticated = true;
+    if (userProfile) {
+      const rolePresets = getRoleDefaultPermissions();
+      const userRole = userProfile.role || 'Owner';
+      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
+
+      this.currentUser = {
+        id: userProfile.id || `usr_${Date.now()}`,
+        name: userProfile.name || 'Astha India',
+        email: userProfile.email || 'owner@hotelastha.com',
+        role: userRole,
+        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
+        avatar: userProfile.avatar || '👑',
+        status: 'ACTIVE',
+        properties: userProfile.properties || ['HOTEL ASTHA'],
+        permissions: userProfile.permissions || defaultPerms
+      };
+    }
+    try {
+      localStorage.setItem('pms_is_authenticated', 'true');
+    } catch (e) {}
+    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
+    this.save();
+    this.notify();
+    return { success: true, user: this.currentUser };
+  }
+
+  logoutUser() {
+    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
+    this.isAuthenticated = false;
+    try {
+      localStorage.setItem('pms_is_authenticated', 'false');
+    } catch (e) {}
+    this.save();
+    this.notify();
+    return { success: true };
   }
 
   addRooms(newRoomsList) {
@@ -2919,17 +4018,101 @@ class PMSStore {
   deleteRoom(roomId) {
     const rm = this.rooms?.find(r => r.id === roomId || r.roomNumber === roomId);
     this.rooms = (this.rooms || []).filter(r => r.id !== roomId && r.roomNumber !== roomId);
+    if (!this.deletedRoomIds) this.deletedRoomIds = new Set();
     if (rm) {
+      this.deletedRoomIds.add(String(rm.id));
+      if (rm.roomNumber) this.deletedRoomIds.add(String(rm.roomNumber));
       this.logAudit('DELETE_ROOM', 'PROPERTIES', rm.roomNumber, `Deleted room ${rm.roomNumber}`);
       this.deleteDocFromFirestore('rooms', rm.id);
       if (rm.roomNumber && rm.roomNumber !== rm.id) {
         this.deleteDocFromFirestore('rooms', rm.roomNumber);
       }
     } else {
+      this.deletedRoomIds.add(String(roomId));
       this.deleteDocFromFirestore('rooms', roomId);
     }
     this.save();
     this.notify();
+    return { success: true };
+  }
+
+
+  loginUser(userProfile) {
+    this.isAuthenticated = true;
+    if (userProfile) {
+      const rolePresets = getRoleDefaultPermissions();
+      const userRole = userProfile.role || 'Owner';
+      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
+
+      this.currentUser = {
+        id: userProfile.id || `usr_${Date.now()}`,
+        name: userProfile.name || 'Astha India',
+        email: userProfile.email || 'owner@hotelastha.com',
+        role: userRole,
+        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
+        avatar: userProfile.avatar || '👑',
+        status: 'ACTIVE',
+        properties: userProfile.properties || ['HOTEL ASTHA'],
+        permissions: userProfile.permissions || defaultPerms
+      };
+    }
+    try {
+      localStorage.setItem('pms_is_authenticated', 'true');
+    } catch (e) {}
+    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
+    this.save();
+    this.notify();
+    return { success: true, user: this.currentUser };
+  }
+
+  logoutUser() {
+    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
+    this.isAuthenticated = false;
+    try {
+      localStorage.setItem('pms_is_authenticated', 'false');
+    } catch (e) {}
+    this.save();
+    this.notify();
+    return { success: true };
+  }
+
+  loginUser(userProfile) {
+    this.isAuthenticated = true;
+    if (userProfile) {
+      const rolePresets = getRoleDefaultPermissions();
+      const userRole = userProfile.role || 'Owner';
+      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
+
+      this.currentUser = {
+        id: userProfile.id || `usr_${Date.now()}`,
+        name: userProfile.name || 'Astha India',
+        email: userProfile.email || 'owner@hotelastha.com',
+        role: userRole,
+        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
+        avatar: userProfile.avatar || '👑',
+        status: 'ACTIVE',
+        properties: userProfile.properties || ['HOTEL ASTHA'],
+        permissions: userProfile.permissions || defaultPerms
+      };
+    }
+    try {
+      localStorage.setItem('pms_is_authenticated', 'true');
+    } catch (e) {}
+    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
+    this.save();
+    this.notify();
+    return { success: true, user: this.currentUser };
+  }
+
+  logoutUser() {
+    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
+    this.isAuthenticated = false;
+    try {
+      localStorage.setItem('pms_is_authenticated', 'false');
+    } catch (e) {}
+    this.save();
+    this.notify();
+    return { success: true };
   }
 
   deleteReservation(resId) {

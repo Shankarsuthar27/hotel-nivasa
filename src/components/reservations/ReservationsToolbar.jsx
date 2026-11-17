@@ -1,4 +1,22 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import {
+  Filter,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
+  Search,
+  Tag,
+  Star,
+  UserCheck,
+  Download,
+  Users,
+  User,
+  List,
+  LayoutGrid,
+  Check,
+  X
+} from 'lucide-react';
 import './reservations-toolbar.css';
 
 /**
@@ -206,7 +224,7 @@ export default function ReservationsToolbar({
   };
 
   return (
-    <div className="w-full flex flex-wrap items-center gap-2 px-2 py-2 otal-res-toolbar">
+    <div className="w-full flex flex-wrap items-center gap-2 px-0 py-2 otal-res-toolbar">
       {/* 1. Subtle Filter Reset Button */}
       <button
         type="button"
@@ -214,9 +232,7 @@ export default function ReservationsToolbar({
         title="Reset All Filters"
         onClick={onResetFilters}
       >
-        <span className="material-symbols-outlined select-none text-slate-400">
-          filter_list
-        </span>
+        <Filter size={16} className="text-slate-400 shrink-0" />
       </button>
 
       {/* 2. Status Dropdown (All Active, All Statuses, Confirmed, In-house, etc.) */}
@@ -229,13 +245,12 @@ export default function ReservationsToolbar({
           aria-expanded={isStatusOpen}
         >
           <span className="truncate">{currentStatusLabel}</span>
-          <span
-            className={`material-symbols-outlined otal-status-arrow ${
+          <ChevronDown
+            size={16}
+            className={`otal-status-arrow ${
               isStatusOpen ? 'open' : ''
             }`}
-          >
-            {isStatusOpen ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
-          </span>
+          />
         </button>
 
         {isStatusOpen && (
@@ -254,7 +269,7 @@ export default function ReservationsToolbar({
                 >
                   <span>{opt.label}</span>
                   {isSelected && (
-                    <span className="material-symbols-outlined check-icon">check</span>
+                    <Check size={14} className="check-icon shrink-0" />
                   )}
                 </button>
               );
@@ -272,9 +287,7 @@ export default function ReservationsToolbar({
           tabIndex={0}
         >
           {/* Calendar icon 1 */}
-          <span className="material-symbols-outlined select-none text-slate-400">
-            calendar_month
-          </span>
+          <Calendar size={15} className="text-slate-400 shrink-0" />
 
           {/* From Label / Value */}
           <span className={`otal-date-text ${fromDate ? 'has-date' : 'placeholder'}`}>
@@ -282,9 +295,7 @@ export default function ReservationsToolbar({
           </span>
 
           {/* Calendar icon 2 */}
-          <span className="material-symbols-outlined select-none text-slate-400">
-            calendar_month
-          </span>
+          <Calendar size={15} className="text-slate-400 shrink-0" />
 
           {/* Separator - To */}
           <span className="otal-date-sep">
@@ -292,9 +303,7 @@ export default function ReservationsToolbar({
           </span>
 
           {/* Calendar icon 3 */}
-          <span className="material-symbols-outlined select-none text-slate-400">
-            calendar_month
-          </span>
+          <Calendar size={15} className="text-slate-400 shrink-0" />
 
           {/* Optional To Date Label */}
           {toDate && (
@@ -315,9 +324,7 @@ export default function ReservationsToolbar({
                 if (onToDateChange) onToDateChange('');
               }}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
-                close
-              </span>
+              <X size={14} />
             </button>
           )}
         </div>
@@ -333,7 +340,7 @@ export default function ReservationsToolbar({
                 onClick={handlePrevMonth}
                 title="Previous month"
               >
-                <span className="material-symbols-outlined">chevron_left</span>
+                <ChevronLeft size={16} />
               </button>
 
               <div className="otal-cal-title">
@@ -346,7 +353,7 @@ export default function ReservationsToolbar({
                 onClick={handleNextMonth}
                 title="Next month"
               >
-                <span className="material-symbols-outlined">chevron_right</span>
+                <ChevronRight size={16} />
               </button>
             </div>
 
@@ -425,9 +432,7 @@ export default function ReservationsToolbar({
 
       {/* 4. Search Bar */}
       <div className="otal-search-box">
-        <span className="material-symbols-outlined otal-search-icon">
-          search
-        </span>
+        <Search size={16} className="otal-search-icon text-slate-400 shrink-0" />
         <input
           className="otal-search-input"
           placeholder="Search Name, Email, Phone"
@@ -447,23 +452,19 @@ export default function ReservationsToolbar({
           onClick={() => setIsSourceOpen((prev) => !prev)}
         >
           <div className="flex items-center flex-1 min-w-0">
-            <span className="material-symbols-outlined select-none mr-2 text-gray-500" style={{ fontSize: '16px' }}>
-              sell
-            </span>
+            <Tag size={15} className="mr-2 text-gray-500 shrink-0" />
             <span className="capitalize truncate text-gray-600">
               {currentSourceLabel}
             </span>
           </div>
-          <span
-            className="material-symbols-outlined select-none ml-2 text-gray-400"
+          <ChevronDown
+            size={16}
+            className="ml-2 text-gray-400 shrink-0"
             style={{
-              fontSize: '20px',
               transform: isSourceOpen ? 'rotate(180deg)' : 'none',
               transition: 'transform 0.2s ease'
             }}
-          >
-            keyboard_arrow_down
-          </span>
+          />
         </button>
 
         {isSourceOpen && (
@@ -478,9 +479,11 @@ export default function ReservationsToolbar({
                   setIsSourceOpen(false);
                 }}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
-                  {sourceFilter === source.value ? 'check' : 'sell'}
-                </span>
+                {sourceFilter === source.value ? (
+                  <Check size={14} className="shrink-0 text-blue-600 mr-2" />
+                ) : (
+                  <Tag size={14} className="shrink-0 text-gray-400 mr-2" />
+                )}
                 <span>{source.label}</span>
               </button>
             ))}
@@ -494,9 +497,7 @@ export default function ReservationsToolbar({
         className={`otal-vip-btn ${filterVip ? 'active' : ''}`}
         onClick={onToggleVip}
       >
-        <span className="material-symbols-outlined select-none text-[#D97706]" style={{ fontSize: '20px' }}>
-          star
-        </span>
+        <Star size={16} className="text-[#D97706] fill-amber-500 shrink-0" />
         <span className="small-title-4 ml-1">VIP</span>
       </button>
 
@@ -506,9 +507,7 @@ export default function ReservationsToolbar({
         className={`otal-single-lady-btn ${filterSingleLady ? 'active' : ''}`}
         onClick={onToggleSingleLady}
       >
-        <span className="material-symbols-outlined select-none text-[#C026D3]" style={{ fontSize: '20px' }}>
-          female
-        </span>
+        <UserCheck size={16} className="text-[#C026D3] shrink-0" />
         <span className="small-title-4 ml-1">Single Lady</span>
       </button>
 
@@ -522,9 +521,7 @@ export default function ReservationsToolbar({
           onClick={onExportReport}
           title="Download Reservation Report (Excel)"
         >
-          <span className="material-symbols-outlined select-none" style={{ fontSize: '18px' }}>
-            download
-          </span>
+          <Download size={16} className="shrink-0" />
           <span className="small-title-4">Report</span>
         </button>
 
@@ -537,9 +534,7 @@ export default function ReservationsToolbar({
             title="All Bookings"
             onClick={() => onBookingTypeChange && onBookingTypeChange('ALL')}
           >
-            <span className="material-symbols-outlined select-none" style={{ fontSize: '20px' }}>
-              groups
-            </span>
+            <Users size={18} className="shrink-0" />
           </button>
 
           {/* Group Bookings */}
@@ -549,9 +544,7 @@ export default function ReservationsToolbar({
             title="Group Bookings Only"
             onClick={() => onBookingTypeChange && onBookingTypeChange('GROUP')}
           >
-            <span className="material-symbols-outlined select-none" style={{ fontSize: '20px' }}>
-              group
-            </span>
+            <User size={18} className="shrink-0" />
           </button>
 
           {/* List View */}
@@ -561,9 +554,7 @@ export default function ReservationsToolbar({
             title="List View"
             onClick={() => onViewModeChange && onViewModeChange('list')}
           >
-            <span className="material-symbols-outlined select-none" style={{ fontSize: '20px' }}>
-              list
-            </span>
+            <List size={18} className="shrink-0" />
           </button>
 
           {/* Grid View */}
@@ -573,9 +564,7 @@ export default function ReservationsToolbar({
             title="Grid View"
             onClick={() => onViewModeChange && onViewModeChange('grid')}
           >
-            <span className="material-symbols-outlined select-none" style={{ fontSize: '20px' }}>
-              grid_view
-            </span>
+            <LayoutGrid size={18} className="shrink-0" />
           </button>
         </div>
       </div>

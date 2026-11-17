@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, X, CheckCircle2, Calendar } from 'lucide-react';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 export default function BulkUpdateModal({
   isOpen,
@@ -133,22 +134,22 @@ export default function BulkUpdateModal({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <div className="form-group">
                 <label className="form-label">From Date</label>
-                <input
-                  type="date"
-                  className="form-input"
+                <CustomDatePicker
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  required
+                  onChange={(val) => setStartDate(val)}
+                  outputFormat="iso"
+                  displayFormat="dmy"
                 />
               </div>
               <div className="form-group">
                 <label className="form-label">To Date</label>
-                <input
-                  type="date"
-                  className="form-input"
+                <CustomDatePicker
                   value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  required
+                  minDate={startDate}
+                  highlightDate={startDate}
+                  onChange={(val) => setEndDate(val)}
+                  outputFormat="iso"
+                  displayFormat="dmy"
                 />
               </div>
             </div>

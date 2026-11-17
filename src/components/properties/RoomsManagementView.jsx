@@ -9,6 +9,7 @@ import {
 import AddRoomTypeModal from './AddRoomTypeModal';
 import AddRoomModal from './AddRoomModal';
 import EditRoomModal from './EditRoomModal';
+import ConfirmDeleteModal from '../common/ConfirmDeleteModal';
 
 export default function RoomsManagementView({
   roomTypes = [],
@@ -31,6 +32,71 @@ export default function RoomsManagementView({
 
   const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState(null);
+
+  // Delete confirmation modal state
+  const [deleteModalState, setDeleteModalState] = useState(null);
+
+  const isRoomTypeAssigned = (roomType) => {
+    if (!roomType || !rooms || !rooms.length) return false;
+    return rooms.some((rm) => {
+      if (!rm) return false;
+      if (
+        rm.roomTypeId &&
+        (rm.roomTypeId === roomType.id ||
+          String(rm.roomTypeId).toLowerCase() === String(roomType.id).toLowerCase())
+      ) {
+        return true;
+      }
+      if (roomType.code && rm.roomTypeId === roomType.code) {
+        return true;
+      }
+      if (
+        roomType.name &&
+        (rm.roomType === roomType.name || rm.roomTypeName === roomType.name)
+      ) {
+        return true;
+      }
+      return false;
+    });
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deleteModalState) return;
+    if (deleteModalState.type === 'roomType') {
+      const targetRt = roomTypes.find((r) => r.id === deleteModalState.id);
+      if (targetRt && isRoomTypeAssigned(targetRt)) {
+        setDeleteModalState(null);
+        if (showToast) {
+          showToast('This room type is assigned to one or more rooms and cannot be deleted.', 'error');
+        }
+        return;
+      }
+      if (onDeleteRoomType) {
+        const res = onDeleteRoomType(deleteModalState.id);
+        if (res && res.success === false) {
+          setDeleteModalState(null);
+          if (showToast) {
+            showToast(
+              res.message || 'This room type is assigned to one or more rooms and cannot be deleted.',
+              'error'
+            );
+          }
+          return;
+        }
+      }
+      if (showToast) {
+        showToast(`Deleted room type "${deleteModalState.name}"`);
+      }
+    } else if (deleteModalState.type === 'room') {
+      if (onDeleteRoom) {
+        onDeleteRoom(deleteModalState.id);
+      }
+      if (showToast) {
+        showToast(`Deleted room ${deleteModalState.name}`);
+      }
+    }
+    setDeleteModalState(null);
+  };
 
   // 3-dots action dropdown state
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -366,13 +432,23 @@ export default function RoomsManagementView({
                             type="button"
                             className="properties-action-item delete"
                             onClick={() => {
-                              if (onDeleteRoomType) {
-                                onDeleteRoomType(rt.id);
-                              }
                               setActiveMenuId(null);
-                              if (showToast) {
-                                showToast(`Deleted room type "${rt.name}"`);
+                              if (isRoomTypeAssigned(rt)) {
+                                if (showToast) {
+                                  showToast(
+                                    'This room type is assigned to one or more rooms and cannot be deleted.',
+                                    'error'
+                                  );
+                                }
+                                return;
                               }
+                              setDeleteModalState({
+                                type: 'roomType',
+                                id: rt.id,
+                                name: rt.name,
+                                title: 'Confirm Deletion',
+                                message: 'Are you sure you want to delete this room type? This action cannot be undone.'
+                              });
                             }}
                           >
                             <Trash2 size={15} color="#EF4444" />
@@ -542,13 +618,14 @@ export default function RoomsManagementView({
                             type="button"
                             className="properties-action-item delete"
                             onClick={() => {
-                              if (onDeleteRoom) {
-                                onDeleteRoom(rm.id);
-                              }
                               setActiveMenuId(null);
-                              if (showToast) {
-                                showToast(`Deleted room ${rm.roomNumber}`);
-                              }
+                              setDeleteModalState({
+                                type: 'room',
+                                id: rm.id,
+                                name: rm.roomNumber,
+                                title: 'Confirm Deletion',
+                                message: 'Are you sure you want to delete this room? This action cannot be undone.'
+                              });
                             }}
                           >
                             <Trash2 size={15} color="#EF4444" />
@@ -641,6 +718,17 @@ export default function RoomsManagementView({
         roomTypes={roomTypes}
         onUpdateRoom={onUpdateRoom}
         showToast={showToast}
+      />
+
+      {/* Confirm Deletion Modal (for Room Types & Rooms) */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteModalState}
+        onClose={() => setDeleteModalState(null)}
+        onConfirm={handleConfirmDelete}
+        title={deleteModalState?.title || 'Confirm Deletion'}
+        message={deleteModalState?.message || 'Are you sure you want to delete this? This action cannot be undone.'}
+        confirmText="Delete"
+        cancelText="Cancel"
       />
     </div>
   );

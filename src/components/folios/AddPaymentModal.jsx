@@ -11,6 +11,8 @@ import {
   BookOpen,
   FileSpreadsheet
 } from 'lucide-react';
+import CustomDatePicker from '../common/CustomDatePicker';
+import { getTodayIsoDate } from '../../services/dateUtils';
 
 export default function AddPaymentModal({
   isOpen,
@@ -19,42 +21,47 @@ export default function AddPaymentModal({
   folio = {},
   onConfirmPayment
 }) {
-  if (!isOpen) return null;
-
-  const guestTitle = reservation.primaryGuest?.title || '';
-  const firstName = reservation.primaryGuest?.firstName || '';
-  const lastName = reservation.primaryGuest?.lastName || '';
-  const rawGuestName = reservation.primaryGuest?.name || `${guestTitle} ${firstName} ${lastName}`.trim() || reservation.guestName || 'Mr Shankar Suthar';
+  const guestTitle = reservation?.primaryGuest?.title || '';
+  const firstName = reservation?.primaryGuest?.firstName || '';
+  const lastName = reservation?.primaryGuest?.lastName || '';
+  const rawGuestName = reservation?.primaryGuest?.name || `${guestTitle} ${firstName} ${lastName}`.trim() || reservation?.guestName || 'Mr Shankar Suthar';
 
   // Format capitalized guest name (e.g. "Mr Shankar Suthar")
   const guestFullName = rawGuestName.replace(/\b\w/g, (c) => c.toUpperCase());
 
   // Folio Number
-  const folioNumber = folio.folioNumber || reservation.folioId || 'FOL_1';
+  const folioNumber = folio?.folioNumber || reservation?.folioId || 'FOL_1';
+
+  // Outstanding Balance
+  const outstanding = folio?.balanceDue !== undefined
+    ? folio.balanceDue
+    : (reservation?.balanceDue !== undefined ? reservation.balanceDue : 0);
 
   // Form State
   const [selectedFolio, setSelectedFolio] = useState(folioNumber);
+  const [paymentDate, setPaymentDate] = useState(getTodayIsoDate());
   const [paymentType, setPaymentType] = useState('Select');
   const [paymentMethod, setPaymentMethod] = useState('CARD');
   const [receiptNumber, setReceiptNumber] = useState('');
   const [amount, setAmount] = useState('');
+  const [hasTypedAmount, setHasTypedAmount] = useState(false);
   const [description, setDescription] = useState('');
 
-  // Pre-fill amount when opened if balance due exists
+  // Reset form when modal opens (do not auto-fill amount; require manual typing)
   useEffect(() => {
-    const outstanding = folio.balanceDue !== undefined
-      ? folio.balanceDue
-      : (reservation.balanceDue !== undefined ? reservation.balanceDue : 0);
-    if (outstanding > 0) {
-      setAmount(String(Number(outstanding).toFixed(2)));
-    } else {
-      setAmount('0.00');
+    if (isOpen) {
+      setAmount('');
+      setHasTypedAmount(false);
+      setPaymentDate(getTodayIsoDate());
+      setPaymentType('Select');
+      setPaymentMethod('CARD');
+      setReceiptNumber('');
+      setDescription('');
+      setSelectedFolio(folio?.folioNumber || reservation?.folioId || 'FOL_1');
     }
-    setPaymentType('Select');
-    setPaymentMethod('CARD');
-    setReceiptNumber('');
-    setDescription('');
-  }, [isOpen, folio.balanceDue, reservation.balanceDue]);
+  }, [isOpen, folio?.folioNumber, reservation?.folioId]);
+
+  if (!isOpen) return null;
 
   const paymentMethods = [
     {
@@ -89,18 +96,27 @@ export default function AddPaymentModal({
     }
   ];
 
+  const isTypeSelected = Boolean(paymentType && paymentType !== 'Select');
+  const numAmount = parseFloat(amount);
+  const isAmountValid = Boolean(hasTypedAmount && !isNaN(numAmount) && numAmount > 0);
+  const isAccessible = Boolean(isTypeSelected && isAmountValid);
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      alert('Please enter a valid payment amount greater than 0.00');
+    if (!isAccessible) {
+      if (!isTypeSelected) {
+        alert('Please select a payment Type');
+      } else if (!isAmountValid) {
+        alert('Please type a valid payment amount greater than 0.00');
+      }
       return;
     }
 
     if (onConfirmPayment) {
       onConfirmPayment({
         folioId: selectedFolio,
-        type: paymentType === 'Select' ? 'Settlement' : paymentType,
+        date: paymentDate || getTodayIsoDate(),
+        type: paymentType,
         paymentMethod,
         receiptNumber: receiptNumber.trim(),
         reference: receiptNumber.trim() || '-',
@@ -111,8 +127,6 @@ export default function AddPaymentModal({
 
     onClose();
   };
-
-  const isFormSubmittable = parseFloat(amount) > 0;
 
   return (
     <div className="add-payment-backdrop" onClick={onClose}>
@@ -161,6 +175,20 @@ export default function AddPaymentModal({
               </select>
               <ChevronDown size={16} className="add-payment-chevron" />
             </div>
+          </div>
+
+          {/* Field: Date (Current Date of Making Payment) */}
+          <div className="add-payment-field-group">
+            <label className="add-payment-label">
+              Date<span className="add-payment-required">*</span>
+            </label>
+            <CustomDatePicker
+              value={paymentDate}
+              onChange={(val) => setPaymentDate(val)}
+              placeholder="Select date"
+              displayFormat="dmy"
+              outputFormat="iso"
+            />
           </div>
 
           {/* Field 2: Type */}
@@ -235,10 +263,13 @@ export default function AddPaymentModal({
               step="0.01"
               min="0.01"
               className="add-payment-input"
-              placeholder="0.00"
+              placeholder={outstanding > 0 ? `0.00 (Due: ₹${Number(outstanding).toFixed(2)})` : "0.00"}
               required
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setHasTypedAmount(true);
+              }}
             />
           </div>
 
@@ -265,7 +296,9 @@ export default function AddPaymentModal({
             </button>
             <button
               type="submit"
-              className={`add-payment-btn-submit ${isFormSubmittable ? 'active' : ''}`}
+              disabled={!isAccessible}
+              className={`add-payment-btn-submit ${isAccessible ? 'active' : ''}`}
+              title={!isAccessible ? 'Please select Type and manually type Amount to enable' : 'Post Payment'}
             >
               <Check size={16} strokeWidth={2.5} />
               <span>Post Payment</span>

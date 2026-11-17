@@ -10,7 +10,7 @@ import './properties.css';
 export default function PropertiesView({
   subtab = 'all',
   property,
-  propertiesList = ['HOTEL ASTHA', 'HOTEL ASTHA RESORT'],
+  propertiesList = ['HOTEL ASTHA'],
   mealPlans = [],
   roomTypes = [],
   rooms = [],

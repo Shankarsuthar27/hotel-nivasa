@@ -9,9 +9,12 @@ import {
   Clock,
   DollarSign,
   AlertCircle,
+  AlertTriangle,
   Tag,
   Star
 } from 'lucide-react';
+import { pmsStore } from '../../services/pmsStore';
+import { normalizeDateStr } from '../../services/dateUtils';
 
 export default function GuestCheckInModal({
   isOpen,
@@ -19,16 +22,15 @@ export default function GuestCheckInModal({
   reservation,
   rooms = [],
   roomTypes = [],
+  reservations: reservationsProp,
   onAssignRoom,
   onConfirmCheckIn
 }) {
-  if (!isOpen || !reservation) return null;
-
   const [selectedRoomId, setSelectedRoomId] = useState(
-    reservation.roomId || ''
+    reservation?.roomId || ''
   );
   const [assignedRoomNumber, setAssignedRoomNumber] = useState(
-    reservation.roomNumber || ''
+    reservation?.roomNumber || ''
   );
   const [assignSuccessMsg, setAssignSuccessMsg] = useState('');
   const [isAssigning, setIsAssigning] = useState(false);
@@ -42,18 +44,95 @@ export default function GuestCheckInModal({
     }
   }, [reservation]);
 
-  // Clean available rooms matching category or all clean rooms
-  const matchingRooms = rooms.filter((rm) => {
-    if (reservation.roomTypeId) {
-      return rm.roomTypeId === reservation.roomTypeId && rm.status === 'clean';
+  const allReservations = reservationsProp || (pmsStore.getState().reservations || []);
+
+  // Helper to check if a specific room is full / occupied
+  const getRoomOccupancy = (rm) => {
+    if (!rm) return { isFull: false, occupantName: '', reason: '' };
+
+    // 1. Is there an in-house reservation in this room?
+    const otherInHouse = allReservations.find((r) => {
+      if (!r || r.status !== 'in_house') return false;
+      if (r.id === reservation.id || r.bookingReference === reservation.bookingReference) return false;
+      return (r.roomId && (r.roomId === rm.id || r.roomId === rm.roomNumber)) ||
+             (r.roomNumber && (r.roomNumber === rm.roomNumber || r.roomNumber === rm.id));
+    });
+
+    if (otherInHouse) {
+      const name = otherInHouse.primaryGuest?.name || otherInHouse.guestName || 'In-House Guest';
+      return {
+        isFull: true,
+        occupantName: name,
+        reason: `Occupied by ${name} (${otherInHouse.bookingReference || otherInHouse.id})`
+      };
     }
-    return rm.status === 'clean';
+
+    // 2. Is room marked operational: 'occupied' by a different reservation?
+    if (rm.operational === 'occupied' && rm.currentReservationId && rm.currentReservationId !== reservation.id) {
+      return {
+        isFull: true,
+        occupantName: rm.currentGuestName || 'Another Guest',
+        reason: `Occupied (${rm.currentGuestName || 'Guest in house'})`
+      };
+    }
+
+    // 3. Overlapping active reservation for this reservation's dates
+    const curIn = normalizeDateStr(reservation.checkInDate);
+    const curOut = normalizeDateStr(reservation.checkOutDate);
+
+    const overlapping = allReservations.find((r) => {
+      if (!r || r.status === 'cancelled' || r.status === 'no_show' || r.status === 'checked_out') return false;
+      if (r.id === reservation.id || r.bookingReference === reservation.bookingReference) return false;
+      const matches = (r.roomId && (r.roomId === rm.id || r.roomId === rm.roomNumber)) ||
+                      (r.roomNumber && (r.roomNumber === rm.roomNumber || r.roomNumber === rm.id));
+      if (!matches) return false;
+      const rIn = normalizeDateStr(r.checkInDate);
+      const rOut = normalizeDateStr(r.checkOutDate);
+      if (curIn && curOut && rIn && rOut) {
+        return (curIn < rOut && curOut > rIn) || r.status === 'in_house';
+      }
+      return r.status === 'in_house';
+    });
+
+    if (overlapping) {
+      const name = overlapping.primaryGuest?.name || overlapping.guestName || 'Booked Guest';
+      return {
+        isFull: true,
+        occupantName: name,
+        reason: `Booked by ${name} (${overlapping.bookingReference || overlapping.id})`
+      };
+    }
+
+    return { isFull: false, occupantName: '', reason: '' };
+  };
+
+  // Category rooms first, then other rooms in inventory
+  const categoryRooms = rooms.filter((rm) => {
+    if (reservation.roomTypeId) {
+      return rm.roomTypeId === reservation.roomTypeId;
+    }
+    return true;
   });
 
-  // Fallback to any clean rooms if none in category
-  const candidateRooms = matchingRooms.length > 0
-    ? matchingRooms
-    : rooms.filter((rm) => rm.status === 'clean' || rm.operational === 'available');
+  const otherRooms = rooms.filter((rm) => {
+    if (reservation.roomTypeId) {
+      return rm.roomTypeId !== reservation.roomTypeId;
+    }
+    return false;
+  });
+
+  const displayRooms = categoryRooms.length > 0 ? [...categoryRooms, ...otherRooms] : rooms;
+
+  const availableCategoryRooms = categoryRooms.filter(rm => !getRoomOccupancy(rm).isFull);
+  const isCategoryFull = categoryRooms.length > 0 && availableCategoryRooms.length === 0;
+
+  // Selected room object and occupancy
+  const selectedRoomObj = rooms.find((r) => r.id === selectedRoomId || r.roomNumber === selectedRoomId);
+  const selectedRoomOccupancy = selectedRoomObj ? getRoomOccupancy(selectedRoomObj) : { isFull: false, occupantName: '', reason: '' };
+
+  // Assigned room object and occupancy
+  const assignedRoomObj = rooms.find((r) => r.roomNumber === assignedRoomNumber || r.id === assignedRoomNumber);
+  const assignedRoomOcc = assignedRoomObj ? getRoomOccupancy(assignedRoomObj) : { isFull: false, occupantName: '', reason: '' };
 
   const guestName = reservation.primaryGuest?.name || 'Guest';
   const phone = reservation.primaryGuest?.phone || reservation.phone || '-';
@@ -72,17 +151,21 @@ export default function GuestCheckInModal({
     'Delux Room';
 
   // Handle clicking "Assign"
-  // Handle clicking "Assign"
   const handleAssignClick = () => {
     if (!selectedRoomId) {
       alert('Please select a room to assign.');
       return;
     }
-    const rm = rooms.find((r) => r.id === selectedRoomId);
+    const rm = rooms.find((r) => r.id === selectedRoomId || r.roomNumber === selectedRoomId);
     if (rm) {
+      const occ = getRoomOccupancy(rm);
+      if (occ.isFull) {
+        alert(`Cannot assign: Room ${rm.roomNumber} is FULL (${occ.reason}). Please select an available room.`);
+        return;
+      }
       setIsAssigning(true);
       if (onAssignRoom) {
-        onAssignRoom(reservation.id || reservation.bookingReference, selectedRoomId);
+        onAssignRoom(reservation.id || reservation.bookingReference, rm.id);
       }
       setAssignedRoomNumber(rm.roomNumber);
       setAssignSuccessMsg(`Success: Room ${rm.roomNumber} assigned successfully`);
@@ -93,12 +176,21 @@ export default function GuestCheckInModal({
   // Handle clicking primary "Check-in" button
   const handleCheckInSubmit = () => {
     let roomIdToUse = selectedRoomId || reservation.roomId;
-    if (!roomIdToUse && candidateRooms.length > 0) {
-      roomIdToUse = candidateRooms[0].id;
+    let targetRm = rooms.find((r) => r.id === roomIdToUse || r.roomNumber === roomIdToUse);
+
+    if (!targetRm) {
+      alert('Please select an available room for check-in.');
+      return;
+    }
+
+    const occ = getRoomOccupancy(targetRm);
+    if (occ.isFull) {
+      alert(`Cannot check in: Room ${targetRm.roomNumber} is FULL (${occ.reason}). Please select an available room.`);
+      return;
     }
 
     if (onConfirmCheckIn) {
-      onConfirmCheckIn(reservation.id || reservation.bookingReference, roomIdToUse);
+      onConfirmCheckIn(reservation.id || reservation.bookingReference, targetRm.id);
     }
     onClose();
   };
@@ -114,6 +206,8 @@ export default function GuestCheckInModal({
       };
     }
   }, [isOpen]);
+
+  if (!isOpen || !reservation) return null;
 
   const modalElement = (
     <div className="modal-overlay" onClick={onClose}>
@@ -333,16 +427,21 @@ export default function GuestCheckInModal({
               </div>
               <span
                 style={{
-                  background: assignedRoomNumber ? '#ecfdf5' : '#fff1f2',
-                  color: assignedRoomNumber ? '#047857' : '#be123c',
+                  background: assignedRoomOcc.isFull ? '#fee2e2' : (assignedRoomNumber ? '#ecfdf5' : '#fff1f2'),
+                  color: assignedRoomOcc.isFull ? '#b91c1c' : (assignedRoomNumber ? '#047857' : '#be123c'),
                   padding: '3px 10px',
                   borderRadius: '20px',
                   fontSize: '0.78rem',
                   fontWeight: 700,
-                  border: assignedRoomNumber ? '1px solid #a7f3d0' : '1px solid #fecdd3'
+                  border: assignedRoomOcc.isFull ? '1px solid #fca5a5' : (assignedRoomNumber ? '1px solid #a7f3d0' : '1px solid #fecdd3'),
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
                 }}
               >
-                {assignedRoomNumber ? `Assigned: Room ${assignedRoomNumber}` : 'Room Unassigned'}
+                {assignedRoomOcc.isFull
+                  ? `Room ${assignedRoomNumber} — FULL (Occupied)`
+                  : (assignedRoomNumber ? `Assigned: Room ${assignedRoomNumber}` : 'Room Unassigned')}
               </span>
             </div>
 
@@ -359,21 +458,38 @@ export default function GuestCheckInModal({
                     width: '100%',
                     padding: '0.65rem 0.85rem',
                     borderRadius: '8px',
-                    border: '1.5px solid #cbd5e1',
+                    border: selectedRoomOccupancy.isFull ? '1.5px solid #ef4444' : '1.5px solid #cbd5e1',
                     fontSize: '0.92rem',
                     fontWeight: 600,
-                    color: '#1e293b',
-                    background: '#ffffff',
+                    color: selectedRoomOccupancy.isFull ? '#b91c1c' : '#1e293b',
+                    background: selectedRoomOccupancy.isFull ? '#fff5f5' : '#ffffff',
                     outline: 'none',
                     cursor: 'pointer'
                   }}
                 >
                   <option value="">-- Select Room (Clean & Ready) --</option>
-                  {candidateRooms.map((rm) => (
-                    <option key={rm.id} value={rm.id}>
-                      Room {rm.roomNumber} ({rm.roomTypeId === 'rt_deluxe' ? 'Delux Room' : 'Standard Room'}) — {rm.status.toUpperCase()}
-                    </option>
-                  ))}
+                  {displayRooms.map((rm) => {
+                    const occ = getRoomOccupancy(rm);
+                    const typeName = roomTypes.find(rt => rt.id === rm.roomTypeId)?.name ||
+                      (rm.roomTypeId === 'rt_deluxe' ? 'Delux Room' :
+                       rm.roomTypeId === 'rt_standard' ? 'Standard Room' :
+                       rm.roomTypeId === 'rt_premium' ? 'Premium Room' :
+                       rm.roomTypeId === 'rt_ultra_premium' ? 'Ultra Premium' : 'Room');
+                    const isCurrentAssigned = (rm.id === reservation.roomId || rm.roomNumber === reservation.roomNumber);
+                    return (
+                      <option
+                        key={rm.id}
+                        value={rm.id}
+                        disabled={occ.isFull && !isCurrentAssigned}
+                        style={{
+                          color: occ.isFull ? '#dc2626' : '#1e293b',
+                          background: occ.isFull ? '#fef2f2' : '#ffffff'
+                        }}
+                      >
+                        Room {rm.roomNumber} ({typeName}) — {occ.isFull ? `FULL (${occ.occupantName ? `Occupied by ${occ.occupantName}` : 'Occupied'})` : `${(rm.status || 'clean').toUpperCase()} (Available)`}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -381,27 +497,76 @@ export default function GuestCheckInModal({
               <button
                 type="button"
                 onClick={handleAssignClick}
-                disabled={!selectedRoomId || isAssigning}
+                disabled={!selectedRoomId || isAssigning || selectedRoomOccupancy.isFull}
+                title={selectedRoomOccupancy.isFull ? 'Cannot assign room: room is full' : 'Assign room'}
                 style={{
-                  background: '#7c3aed',
+                  background: selectedRoomOccupancy.isFull ? '#94a3b8' : '#7c3aed',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '8px',
                   padding: '0.65rem 1.4rem',
                   fontSize: '0.9rem',
                   fontWeight: 700,
-                  cursor: !selectedRoomId ? 'not-allowed' : 'pointer',
-                  opacity: !selectedRoomId ? 0.6 : 1,
+                  cursor: (!selectedRoomId || selectedRoomOccupancy.isFull) ? 'not-allowed' : 'pointer',
+                  opacity: (!selectedRoomId || selectedRoomOccupancy.isFull) ? 0.65 : 1,
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.4rem',
                   transition: 'all 0.15s ease',
-                  boxShadow: '0 2px 4px rgba(124, 58, 237, 0.25)'
+                  boxShadow: selectedRoomOccupancy.isFull ? 'none' : '0 2px 4px rgba(124, 58, 237, 0.25)'
                 }}
               >
                 <span>Assign</span>
               </button>
             </div>
+
+            {/* Room Full Warning Alert Box */}
+            {selectedRoomOccupancy.isFull && (
+              <div
+                style={{
+                  marginTop: '0.75rem',
+                  background: '#fef2f2',
+                  border: '1.5px solid #f87171',
+                  borderRadius: '8px',
+                  padding: '0.65rem 0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.55rem',
+                  color: '#991b1b',
+                  fontSize: '0.85rem',
+                  fontWeight: 600
+                }}
+              >
+                <AlertTriangle size={18} color="#dc2626" style={{ flexShrink: 0 }} />
+                <span>
+                  Room {selectedRoomObj?.roomNumber || selectedRoomId} is <strong>FULL</strong> ({selectedRoomOccupancy.reason}). Check-in cannot be completed for this room. Please select an available room.
+                </span>
+              </div>
+            )}
+
+            {/* All Category Rooms Full Notice */}
+            {isCategoryFull && !selectedRoomOccupancy.isFull && (
+              <div
+                style={{
+                  marginTop: '0.75rem',
+                  background: '#fffbeb',
+                  border: '1px solid #fcd34d',
+                  borderRadius: '8px',
+                  padding: '0.6rem 0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  color: '#92400e',
+                  fontSize: '0.82rem',
+                  fontWeight: 600
+                }}
+              >
+                <AlertCircle size={16} color="#d97706" style={{ flexShrink: 0 }} />
+                <span>
+                  All rooms in <strong>{bookedCategoryName}</strong> are currently FULL. Select an available room from another category to proceed with check-in.
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -438,25 +603,35 @@ export default function GuestCheckInModal({
           <button
             type="button"
             onClick={handleCheckInSubmit}
-            disabled={!assignedRoomNumber && !selectedRoomId && candidateRooms.length === 0}
+            disabled={!selectedRoomId || selectedRoomOccupancy.isFull}
+            title={selectedRoomOccupancy.isFull ? 'Cannot check in: room is full' : 'Complete check-in'}
             style={{
-              background: '#2563eb',
+              background: selectedRoomOccupancy.isFull ? '#94a3b8' : (!selectedRoomId ? '#cbd5e1' : '#2563eb'),
               color: '#ffffff',
               border: 'none',
               borderRadius: '8px',
               padding: '0.6rem 1.6rem',
               fontSize: '0.92rem',
               fontWeight: 700,
-              cursor: !assignedRoomNumber && !selectedRoomId && candidateRooms.length === 0 ? 'not-allowed' : 'pointer',
-              opacity: !assignedRoomNumber && !selectedRoomId && candidateRooms.length === 0 ? 0.6 : 1,
+              cursor: (!selectedRoomId || selectedRoomOccupancy.isFull) ? 'not-allowed' : 'pointer',
+              opacity: (!selectedRoomId || selectedRoomOccupancy.isFull) ? 0.7 : 1,
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
-              boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)'
+              boxShadow: (selectedRoomOccupancy.isFull || !selectedRoomId) ? 'none' : '0 2px 6px rgba(37, 99, 235, 0.3)'
             }}
           >
-            <CheckCircle2 size={16} />
-            <span>Check-in</span>
+            {selectedRoomOccupancy.isFull ? (
+              <>
+                <AlertTriangle size={16} />
+                <span>Room is Full (Cannot Check-in)</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={16} />
+                <span>Check-in</span>
+              </>
+            )}
           </button>
         </div>
       </div>

@@ -527,8 +527,11 @@
   white-space: nowrap;
 }
 
-.radix-menu-item .material-symbols-outlined {
+.radix-menu-item .material-symbols-outlined,
+.radix-menu-item svg {
   font-size: 19px !important;
+  width: 17px;
+  height: 17px;
   color: #475569;
   flex-shrink: 0;
   transition: color 0.12s ease;
@@ -541,13 +544,17 @@
 }
 
 .radix-menu-item:hover .material-symbols-outlined,
-.radix-menu-item.active .material-symbols-outlined {
+.radix-menu-item.active .material-symbols-outlined,
+.radix-menu-item:hover svg,
+.radix-menu-item.active svg {
   color: #1e293b;
 }
 
 .radix-menu-item .chevron-icon {
   margin-left: auto;
   font-size: 16px !important;
+  width: 15px;
+  height: 15px;
   color: #475569;
 }
 
@@ -612,7 +619,8 @@
   font-weight: 500;
 }
 
-.radix-menu-item.action-checkin .material-symbols-outlined {
+.radix-menu-item.action-checkin .material-symbols-outlined,
+.radix-menu-item.action-checkin svg {
   color: #4f46e5 !important;
 }
 
@@ -621,7 +629,8 @@
   color: #4338ca !important;
 }
 
-.radix-menu-item.action-checkin:hover .material-symbols-outlined {
+.radix-menu-item.action-checkin:hover .material-symbols-outlined,
+.radix-menu-item.action-checkin:hover svg {
   color: #4338ca !important;
 }
 
@@ -631,7 +640,8 @@
   font-weight: 500;
 }
 
-.radix-menu-item.action-checkout .material-symbols-outlined {
+.radix-menu-item.action-checkout .material-symbols-outlined,
+.radix-menu-item.action-checkout svg {
   color: #ef4444 !important;
 }
 
@@ -640,7 +650,8 @@
   color: #dc2626 !important;
 }
 
-.radix-menu-item.action-checkout:hover .material-symbols-outlined {
+.radix-menu-item.action-checkout:hover .material-symbols-outlined,
+.radix-menu-item.action-checkout:hover svg {
   color: #dc2626 !important;
 }
 
