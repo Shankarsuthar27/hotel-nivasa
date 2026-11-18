@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
+import { canAccessRoute } from '../../utils/permissions';
 
 export default function Sidebar({
   activeTab,
@@ -149,11 +150,8 @@ export default function Sidebar({
       {/* 3. Navigation List */}
       <nav className="sidebar-menu-list">
         {navItems.map((item) => {
-          if (hasPermission) {
-            if (item.id === 'rates' && !hasPermission('ratesInventory.view')) return null;
-            if (item.id === 'nightaudit' && !hasPermission('reservations.nightAudit')) return null;
-            if (item.id === 'calendar' && !hasPermission('dashboard.viewCalendar')) return null;
-            if (item.id === 'reservations' && !hasPermission('reservations.view')) return null;
+          if (!canAccessRoute(activeUser, item.id)) {
+            return null;
           }
 
           const Icon = item.icon;
@@ -310,62 +308,73 @@ export default function Sidebar({
               onClick={(e) => e.stopPropagation()}
             >
               <div style={{ padding: '6px 10px', fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                Active Profile (RBAC Mode)
+                {activeUser.role === 'Owner' ? 'Active Profile (Owner Preview)' : 'Signed In Staff'}
               </div>
 
-              {/* Owner */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '7px 10px',
-                  borderRadius: '6px',
-                  fontSize: '12.5px',
-                  cursor: 'pointer',
-                  backgroundColor: activeUser.role === 'Owner' ? '#eff6ff' : 'transparent',
-                  color: activeUser.role === 'Owner' ? '#1d4ed8' : '#334155',
-                  fontWeight: activeUser.role === 'Owner' ? 600 : 500
-                }}
-                onClick={() => {
-                  if (onSwitchUser) onSwitchUser('usr_owner');
-                  setIsUserSwitcherOpen(false);
-                }}
-              >
-                <span>👑</span>
-                <span>Astha India (Owner)</span>
-              </div>
+              {activeUser.role === 'Owner' ? (
+                <>
+                  {/* Owner */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '7px 10px',
+                      borderRadius: '6px',
+                      fontSize: '12.5px',
+                      cursor: 'pointer',
+                      backgroundColor: '#eff6ff',
+                      color: '#1d4ed8',
+                      fontWeight: 600
+                    }}
+                    onClick={() => {
+                      if (onSwitchUser) onSwitchUser('usr_owner');
+                      setIsUserSwitcherOpen(false);
+                    }}
+                  >
+                    <span>👑</span>
+                    <span>Astha India (Owner)</span>
+                  </div>
 
-              {/* Team Members */}
-              {teamMembers
-                .filter((m) => m.role !== 'Owner')
-                .map((m) => {
-                  const isCurrent = activeUser.id === m.id;
-                  return (
-                    <div
-                      key={m.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '7px 10px',
-                        borderRadius: '6px',
-                        fontSize: '12.5px',
-                        cursor: 'pointer',
-                        backgroundColor: isCurrent ? '#eff6ff' : 'transparent',
-                        color: isCurrent ? '#1d4ed8' : '#334155',
-                        fontWeight: isCurrent ? 600 : 500
-                      }}
-                      onClick={() => {
-                        if (onSwitchUser) onSwitchUser(m.id);
-                        setIsUserSwitcherOpen(false);
-                      }}
-                    >
-                      <span>👤</span>
-                      <span className="truncate">{m.name || m.email} ({m.role})</span>
-                    </div>
-                  );
-                })}
+                  {/* Team Members */}
+                  {teamMembers
+                    .filter((m) => m.role !== 'Owner')
+                    .map((m) => {
+                      const isCurrent = activeUser.id === m.id;
+                      return (
+                        <div
+                          key={m.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '7px 10px',
+                            borderRadius: '6px',
+                            fontSize: '12.5px',
+                            cursor: 'pointer',
+                            backgroundColor: isCurrent ? '#eff6ff' : 'transparent',
+                            color: isCurrent ? '#1d4ed8' : '#334155',
+                            fontWeight: isCurrent ? 600 : 500
+                          }}
+                          onClick={() => {
+                            if (onSwitchUser) onSwitchUser(m.id);
+                            setIsUserSwitcherOpen(false);
+                          }}
+                        >
+                          <span>👤</span>
+                          <span className="truncate">{m.name || m.email} ({m.role})</span>
+                        </div>
+                      );
+                    })}
+                </>
+              ) : (
+                <div style={{ padding: '6px 10px', fontSize: '12.5px', color: '#334155' }}>
+                  <div style={{ fontWeight: 600, color: '#0F172A' }}>{activeUser.name}</div>
+                  <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                    {activeUser.staffId ? `${activeUser.staffId} · ` : ''}{activeUser.role}
+                  </div>
+                </div>
+              )}
 
               {/* Divider & Sign Out */}
               <div style={{ height: '1px', backgroundColor: '#E2E8F0', margin: '6px 0' }} />

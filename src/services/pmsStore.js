@@ -20,6 +20,7 @@ import {
 } from '../data/initialPmsData';
 import { calculateRoomTax, setActiveTaxRules } from './taxEngine';
 import { getRoleDefaultPermissions } from '../data/rolePresets';
+import { hasPermission as checkUserPermission } from '../utils/permissions';
 import { normalizeDateStr, getNextDayIsoDate, getTodayIsoDate } from './dateUtils';
 import {
   doc,
@@ -3481,20 +3482,66 @@ class PMSStore {
   }
 
   hasPermission(permissionPath) {
-    if (this.currentUser?.role === 'Owner') return true;
+    return checkUserPermission(this.currentUser, permissionPath);
+  }
 
-    const perms = this.currentUser?.permissions;
-    if (!perms) return true;
-
-    if (perms.allowAll) return true;
-
-    const keys = permissionPath.split('.');
-    let curr = perms;
-    for (const key of keys) {
-      if (curr === undefined || curr === null) return false;
-      curr = curr[key];
+  registerProvisionedStaff(memberRecord) {
+    if (!memberRecord || !memberRecord.id) return null;
+    const existsIdx = (this.teamMembers || []).findIndex(
+      (m) => m.id === memberRecord.id || (memberRecord.staffId && m.staffId === memberRecord.staffId)
+    );
+    if (existsIdx >= 0) {
+      this.teamMembers = this.teamMembers.map((m, idx) =>
+        idx === existsIdx ? { ...m, ...memberRecord } : m
+      );
+    } else {
+      this.teamMembers = [memberRecord, ...(this.teamMembers || [])];
     }
-    return curr === true;
+
+    this.syncDocToFirestore('teamMembers', memberRecord.id, memberRecord);
+    this.syncDocToFirestore('staff', memberRecord.uid || memberRecord.id, memberRecord);
+    this.logAudit(
+      'CREATE_STAFF_ACCOUNT',
+      'RBAC',
+      memberRecord.staffId || memberRecord.id,
+      `Created staff member ${memberRecord.name} (${memberRecord.role}) with ID ${memberRecord.staffId}.`
+    );
+    this.save();
+    this.notify();
+    return memberRecord;
+  }
+
+  toggleStaffStatus(memberId) {
+    let toggledMember = null;
+    this.teamMembers = (this.teamMembers || []).map((m) => {
+      if (m.id === memberId) {
+        const currentStatus = String(m.status || 'ACTIVE').toUpperCase();
+        const nextStatus = currentStatus === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+        toggledMember = { ...m, status: nextStatus, updatedAt: new Date().toISOString() };
+        this.syncDocToFirestore('teamMembers', m.id, toggledMember);
+        this.syncDocToFirestore('staff', toggledMember.uid || toggledMember.id, toggledMember);
+        return toggledMember;
+      }
+      return m;
+    });
+
+    if (toggledMember) {
+      if (this.currentUser && this.currentUser.id === toggledMember.id) {
+        this.currentUser = { ...this.currentUser, status: toggledMember.status };
+        if (toggledMember.status === 'SUSPENDED') {
+          this.isAuthenticated = false;
+        }
+      }
+      this.logAudit(
+        toggledMember.status === 'SUSPENDED' ? 'SUSPEND_STAFF' : 'ACTIVATE_STAFF',
+        'RBAC',
+        toggledMember.staffId || toggledMember.id,
+        `${toggledMember.status === 'SUSPENDED' ? 'Suspended' : 'Activated'} staff member ${toggledMember.name}.`
+      );
+      this.save();
+      this.notify();
+    }
+    return toggledMember;
   }
 
   updateGranularPermissions(userId, permissions, targetPropertyNames = [], copyToUserIds = []) {
@@ -3505,16 +3552,21 @@ class PMSStore {
         const updated = {
           ...m,
           permissions: JSON.parse(JSON.stringify(permissions)),
-          ...(targetPropertyNames.length ? { properties: targetPropertyNames } : {})
+          ...(targetPropertyNames.length ? { properties: targetPropertyNames } : {}),
+          updatedAt: new Date().toISOString()
         };
         this.syncDocToFirestore('teamMembers', m.id, updated);
+        this.syncDocToFirestore('staff', updated.uid || updated.id, updated);
         return updated;
       }
       return m;
     });
 
     if (this.currentUser && applyToIds.has(this.currentUser.id)) {
-      this.currentUser.permissions = JSON.parse(JSON.stringify(permissions));
+      this.currentUser = {
+        ...this.currentUser,
+        permissions: JSON.parse(JSON.stringify(permissions))
+      };
     }
 
     this.logAudit('UPDATE_PERMISSIONS', 'RBAC', userId, `Updated granular operational permissions.`);
@@ -3523,30 +3575,74 @@ class PMSStore {
     return { success: true };
   }
 
-
   loginUser(userProfile) {
-    this.isAuthenticated = true;
     if (userProfile) {
+      const cleanEmail = String(userProfile.email || userProfile.loginEmail || '').toLowerCase();
+      const cleanStaffId = String(userProfile.staffId || '').toLowerCase();
+
+      // Match live record from teamMembers so Owner-configured permissions & status always win
+      const liveRecord = (this.teamMembers || []).find((m) => {
+        if (!m) return false;
+        if (userProfile.id && m.id === userProfile.id) return true;
+        if (cleanStaffId && String(m.staffId || '').toLowerCase() === cleanStaffId) return true;
+        if (
+          cleanEmail &&
+          (String(m.email || '').toLowerCase() === cleanEmail ||
+            String(m.loginEmail || '').toLowerCase() === cleanEmail)
+        ) {
+          return true;
+        }
+        return false;
+      });
+
+      const merged = liveRecord ? { ...userProfile, ...liveRecord } : userProfile;
+      const mergedStatus = String(merged.status || 'ACTIVE').toUpperCase();
+      if (mergedStatus === 'SUSPENDED' || mergedStatus === 'INACTIVE') {
+        this.isAuthenticated = false;
+        return { success: false, error: 'Account has been suspended by the Owner.' };
+      }
+
       const rolePresets = getRoleDefaultPermissions();
-      const userRole = userProfile.role || 'Owner';
+      const userRole = merged.role || 'Owner';
       const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
 
       this.currentUser = {
-        id: userProfile.id || `usr_${Date.now()}`,
-        name: userProfile.name || 'Astha India',
-        email: userProfile.email || 'owner@hotelastha.com',
+        id: merged.id || `usr_${Date.now()}`,
+        uid: merged.uid || merged.id || `usr_${Date.now()}`,
+        staffId: merged.staffId || '',
+        name: merged.name || 'Astha India',
+        email: merged.email || merged.loginEmail || 'owner@hotelastha.com',
+        loginEmail: merged.loginEmail || merged.email || 'owner@hotelastha.com',
         role: userRole,
-        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
-        avatar: userProfile.avatar || '👑',
+        initials:
+          merged.initials ||
+          (merged.name
+            ? merged.name
+                .split(/\s+/)
+                .map((p) => p[0])
+                .join('')
+                .toUpperCase()
+                .slice(0, 2)
+            : 'AI'),
+        avatar: merged.avatar || (userRole === 'Owner' ? '👑' : '👤'),
         status: 'ACTIVE',
-        properties: userProfile.properties || ['HOTEL ASTHA'],
-        permissions: userProfile.permissions || defaultPerms
+        properties: merged.properties || ['HOTEL ASTHA'],
+        permissions: merged.permissions
+          ? JSON.parse(JSON.stringify(merged.permissions))
+          : JSON.parse(JSON.stringify(defaultPerms))
       };
     }
+
+    this.isAuthenticated = true;
     try {
       localStorage.setItem('pms_is_authenticated', 'true');
     } catch (e) {}
-    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
+    this.logAudit(
+      'STAFF_LOGIN',
+      'AUTH',
+      this.currentUser?.staffId || this.currentUser?.id || 'usr_staff',
+      `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`
+    );
     this.save();
     this.notify();
     return { success: true, user: this.currentUser };

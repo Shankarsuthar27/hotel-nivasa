@@ -34,6 +34,7 @@ import BookingDetailsDrawer from './BookingDetailsDrawer';
 import GroupReservationListDrawer from './GroupReservationListDrawer';
 import CancelReservationModal from './CancelReservationModal';
 import SlidingTabBar from '../common/SlidingTabBar';
+import Can from '../common/Can';
 import ReservationsToolbar from './ReservationsToolbar';
 import ReservationsListView from './ReservationsListView';
 import AmendStayDrawer from './AmendStayDrawer';
@@ -59,6 +60,7 @@ const BedIcon = ({ size = 18, color = "#2563eb" }) => (
 export default function ReservationsView({
   reservations = [],
   property,
+  currentUser,
   rooms = [],
   roomTypes = [],
   initialTab = 'all',
@@ -363,14 +365,16 @@ export default function ReservationsView({
           <span className="breadcrumb-current">Reservations</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            type="button"
-            className="btn-create-reservation"
-            onClick={onNewReservation}
-          >
-            <Plus size={16} />
-            <span>Create Reservation</span>
-          </button>
+          <Can user={currentUser || pmsStore.getState().currentUser} permission="reservations.create">
+            <button
+              type="button"
+              className="btn-create-reservation"
+              onClick={onNewReservation}
+            >
+              <Plus size={16} />
+              <span>Create Reservation</span>
+            </button>
+          </Can>
         </div>
       </div>
 

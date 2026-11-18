@@ -1,132 +1,227 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Users, X, Plus, ChevronDown, ChevronUp, AlertCircle, Building2, Check } from 'lucide-react';
-import { PREDEFINED_ROLES } from '../../data/rolePresets';
+import React, { useState, useEffect } from 'react';
+import {
+  Users,
+  X,
+  ShieldCheck,
+  KeyRound,
+  AlertCircle,
+  Loader2,
+  Check
+} from 'lucide-react';
+import { PREDEFINED_ROLES, getRoleDefaultPermissions } from '../../data/rolePresets';
+import { createEmptyPermissions } from '../../utils/permissions';
+import { createStaffAccount } from '../../services/firebaseAuth';
+
+const PERMISSION_GROUPS = [
+  {
+    title: 'Dashboard & Calendar',
+    items: [
+      { path: 'dashboard.viewDashboard', label: 'View Dashboard' },
+      { path: 'dashboard.viewCalendar', label: 'Calendar / Tape Chart' }
+    ]
+  },
+  {
+    title: 'Reservations & Front Desk',
+    items: [
+      { path: 'reservations.view', label: 'View Reservations' },
+      { path: 'reservations.create', label: 'Create Reservation', requires: 'reservations.view' },
+      { path: 'reservations.actions.checkIn', label: 'Check-In Guest', requires: 'reservations.view' },
+      { path: 'reservations.actions.checkOut', label: 'Check-Out Guest', requires: 'reservations.view' },
+      { path: 'reservations.actions.assignRoom', label: 'Assign / Move Room', requires: 'reservations.view' },
+      { path: 'reservations.actions.amendStay', label: 'Amend Stay / Edit', requires: 'reservations.view' },
+      { path: 'reservations.actions.cancel', label: 'Cancel Booking', requires: 'reservations.view' },
+      { path: 'reservations.nightAudit', label: 'Run Night Audit' }
+    ]
+  },
+  {
+    title: 'Reports & Analytics',
+    items: [
+      { path: 'reports.accessReports', label: 'View Reports' },
+      { path: 'reports.reportActions.managerReport', label: 'Manager Report', requires: 'reports.accessReports' },
+      { path: 'reports.reportActions.reservationReport', label: 'Reservation Report', requires: 'reports.accessReports' },
+      { path: 'reports.reportActions.folioList', label: 'Folio & Ledger List', requires: 'reports.accessReports' }
+    ]
+  },
+  {
+    title: 'Rates, Rooms & Guests',
+    items: [
+      { path: 'ratesInventory.view', label: 'View Rates & Inventory' },
+      { path: 'ratesInventory.actions.editRates', label: 'Edit Room Rates', requires: 'ratesInventory.view' },
+      { path: 'ratesInventory.actions.stopSell', label: 'Stop Sell / Restrictions', requires: 'ratesInventory.view' },
+      { path: 'advanced.roomInventory.view', label: 'Room View & Housekeeping' },
+      { path: 'advanced.guestDatabase.view', label: 'Guests CRM' }
+    ]
+  },
+  {
+    title: 'Property, Taxes & Admin',
+    items: [
+      { path: 'taxesAddons.manageTaxes', label: 'Tax Rules & Services' },
+      { path: 'team.viewTeam', label: 'View Team Directory' },
+      { path: 'team.memberManagement', label: 'Create / Manage Staff', requires: 'team.viewTeam' },
+      { path: 'team.permissionManagement', label: 'Manage Permissions' },
+      { path: 'advanced.settings.view', label: 'Property Settings' }
+    ]
+  }
+];
+
+function getNestedBool(obj, path) {
+  return path.split('.').reduce((acc, k) => acc?.[k], obj) === true;
+}
+
+function setNestedBool(obj, path, value) {
+  const clone = JSON.parse(JSON.stringify(obj));
+  const keys = path.split('.');
+  let curr = clone;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (!curr[keys[i]] || typeof curr[keys[i]] !== 'object') {
+      curr[keys[i]] = {};
+    }
+    curr = curr[keys[i]];
+  }
+  curr[keys[keys.length - 1]] = value;
+  clone.allowAll = false;
+  return clone;
+}
 
 export default function AddTeamMemberModal({
   isOpen,
   onClose,
   propertiesList = ['HOTEL ASTHA'],
   currentProperty = 'HOTEL ASTHA',
-  onSendInvitations
+  propertyId = 'hotel_astha_main',
+  currentUserId = 'usr_owner',
+  onStaffCreated
 }) {
-  const [emailInput, setEmailInput] = useState('');
-  const [emails, setEmails] = useState([]);
-  const [emailError, setEmailError] = useState('');
-
-  // Selected properties
+  const [name, setName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [role, setRole] = useState('Hotel Manager / GM');
   const [selectedProperties, setSelectedProperties] = useState([currentProperty]);
-  const [isPropDropdownOpen, setIsPropDropdownOpen] = useState(false);
+  const [permissions, setPermissions] = useState(() => createEmptyPermissions());
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Roles per property map: { [propertyName]: roleString }
-  const [propertyRoles, setPropertyRoles] = useState({});
-  const [openRoleDropdownProp, setOpenRoleDropdownProp] = useState(null); // propName or null
-
-  const propDropdownRef = useRef(null);
-  const roleDropdownRef = useRef(null);
-
-  // Close dropdowns on outside click
+  // Initialize sensible default permissions when modal opens
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (propDropdownRef.current && !propDropdownRef.current.contains(event.target)) {
-        setIsPropDropdownOpen(false);
-      }
-      if (roleDropdownRef.current && !roleDropdownRef.current.contains(event.target)) {
-        setOpenRoleDropdownProp(null);
-      }
+    if (isOpen) {
+      setName('');
+      setContactEmail('');
+      setRole('Hotel Manager / GM');
+      setSelectedProperties([currentProperty]);
+      const presets = getRoleDefaultPermissions();
+      const preset = presets['Hotel Manager / GM']
+        ? JSON.parse(JSON.stringify(presets['Hotel Manager / GM']))
+        : createEmptyPermissions();
+      preset.allowAll = false;
+      // By default give manager dashboard, reservations (view+create+checkin+checkout), reports — owner can freely toggle any box
+      setPermissions(preset);
+      setError('');
+      setIsSubmitting(false);
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+  }, [isOpen, currentProperty]);
 
   if (!isOpen) return null;
 
-  // Real-time email validation
-  const validateEmailFormat = (email) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  };
-
-  const handleEmailInputChange = (e) => {
-    const val = e.target.value;
-    setEmailInput(val);
-    if (!val.trim()) {
-      setEmailError('');
-    } else if (!validateEmailFormat(val.trim())) {
-      setEmailError('Please enter a valid email address');
-    } else {
-      setEmailError('');
+  const handleRoleChange = (newRole) => {
+    setRole(newRole);
+    const presets = getRoleDefaultPermissions();
+    if (presets[newRole]) {
+      const nextPerms = JSON.parse(JSON.stringify(presets[newRole]));
+      nextPerms.allowAll = false;
+      setPermissions(nextPerms);
     }
   };
 
-  const handleAddEmail = () => {
-    const trimmed = emailInput.trim().toLowerCase();
-    if (!trimmed) return;
-    if (!validateEmailFormat(trimmed)) {
-      setEmailError('Please enter a valid email address');
-      return;
+  const handleTogglePerm = (item) => {
+    const currentlyChecked = getNestedBool(permissions, item.path);
+    const nextVal = !currentlyChecked;
+    let nextPerms = setNestedBool(permissions, item.path, nextVal);
+
+    // If enabling a dependent action (e.g. Create Reservation), automatically enable its parent view
+    if (nextVal && item.requires) {
+      nextPerms = setNestedBool(nextPerms, item.requires, true);
     }
-    if (emails.includes(trimmed)) {
-      setEmailError('Email already added to invitation list');
-      return;
-    }
-    setEmails([...emails, trimmed]);
-    setEmailInput('');
-    setEmailError('');
+    setPermissions(nextPerms);
   };
 
-  const handleRemoveEmail = (emailToRemove) => {
-    setEmails(emails.filter((e) => e !== emailToRemove));
+  const handleClearAllPerms = () => {
+    setPermissions(createEmptyPermissions());
+  };
+
+  const handleSelectAllPerms = () => {
+    let next = createEmptyPermissions();
+    PERMISSION_GROUPS.forEach((group) => {
+      group.items.forEach((item) => {
+        next = setNestedBool(next, item.path, true);
+      });
+    });
+    setPermissions(next);
   };
 
   const handleToggleProperty = (propName) => {
     if (selectedProperties.includes(propName)) {
-      if (selectedProperties.length === 1) return; // Keep at least one
+      if (selectedProperties.length === 1) return;
       setSelectedProperties(selectedProperties.filter((p) => p !== propName));
     } else {
       setSelectedProperties([...selectedProperties, propName]);
     }
   };
 
-  const handleSelectRole = (propName, roleName) => {
-    setPropertyRoles((prev) => ({
-      ...prev,
-      [propName]: roleName
-    }));
-    setOpenRoleDropdownProp(null);
-  };
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
 
-    let finalEmails = [...emails];
-    const trimmed = emailInput.trim().toLowerCase();
-    if (trimmed && validateEmailFormat(trimmed) && !finalEmails.includes(trimmed)) {
-      finalEmails.push(trimmed);
-    }
-
-    if (finalEmails.length === 0) {
-      setEmailError('Please enter at least one valid email address');
+    if (!name.trim()) {
+      setError('Please enter the staff member full name.');
       return;
     }
 
-    const assignments = selectedProperties.map((propName) => ({
-      property: propName,
-      role: propertyRoles[propName] || 'Hotel Manager / GM'
-    }));
+    if (contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
+      setError('Please enter a valid email address, or leave blank to auto-generate a Staff ID login.');
+      return;
+    }
 
-    onSendInvitations({
-      emails: finalEmails,
-      assignments
-    });
+    // Ensure at least one permission is enabled
+    const hasAnyPerm = PERMISSION_GROUPS.some((g) =>
+      g.items.some((item) => getNestedBool(permissions, item.path))
+    );
+    if (!hasAnyPerm) {
+      setError('Please select at least one permission for this staff member.');
+      return;
+    }
 
-    onClose();
+    setIsSubmitting(true);
+    try {
+      const result = await createStaffAccount({
+        name: name.trim(),
+        contactEmail: contactEmail.trim(),
+        role,
+        properties: selectedProperties,
+        permissions,
+        propertyId,
+        createdBy: currentUserId
+      });
+
+      if (!result.success) {
+        setError(result.error || 'Could not create staff account.');
+        return;
+      }
+
+      if (onStaffCreated) {
+        onStaffCreated(result);
+      }
+      onClose();
+    } catch (err) {
+      setError(err?.message || 'Unexpected error creating staff account.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="team-drawer-overlay" onClick={onClose}>
       <div
         className="team-drawer-container"
+        style={{ maxWidth: '620px' }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -137,7 +232,12 @@ export default function AddTeamMemberModal({
             <div className="team-drawer-icon-badge">
               <Users size={18} color="#2563EB" />
             </div>
-            <h3 className="team-drawer-title">Add Team Member</h3>
+            <div>
+              <h3 className="team-drawer-title">Create Staff Member & Permissions</h3>
+              <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                Select allowed operations and auto-generate a Staff Login ID & Password
+              </p>
+            </div>
           </div>
           <button
             type="button"
@@ -151,173 +251,245 @@ export default function AddTeamMemberModal({
 
         {/* Drawer Body Form */}
         <form onSubmit={handleSubmit} className="team-drawer-form">
-          <div className="team-drawer-body">
-            {/* Field 1: Email Address */}
-            <div className="team-drawer-field">
-              <label className="team-drawer-label">
-                Email Address <span style={{ color: '#EF4444' }}>*</span>
-              </label>
-              <div className="team-drawer-helper">
-                Type an email address and click Add to add to invitation list.
+          <div className="team-drawer-body" style={{ gap: '18px' }}>
+            {error && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  color: '#DC2626',
+                  fontSize: '13px',
+                  fontWeight: 500
+                }}
+              >
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                <span>{error}</span>
               </div>
+            )}
 
-              <div className="team-drawer-email-input-wrap">
+            {/* Row 1: Staff Name & Role */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <div className="team-drawer-field">
+                <label className="team-drawer-label">
+                  Full Name <span style={{ color: '#EF4444' }}>*</span>
+                </label>
                 <input
-                  type="email"
-                  className={`team-drawer-input ${emailError ? 'error' : ''}`}
-                  placeholder="Enter email address"
-                  value={emailInput}
-                  onChange={handleEmailInputChange}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddEmail();
-                    }
-                  }}
+                  type="text"
+                  className="team-drawer-input"
+                  placeholder="e.g. Rahul Verma"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={isSubmitting}
                 />
-                <button
-                  type="button"
-                  className="team-drawer-btn-add"
-                  onClick={handleAddEmail}
-                >
-                  <Plus size={15} />
-                  <span>Add</span>
-                </button>
               </div>
 
-              {emailError && (
-                <div className="team-drawer-error-row">
-                  <AlertCircle size={13} style={{ flexShrink: 0 }} />
-                  <span>{emailError}</span>
-                </div>
-              )}
-
-              {emails.length > 0 && (
-                <div className="team-drawer-chips-wrap">
-                  {emails.map((em) => (
-                    <div key={em} className="team-drawer-chip">
-                      <span>{em}</span>
-                      <button
-                        type="button"
-                        className="team-drawer-chip-remove"
-                        onClick={() => handleRemoveEmail(em)}
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
+              <div className="team-drawer-field">
+                <label className="team-drawer-label">
+                  Role Preset <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <select
+                  className="team-drawer-input"
+                  value={role}
+                  onChange={(e) => handleRoleChange(e.target.value)}
+                  disabled={isSubmitting}
+                  style={{ backgroundColor: '#FFFFFF', cursor: 'pointer' }}
+                >
+                  {PREDEFINED_ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
                   ))}
-                </div>
-              )}
+                  <option value="Night Auditor">Night Auditor</option>
+                  <option value="Custom Staff">Custom Staff</option>
+                </select>
+              </div>
             </div>
 
-            {/* Field 2: Assign Properties */}
-            <div className="team-drawer-field" ref={propDropdownRef}>
-              <div className="team-drawer-field-header">
+            {/* Row 2: Optional Contact Email & Property */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
+              <div className="team-drawer-field">
                 <label className="team-drawer-label">
-                  Assign Properties <span style={{ color: '#EF4444' }}>*</span>
+                  Email Address <span style={{ color: '#94A3B8', fontWeight: 400 }}>(Optional)</span>
                 </label>
-                <span className="team-drawer-counter">
-                  My Properties ({selectedProperties.length})
-                </span>
+                <input
+                  type="email"
+                  className="team-drawer-input"
+                  placeholder="Leave blank to use Staff ID login"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  disabled={isSubmitting}
+                />
               </div>
 
-              <div className="team-drawer-prop-selector-wrap">
-                <button
-                  type="button"
-                  className={`team-drawer-select-box ${isPropDropdownOpen ? 'open' : ''}`}
-                  onClick={() => setIsPropDropdownOpen(!isPropDropdownOpen)}
-                >
-                  <span className="team-drawer-select-val">
-                    {selectedProperties.join(', ')}
-                  </span>
-                  <ChevronDown
-                    size={16}
-                    color="#94A3B8"
-                    className={`team-drawer-chevron ${isPropDropdownOpen ? 'rotated' : ''}`}
-                  />
-                </button>
+              <div className="team-drawer-field">
+                <label className="team-drawer-label">Assigned Property</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', paddingTop: '4px' }}>
+                  {propertiesList.map((propName) => {
+                    const checked = selectedProperties.includes(propName);
+                    return (
+                      <button
+                        key={propName}
+                        type="button"
+                        onClick={() => handleToggleProperty(propName)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '7px 12px',
+                          borderRadius: '8px',
+                          border: checked ? '1px solid #2563EB' : '1px solid #E2E8F0',
+                          backgroundColor: checked ? '#EFF6FF' : '#FFFFFF',
+                          color: checked ? '#1D4ED8' : '#475569',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {checked && <Check size={13} />}
+                        <span>{propName}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
 
-                {isPropDropdownOpen && (
-                  <div className="team-drawer-prop-dropdown">
-                    {propertiesList.map((propName) => {
-                      const isChecked = selectedProperties.includes(propName);
+            {/* Granular Permissions Selection Matrix */}
+            <div
+              style={{
+                borderTop: '1px solid #E2E8F0',
+                paddingTop: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <ShieldCheck size={16} color="#2563EB" />
+                  <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#0F172A' }}>
+                    Select Allowed Functions & Operations
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={handleClearAllPerms}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #E2E8F0',
+                      backgroundColor: '#FFFFFF',
+                      color: '#64748B',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSelectAllPerms}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #DBEAFE',
+                      backgroundColor: '#EFF6FF',
+                      color: '#2563EB',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Select All
+                  </button>
+                </div>
+              </div>
+
+              {PERMISSION_GROUPS.map((group) => (
+                <div
+                  key={group.title}
+                  style={{
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '10px',
+                    padding: '12px 14px',
+                    backgroundColor: '#F8FAFC'
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: '#334155',
+                      marginBottom: '10px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.03em'
+                    }}
+                  >
+                    {group.title}
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                      gap: '8px'
+                    }}
+                  >
+                    {group.items.map((item) => {
+                      const isChecked = getNestedBool(permissions, item.path);
                       return (
-                        <div
-                          key={propName}
-                          className={`team-drawer-prop-item ${isChecked ? 'active' : ''}`}
-                          onClick={() => handleToggleProperty(propName)}
+                        <label
+                          key={item.path}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '7px 10px',
+                            borderRadius: '8px',
+                            border: isChecked ? '1px solid #93C5FD' : '1px solid #E2E8F0',
+                            backgroundColor: isChecked ? '#EFF6FF' : '#FFFFFF',
+                            cursor: 'pointer',
+                            fontSize: '12.5px',
+                            fontWeight: isChecked ? 600 : 500,
+                            color: isChecked ? '#1E40AF' : '#475569',
+                            userSelect: 'none',
+                            transition: 'all 0.12s ease'
+                          }}
                         >
-                          <div className={`team-drawer-checkbox ${isChecked ? 'checked' : ''}`}>
-                            {isChecked && <Check size={11} color="#FFFFFF" strokeWidth={3} />}
-                          </div>
-                          <Building2 size={15} color={isChecked ? '#2563EB' : '#64748B'} />
-                          <span>{propName}</span>
-                        </div>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleTogglePerm(item)}
+                            style={{
+                              width: '15px',
+                              height: '15px',
+                              accentColor: '#2563EB',
+                              cursor: 'pointer',
+                              margin: 0
+                            }}
+                          />
+                          <span>{item.label}</span>
+                        </label>
                       );
                     })}
                   </div>
-                )}
-              </div>
-            </div>
-
-            {/* Field 3: Roles per Property */}
-            <div className="team-drawer-field" ref={roleDropdownRef}>
-              <label className="team-drawer-label">
-                Roles per Property <span style={{ color: '#EF4444' }}>*</span>
-              </label>
-
-              <div className="team-drawer-roles-list">
-                {selectedProperties.map((propName) => {
-                  const currentRole = propertyRoles[propName] || '';
-                  const isOpen = openRoleDropdownProp === propName;
-
-                  return (
-                    <div key={propName} className="team-drawer-role-row">
-                      <div className="team-drawer-role-prop-name">
-                        {propName}
-                      </div>
-
-                      <div className="team-drawer-role-select-wrap">
-                        <button
-                          type="button"
-                          className={`team-drawer-role-select-btn ${isOpen ? 'open' : ''}`}
-                          onClick={() => setOpenRoleDropdownProp(isOpen ? null : propName)}
-                        >
-                          <span className={currentRole ? 'text-selected' : 'text-placeholder'}>
-                            {currentRole || 'Select role...'}
-                          </span>
-                          {isOpen ? (
-                            <ChevronUp size={16} color="#2563EB" />
-                          ) : (
-                            <ChevronDown size={16} color="#94A3B8" />
-                          )}
-                        </button>
-
-                        {/* Dropdown Menu (Matches Image 3) */}
-                        {isOpen && (
-                          <div className="team-drawer-role-menu">
-                            {PREDEFINED_ROLES.map((roleOpt) => {
-                              const isSelected = currentRole === roleOpt;
-                              return (
-                                <div
-                                  key={roleOpt}
-                                  className={`team-drawer-role-item ${isSelected ? 'active' : ''}`}
-                                  onClick={() => handleSelectRole(propName, roleOpt)}
-                                >
-                                  <span>{roleOpt}</span>
-                                  {isSelected && (
-                                    <Check size={14} color="#2563EB" strokeWidth={2.5} />
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -327,14 +499,27 @@ export default function AddTeamMemberModal({
               type="button"
               className="team-drawer-btn-cancel"
               onClick={onClose}
+              disabled={isSubmitting}
             >
               Cancel
             </button>
             <button
               type="submit"
               className="team-drawer-btn-submit"
+              disabled={isSubmitting}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
             >
-              Send Invitation
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  <span>Generating Credentials...</span>
+                </>
+              ) : (
+                <>
+                  <KeyRound size={15} />
+                  <span>Create Staff & Generate ID / Password</span>
+                </>
+              )}
             </button>
           </div>
         </form>

@@ -11,7 +11,7 @@ import { getStorage } from "firebase/storage";
 
 const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : (typeof process !== 'undefined' && process.env ? process.env : {});
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyAdHlCHjFIZuS9LyiO0HTUL4DFhg7XO3yE",
   authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "hotel-263a3.firebaseapp.com",
   projectId: env.VITE_FIREBASE_PROJECT_ID || "hotel-263a3",

@@ -26,11 +26,13 @@ import EditReservationView from './components/reservations/EditReservationView';
 import AddReservationView from './components/reservations/AddReservationView';
 import LoginView from './components/auth/LoginView';
 import ToastNotification from './components/common/ToastNotification';
+import AccessDeniedView from './components/common/AccessDeniedView';
 
 import { pmsStore } from './services/pmsStore';
 import { useRouter, navigate, ROUTES } from './services/router';
 import { createReservationViaApi } from './services/reservationApi';
 import { logoutStaff, subscribeToStaffAuth } from './services/firebaseAuth';
+import { canAccessRoute, getFirstAllowedTab, hasPermission } from './utils/permissions';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function App() {
@@ -149,13 +151,24 @@ export default function App() {
 
   // Staff Sign In / Sign Out Handlers
   const handleLoginSuccess = (staffProfile) => {
-    pmsStore.loginUser(staffProfile);
-    showToast(`👋 Welcome back, ${staffProfile.name || 'Staff'}! Terminal active.`, 'success');
-    let dest = '/dashboard';
+    const loginRes = pmsStore.loginUser(staffProfile);
+    if (!loginRes?.success) {
+      showToast(loginRes?.error || 'Account access restricted.', 'error');
+      return;
+    }
+    const activeProfile = loginRes.user || staffProfile;
+    showToast(`👋 Welcome back, ${activeProfile.name || 'Staff'}! Terminal active.`, 'success');
+
+    const firstAllowed = getFirstAllowedTab(activeProfile);
+    const defaultDest = firstAllowed === 'myteam' ? '/my-team' : `/${firstAllowed}`;
+    let dest = defaultDest;
     try {
       const intended = sessionStorage.getItem('pms_intended_dest');
       if (intended && intended !== '/login' && intended !== '/') {
-        dest = intended;
+        const intendedTab = intended.replace(/^\//, '').split(/[/?]/)[0].replace('my-team', 'myteam');
+        if (canAccessRoute(activeProfile, intendedTab)) {
+          dest = intended;
+        }
         sessionStorage.removeItem('pms_intended_dest');
       }
     } catch (e) {}
@@ -366,9 +379,9 @@ export default function App() {
 
       {/* Auth Gate: If not authenticated and not on public accept-invite, show Staff Sign In */}
       {!state.isAuthenticated && activeTab !== 'accept-invite' ? (
-        <LoginView onLoginSuccess={handleLoginSuccess} />
+        <LoginView onLoginSuccess={handleLoginSuccess} teamMembers={state.teamMembers} />
       ) : activeTab === 'login' ? (
-        <LoginView onLoginSuccess={handleLoginSuccess} />
+        <LoginView onLoginSuccess={handleLoginSuccess} teamMembers={state.teamMembers} />
       ) : editingReservation && !['cancelled', 'no_show'].includes((((state.reservations.find((r) => r.id === editingReservation.id) || editingReservation).status || '').toLowerCase().replace('-', '_').replace(' ', '_'))) ? (
         <div className="edit-res-fullscreen-overlay">
           <EditReservationView
@@ -425,6 +438,17 @@ export default function App() {
           />
         </div>
       ) : isCreatingReservation ? (
+        !hasPermission(state.currentUser, 'reservations.create') ? (
+          <AccessDeniedView
+            fullScreen={true}
+            sectionName="Create Reservation"
+            userRole={state.currentUser?.role || 'Staff'}
+            onGoHome={() => {
+              const firstTab = getFirstAllowedTab(state.currentUser);
+              navigate(firstTab === 'myteam' ? '/my-team' : `/${firstTab}`);
+            }}
+          />
+        ) : (
         /* Full-Screen Add Reservation View matching OTAL PMS */
         <div className="add-res-fullscreen-overlay">
           <AddReservationView
@@ -452,6 +476,7 @@ export default function App() {
             }}
           />
         </div>
+        )
       ) : activeTab === 'accept-invite' ? (
         <AcceptInviteView
           token={router.queryParams?.token}
@@ -515,6 +540,17 @@ export default function App() {
         {/* Dynamic Viewport with Page Transitions */}
         <main className={`content-viewport ${activeTab === 'reservations' || activeTab === 'dashboard' || activeTab === 'rates' || activeTab === 'guests' || activeTab === 'myteam' || activeTab === 'permissions' || activeTab === 'properties' || activeTab === 'calendar' ? 'no-pad-viewport' : ''} ${activeTab === 'calendar' ? 'calendar-viewport' : ''} ${activeTab === 'rates' ? 'rates-viewport' : ''} ${activeTab === 'reservations' ? 'reservations-viewport' : ''}`}>
           <div key={activeTab} className="pms-page-view">
+            {!canAccessRoute(state.currentUser, activeTab) ? (
+              <AccessDeniedView
+                sectionName={activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
+                userRole={state.currentUser?.role || 'Staff'}
+                onGoHome={() => {
+                  const firstTab = getFirstAllowedTab(state.currentUser);
+                  navigate(firstTab === 'myteam' ? '/my-team' : `/${firstTab}`);
+                }}
+              />
+            ) : (
+            <>
             {activeTab === 'dashboard' && (
             <DashboardView
               property={state.property}
@@ -579,6 +615,7 @@ export default function App() {
             <ReservationsView
               reservations={state.reservations}
               property={state.property}
+              currentUser={state.currentUser}
               rooms={state.rooms}
               roomTypes={state.roomTypes}
               initialTab={router.queryParams?.tab || 'all'}
@@ -741,6 +778,14 @@ export default function App() {
               teamMembers={state.teamMembers}
               propertiesList={state.propertiesList || ['HOTEL ASTHA']}
               currentProperty={state.property?.name || 'HOTEL ASTHA'}
+              propertyId={pmsStore.propertyId || 'hotel_astha_main'}
+              currentUser={state.currentUser}
+              onStaffCreated={(memberRecord) => {
+                pmsStore.registerProvisionedStaff(memberRecord);
+              }}
+              onToggleStaffStatus={(memberId) => {
+                pmsStore.toggleStaffStatus(memberId);
+              }}
               onInviteMembers={({ emails, assignments }) => {
                 pmsStore.inviteTeamMembers({
                   emails,
@@ -863,6 +908,8 @@ export default function App() {
               showToast={showToast}
             />
           )}
+            </>
+            )}
           </div>
         </main>
       </div>

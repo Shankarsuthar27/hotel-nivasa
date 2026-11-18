@@ -1,21 +1,141 @@
 rules_version = '2';
+
+// Enterprise RBAC Firestore Security Rules for Hotel Astha PMS
+// Deploy with: firebase deploy --only firestore:rules
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Hotel PMS Security Rules
-    // Supports multi-tenant properties, root operational mirrors, and front desk operations
 
-    // Properties Collection & all nested subcollections
-    match /properties/{propertyId} {
-      allow read, write: if true;
-
-      match /{subcollection=**} {
-        allow read, write: if true;
-      }
+    function staffPath(propertyId) {
+      return /databases/$(database)/documents/properties/$(propertyId)/staff/$(request.auth.uid);
     }
 
-    // Root-level mirror collections (reservations, rooms, roomTypes, mealPlans, ratePlans, folios, guests, teamMembers, settings)
-    match /{document=**} {
-      allow read, write: if true;
+    function hasStaffProfile(propertyId) {
+      return request.auth != null && exists(staffPath(propertyId));
+    }
+
+    function staffData(propertyId) {
+      return get(staffPath(propertyId)).data;
+    }
+
+    function isActiveStaff(propertyId) {
+      return hasStaffProfile(propertyId) && staffData(propertyId).status == 'ACTIVE';
+    }
+
+    function isOwner(propertyId) {
+      return isActiveStaff(propertyId)
+        && (staffData(propertyId).role == 'Owner' || staffData(propertyId).permissions.allowAll == true);
+    }
+
+    match /properties/{propertyId} {
+      allow read: if isActiveStaff(propertyId);
+      allow write: if isOwner(propertyId)
+        || (isActiveStaff(propertyId) && staffData(propertyId).permissions.advanced.settings.view == true);
+
+      // Staff RBAC profiles & directory
+      match /staff/{uid} {
+        allow read: if request.auth != null && (request.auth.uid == uid || isOwner(propertyId)
+          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.team.viewTeam == true));
+        allow write: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.team.permissionManagement == true);
+      }
+
+      match /teamMembers/{memberId} {
+        allow read: if isActiveStaff(propertyId)
+          && (isOwner(propertyId) || staffData(propertyId).permissions.team.viewTeam == true || memberId == request.auth.uid);
+        allow write: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.team.memberManagement == true);
+      }
+
+      // Reservations
+      match /reservations/{resId} {
+        allow read: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.reservations.view == true);
+        allow create: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.reservations.create == true);
+        allow update: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && (
+            staffData(propertyId).permissions.reservations.actions.amendStay == true
+            || staffData(propertyId).permissions.reservations.actions.checkIn == true
+            || staffData(propertyId).permissions.reservations.actions.checkOut == true
+            || staffData(propertyId).permissions.reservations.actions.assignRoom == true
+            || staffData(propertyId).permissions.reservations.actions.cancel == true
+          ));
+        allow delete: if isOwner(propertyId);
+      }
+
+      // Folios & Billing
+      match /folios/{folioId} {
+        allow read: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && (
+            staffData(propertyId).permissions.reservations.view == true
+            || staffData(propertyId).permissions.reports.accessReports == true
+          ));
+        allow write: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && (
+            staffData(propertyId).permissions.reservations.create == true
+            || staffData(propertyId).permissions.reservations.actions.checkOut == true
+          ));
+      }
+
+      // Rooms, Room Types, Meal Plans & Rate Plans
+      match /rooms/{roomId} {
+        allow read: if isActiveStaff(propertyId);
+        allow write: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && (
+            staffData(propertyId).permissions.advanced.roomInventory.edit == true
+            || staffData(propertyId).permissions.advanced.roomInventory.changeRoomStatus == true
+          ));
+      }
+
+      match /roomTypes/{rtId} {
+        allow read: if isActiveStaff(propertyId);
+        allow write: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.ratesInventory.actions.editRates == true);
+      }
+
+      match /ratePlans/{rpId} {
+        allow read: if isActiveStaff(propertyId);
+        allow write: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.ratesInventory.actions.editRates == true);
+      }
+
+      match /mealPlans/{mpId} {
+        allow read: if isActiveStaff(propertyId);
+        allow write: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.advanced.mealOptions.edit == true);
+      }
+
+      // Tax Rules & Service Charges
+      match /taxRules/{ruleId} {
+        allow read: if isActiveStaff(propertyId);
+        allow write: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.taxesAddons.manageTaxes == true);
+      }
+
+      match /serviceCharges/{svcId} {
+        allow read: if isActiveStaff(propertyId);
+        allow write: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.taxesAddons.manageServices == true);
+      }
+
+      // Night Audits & Reports
+      match /nightAudits/{auditId} {
+        allow read: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && (
+            staffData(propertyId).permissions.reports.accessReports == true
+            || staffData(propertyId).permissions.reservations.nightAudit == true
+          ));
+        allow write: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.reservations.nightAudit == true);
+      }
+
+      // Audit Trail (append-only for active staff, read for Owner / Auditors)
+      match /auditTrail/{logId} {
+        allow read: if isOwner(propertyId)
+          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.reports.accessReports == true);
+        allow create: if isActiveStaff(propertyId);
+        allow update, delete: if false;
+      }
     }
   }
 }

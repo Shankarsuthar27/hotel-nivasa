@@ -19,9 +19,10 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { loginStaff, quickStaffLogin, sendStaffPasswordReset, DEMO_STAFF_ACCOUNTS } from '../../services/firebaseAuth';
+import { pmsStore } from '../../services/pmsStore';
 import './login.css';
 
-export default function LoginView({ onLoginSuccess }) {
+export default function LoginView({ onLoginSuccess, teamMembers = [] }) {
   const [email, setEmail] = useState('info@asthasoftindia.com');
   const [password, setPassword] = useState('Password@123');
   const [showPassword, setShowPassword] = useState(false);
@@ -82,12 +83,15 @@ export default function LoginView({ onLoginSuccess }) {
     setPasswordError('');
     setGeneralError('');
 
-    const cleanEmail = email.trim();
+    const cleanIdentifier = email.trim();
     const cleanPassword = password.trim();
     let hasError = false;
 
-    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setEmailError('Please enter a valid partner email address.');
+    const isEmailFormat = cleanIdentifier.includes('@') && cleanIdentifier.includes('.');
+    const isStaffIdFormat = /^[a-zA-Z0-9._-]{3,32}$/.test(cleanIdentifier);
+
+    if (!cleanIdentifier || (!isEmailFormat && !isStaffIdFormat)) {
+      setEmailError('Please enter a valid Staff ID (e.g. MGR-4821) or email address.');
       hasError = true;
     }
 
@@ -101,18 +105,22 @@ export default function LoginView({ onLoginSuccess }) {
     setIsLoading(true);
 
     try {
-      const res = await loginStaff(cleanEmail, cleanPassword);
+      const liveTeamMembers =
+        Array.isArray(teamMembers) && teamMembers.length > 0
+          ? teamMembers
+          : pmsStore?.getState()?.teamMembers || [];
+      const res = await loginStaff(cleanIdentifier, cleanPassword, liveTeamMembers);
 
       if (res.success) {
         try {
-          localStorage.setItem('pms_remember_email', cleanEmail);
+          localStorage.setItem('pms_remember_email', cleanIdentifier);
         } catch (err) {}
 
         if (onLoginSuccess) {
-          onLoginSuccess(res.staff || { email: cleanEmail });
+          onLoginSuccess(res.staff || { email: res.email || cleanIdentifier });
         }
       } else {
-        setGeneralError(res.error || 'Invalid credentials. Please verify your email or password.');
+        setGeneralError(res.error || 'Invalid credentials. Please verify your Staff ID / email or password.');
       }
     } catch (err) {
       setGeneralError(err.message || 'An error occurred during authentication.');
@@ -263,10 +271,10 @@ export default function LoginView({ onLoginSuccess }) {
 
               {/* Login Form */}
               <form onSubmit={handleFormSubmit} className="asthastay-form" noValidate>
-                {/* Email Address Input */}
+                {/* Staff ID or Email Address Input */}
                 <div>
                   <label htmlFor="email" className="asthastay-label">
-                    Email Address
+                    Staff ID or Email Address
                   </label>
                   <div className="asthastay-input-wrap">
                     <span className="asthastay-input-icon">
@@ -275,12 +283,12 @@ export default function LoginView({ onLoginSuccess }) {
                     <input
                       id="email"
                       name="email"
-                      type="email"
+                      type="text"
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="info@asthasoftindia.com"
-                      autoComplete="email"
+                      placeholder="MGR-4821 or info@asthasoftindia.com"
+                      autoComplete="username"
                       className="asthastay-input"
                     />
                   </div>
@@ -353,54 +361,6 @@ export default function LoginView({ onLoginSuccess }) {
                   </button>
                 </div>
               </form>
-
-              {/* Subtle Divider */}
-              <div className="asthastay-divider" />
-
-              {/* Partner Registration Prompt */}
-              <p className="asthastay-partner-prompt">
-                New Partner?
-                <button
-                  type="button"
-                  onClick={() => setActiveModal('partner')}
-                  className="asthastay-partner-btn"
-                >
-                  Apply for access
-                </button>
-              </p>
-
-              {/* Quick Demo Switcher (Instant role selection for testing) */}
-              <div className="asthastay-demo-pills">
-                <div
-                  className="asthastay-demo-label"
-                  onClick={() => setIsDemoOpen(!isDemoOpen)}
-                  title="Toggle demo staff roles"
-                >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    <Sparkles size={13} color="#3b82f6" />
-                    <span>Quick Demo Roles</span>
-                  </span>
-                  {isDemoOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </div>
-
-                {isDemoOpen && (
-                  <div className="asthastay-demo-chips-grid">
-                    {DEMO_STAFF_ACCOUNTS.map((acc) => (
-                      <button
-                        key={acc.id}
-                        type="button"
-                        onClick={() => handleQuickDemoLogin(acc)}
-                        disabled={isLoading}
-                        className="asthastay-demo-chip-btn"
-                        title={`${acc.role} (${acc.email})`}
-                      >
-                        <span>{acc.avatar}</span>
-                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden' }}>{acc.role}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
 
               {/* Card Footer Links */}
               <footer className="asthastay-card-footer">

@@ -15,18 +15,25 @@ import {
   CheckCircle2,
   AlertCircle,
   Archive,
-  Lock
+  Lock,
+  Ban,
+  KeyRound
 } from 'lucide-react';
 import AddTeamMemberModal from './AddTeamMemberModal';
 import EditTeamMemberModal from './EditTeamMemberModal';
 import InviteEmailModal from './InviteEmailModal';
+import StaffCredentialsModal from './StaffCredentialsModal';
 import './my-team.css';
 
 export default function MyTeamView({
   teamMembers = [],
   propertiesList = ['HOTEL ASTHA'],
   currentProperty = 'HOTEL ASTHA',
+  propertyId = 'hotel_astha_main',
+  currentUser,
   onInviteMembers,
+  onStaffCreated,
+  onToggleStaffStatus,
   onUpdateMember,
   onManagePermissions,
   onRemoveInvitation,
@@ -42,6 +49,7 @@ export default function MyTeamView({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
   const [previewEmailMember, setPreviewEmailMember] = useState(null);
+  const [createdCredentials, setCreatedCredentials] = useState(null);
 
   // Action Menu dropdown state: memberId or null
   const [openActionMenuId, setOpenActionMenuId] = useState(null);
@@ -69,6 +77,7 @@ export default function MyTeamView({
       !q ||
       m.name?.toLowerCase().includes(q) ||
       m.email?.toLowerCase().includes(q) ||
+      m.staffId?.toLowerCase().includes(q) ||
       m.role?.toLowerCase().includes(q);
 
     return matchesProp && matchesSearch;
@@ -178,7 +187,7 @@ export default function MyTeamView({
             />
           </div>
 
-          {/* Primary Blue Invite CTA Button (visible when members exist) */}
+          {/* Primary Blue Create Staff CTA Button (visible when members exist) */}
           {eligibleMembers.length > 0 && (
             <button
               type="button"
@@ -186,7 +195,7 @@ export default function MyTeamView({
               onClick={handleOpenAddModal}
             >
               <UserPlus size={15} />
-              <span>+ Invite Members</span>
+              <span>+ Create Staff Member</span>
             </button>
           )}
         </div>
@@ -203,7 +212,7 @@ export default function MyTeamView({
 
             <h2 className="my-team-empty-title">No Team Members Yet</h2>
             <p className="my-team-empty-sub">
-              Get started by inviting your first team member to collaborate on your property.
+              Create your first staff member (like a Hotel Manager), select their allowed permissions, and generate their Staff ID &amp; Password.
             </p>
 
             <button
@@ -212,7 +221,7 @@ export default function MyTeamView({
               onClick={handleOpenAddModal}
             >
               <UserPlus size={16} />
-              <span>+ Invite Members</span>
+              <span>+ Create Staff Member</span>
             </button>
           </div>
         ) : filteredMembers.length === 0 ? (
@@ -249,7 +258,8 @@ export default function MyTeamView({
                       (member.name ? member.name.charAt(0).toUpperCase() : member.email.charAt(0).toUpperCase());
 
                     const isInvited = member.status === 'INVITED';
-                    const isActive = member.status === 'ACTIVE';
+                    const isSuspended = member.status === 'SUSPENDED' || member.status === 'INACTIVE';
+                    const isActive = !isInvited && !isSuspended;
 
                     return (
                       <tr key={member.id} className="my-team-row">
@@ -260,7 +270,29 @@ export default function MyTeamView({
                               {initials}
                             </div>
                             <div className="my-team-member-info">
-                              <span className="my-team-member-name">{member.name || 'Invited Staff'}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span className="my-team-member-name">{member.name || 'Invited Staff'}</span>
+                                {member.staffId && (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      padding: '1px 7px',
+                                      borderRadius: '9999px',
+                                      backgroundColor: '#EFF6FF',
+                                      border: '1px solid #DBEAFE',
+                                      color: '#1D4ED8',
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      fontFamily: 'monospace'
+                                    }}
+                                  >
+                                    <KeyRound size={10} />
+                                    {member.staffId}
+                                  </span>
+                                )}
+                              </div>
                               <span className="my-team-member-email">{member.email}</span>
                             </div>
                           </div>
@@ -305,6 +337,18 @@ export default function MyTeamView({
                           {isActive && (
                             <span className="my-team-status-pill active">
                               Active
+                            </span>
+                          )}
+                          {isSuspended && (
+                            <span
+                              className="my-team-status-pill"
+                              style={{
+                                backgroundColor: '#FEF2F2',
+                                color: '#DC2626',
+                                border: '1px solid #FECACA'
+                              }}
+                            >
+                              Suspended
                             </span>
                           )}
                         </td>
@@ -366,7 +410,7 @@ export default function MyTeamView({
                                 </>
                               )}
 
-                              {isActive && (
+                              {(isActive || isSuspended) && (
                                 <>
                                   <button
                                     type="button"
@@ -392,6 +436,27 @@ export default function MyTeamView({
                                     <Lock size={14} color="#334155" />
                                     <span>Manage Permissions</span>
                                   </button>
+                                  <button
+                                    type="button"
+                                    className="my-team-action-item"
+                                    onClick={() => {
+                                      setOpenActionMenuId(null);
+                                      if (onToggleStaffStatus) {
+                                        onToggleStaffStatus(member.id);
+                                      }
+                                      if (showToast) {
+                                        showToast(
+                                          isSuspended
+                                            ? `Reactivated ${member.name}'s account.`
+                                            : `Suspended ${member.name}'s account.`
+                                        );
+                                      }
+                                    }}
+                                  >
+                                    <Ban size={14} color={isSuspended ? '#059669' : '#D97706'} />
+                                    <span>{isSuspended ? 'Reactivate Account' : 'Suspend Account'}</span>
+                                  </button>
+                                  <div className="my-team-menu-divider" />
                                   <button
                                     type="button"
                                     className="my-team-action-item danger"
@@ -444,13 +509,30 @@ export default function MyTeamView({
         )}
       </div>
 
-      {/* Add Team Member Modal */}
+      {/* Create Staff Member & Generate Credentials Drawer */}
       <AddTeamMemberModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         propertiesList={propertiesList}
         currentProperty={currentProperty}
-        onSendInvitations={handleSendInvitations}
+        propertyId={propertyId}
+        currentUserId={currentUser?.id || 'usr_owner'}
+        onStaffCreated={(result) => {
+          if (onStaffCreated && result.member) {
+            onStaffCreated(result.member);
+          }
+          setCreatedCredentials(result);
+          if (showToast) {
+            showToast(`Staff account created! Login ID: ${result.staffId}`, 'success');
+          }
+        }}
+      />
+
+      {/* One-Time Generated Staff ID & Password Modal */}
+      <StaffCredentialsModal
+        isOpen={!!createdCredentials}
+        onClose={() => setCreatedCredentials(null)}
+        credentials={createdCredentials}
       />
 
       {/* Edit Team Member Modal (Matches Image 2) */}
