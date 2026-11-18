@@ -7,14 +7,15 @@ export default function AddRoomTypeModal({
   onCreateRoomType,
   onUpdateRoomType,
   roomTypeToEdit = null,
+  existingRoomTypes = [],
   showToast
 }) {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
-  const [baseAdults, setBaseAdults] = useState('0');
-  const [maxAdults, setMaxAdults] = useState('0');
+  const [baseAdults, setBaseAdults] = useState('2');
+  const [maxAdults, setMaxAdults] = useState('2');
   const [baseChildren, setBaseChildren] = useState('0');
-  const [maxChildren, setMaxChildren] = useState('0');
+  const [maxChildren, setMaxChildren] = useState('1');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -22,18 +23,18 @@ export default function AddRoomTypeModal({
       if (roomTypeToEdit) {
         setName(roomTypeToEdit.name || '');
         setCode(roomTypeToEdit.code || '');
-        setBaseAdults(String(roomTypeToEdit.baseAdults ?? '0'));
-        setMaxAdults(String(roomTypeToEdit.maxAdults ?? '0'));
+        setBaseAdults(String(roomTypeToEdit.baseAdults ?? '2'));
+        setMaxAdults(String(roomTypeToEdit.maxAdults ?? '2'));
         setBaseChildren(String(roomTypeToEdit.baseChildren ?? '0'));
         setMaxChildren(String(roomTypeToEdit.maxChildren ?? '0'));
         setError('');
       } else {
         setName('');
         setCode('');
-        setBaseAdults('0');
-        setMaxAdults('0');
+        setBaseAdults('2');
+        setMaxAdults('2');
         setBaseChildren('0');
-        setMaxChildren('0');
+        setMaxChildren('1');
         setError('');
       }
     }
@@ -43,18 +44,32 @@ export default function AddRoomTypeModal({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!name.trim()) {
+    const cleanName = name.trim();
+    const cleanCode = code.trim().toUpperCase();
+    if (!cleanName) {
       setError('Please enter a room type name');
       return;
     }
-    if (!code.trim()) {
+    if (!cleanCode) {
       setError('Please enter a room type code');
       return;
     }
 
+    const duplicate = (existingRoomTypes || []).find((rt) => {
+      if (roomTypeToEdit && rt.id === roomTypeToEdit.id) return false;
+      return (
+        String(rt.name || '').trim().toLowerCase() === cleanName.toLowerCase() ||
+        (cleanCode && String(rt.code || '').trim().toUpperCase() === cleanCode)
+      );
+    });
+    if (duplicate) {
+      setError(`A room type with name "${duplicate.name}" or code "${duplicate.code}" already exists.`);
+      return;
+    }
+
     const payload = {
-      name: name.trim(),
-      code: code.trim().toUpperCase(),
+      name: cleanName,
+      code: cleanCode,
       baseAdults: parseInt(baseAdults, 10) || 0,
       maxAdults: parseInt(maxAdults, 10) || 0,
       baseChildren: parseInt(baseChildren, 10) || 0,

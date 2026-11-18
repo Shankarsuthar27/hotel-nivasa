@@ -22,6 +22,8 @@ export const firebaseConfig = {
 };
 
 export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+export const isFirebaseAuthEnabled =
+  isFirebaseConfigured && String(env.VITE_ENABLE_FIREBASE_AUTH || '').toLowerCase() === 'true';
 
 if (!isFirebaseConfigured && typeof console !== 'undefined') {
   console.warn('[Firebase] Missing VITE_FIREBASE_* environment variables in .env. Running in local offline mode.');
@@ -63,10 +65,12 @@ if (app) {
 }
 export const db = firestoreInstance;
 
-// Initialize Firebase Auth lazily on demand to avoid automatic CONFIGURATION_NOT_FOUND errors
+// Initialize Firebase Auth only when explicitly enabled via VITE_ENABLE_FIREBASE_AUTH=true
+// to prevent Firebase's hidden auth iframe from throwing 400 CONFIGURATION_NOT_FOUND
 // when Authentication has not yet been activated in the Firebase Console.
 let _authInstance = null;
 export const getFirebaseAuth = () => {
+  if (!isFirebaseAuthEnabled) return null;
   if (!_authInstance && app && typeof window !== 'undefined') {
     try {
       _authInstance = getAuth(app);

@@ -236,6 +236,11 @@ export default function RoomsManagementView({
     return orderA - orderB;
   });
 
+  // Sort physical rooms numerically (101, 102, 201, 202, 301...)
+  const sortedRooms = [...rooms].sort((a, b) =>
+    String(a.roomNumber || '').localeCompare(String(b.roomNumber || ''), undefined, { numeric: true })
+  );
+
   return (
     <div
       style={{
@@ -546,7 +551,7 @@ export default function RoomsManagementView({
                 </tr>
               </thead>
               <tbody>
-                {rooms.map((rm, idx) => (
+                {sortedRooms.map((rm, idx) => (
                   <tr
                     key={rm.id || rm.roomNumber}
                     style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
@@ -575,6 +580,7 @@ export default function RoomsManagementView({
                     {/* Actions */}
                     <td
                       className="properties-action-cell"
+                      onClick={(e) => e.stopPropagation()}
                       style={{
                         position: 'relative',
                         textAlign: 'center',
@@ -584,7 +590,7 @@ export default function RoomsManagementView({
                       <button
                         type="button"
                         className="properties-action-btn"
-                        onClick={(e) => handleToggleMenu(e, rm.id, rooms.length, idx)}
+                        onClick={(e) => handleToggleMenu(e, rm.id, sortedRooms.length, idx)}
                         title="Actions"
                       >
                         <MoreVertical size={16} />
@@ -698,6 +704,7 @@ export default function RoomsManagementView({
         onCreateRoomType={onAddRoomType}
         onUpdateRoomType={onUpdateRoomType}
         roomTypeToEdit={editingRoomType}
+        existingRoomTypes={roomTypes}
         showToast={showToast}
       />
 
@@ -706,6 +713,7 @@ export default function RoomsManagementView({
         isOpen={isAddRoomOpen}
         onClose={() => setIsAddRoomOpen(false)}
         roomTypes={roomTypes}
+        existingRooms={rooms}
         onAddRooms={onAddRooms}
         showToast={showToast}
       />

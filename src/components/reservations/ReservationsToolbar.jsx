@@ -33,7 +33,7 @@ import './reservations-toolbar.css';
  * - Segmented controls: groups, group, list, grid_view
  */
 export default function ReservationsToolbar({
-  statusFilter = 'all_active',
+  statusFilter = 'all',
   onStatusFilterChange,
   searchQuery = '',
   onSearchChange,

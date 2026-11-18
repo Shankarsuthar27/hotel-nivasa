@@ -54,11 +54,17 @@ export default function TopNav({
 
         {/* Primary CTA: Walk-In / New Booking */}
         <button
-          className="btn-primary"
+          type="button"
+          className="btn-create-reservation"
           onClick={onNewReservation}
-          style={{ height: '36px' }}
         >
-          <Plus size={16} />
+          <span
+            className="material-symbols-outlined select-none"
+            style={{ fontSize: '18px', lineHeight: 1 }}
+            aria-hidden="true"
+          >
+            add
+          </span>
           <span>Create Reservation</span>
         </button>
 

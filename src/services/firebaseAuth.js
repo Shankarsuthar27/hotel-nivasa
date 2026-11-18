@@ -9,7 +9,7 @@ import {
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { db, firebaseConfig, getFirebaseAuth, isFirebaseConfigured } from './firebase';
+import { db, firebaseConfig, getFirebaseAuth, isFirebaseAuthEnabled } from './firebase';
 
 export const STAFF_AUTH_DOMAIN = 'staff.hotelastha.com';
 
@@ -206,7 +206,7 @@ export async function createStaffAccount({
 
   // Use a temporary secondary Firebase App so creating a user does NOT sign out the Owner
   let secondaryApp = null;
-  if (isFirebaseConfigured) {
+  if (isFirebaseAuthEnabled) {
     try {
       secondaryApp = initializeApp(firebaseConfig, `staff-provisioner-${Date.now()}`);
       const secondaryAuth = getAuth(secondaryApp);

@@ -620,7 +620,7 @@ export default function App() {
               rooms={state.rooms}
               roomTypes={state.roomTypes}
               initialTab={router.queryParams?.tab || 'all'}
-              initialStatusFilter={router.queryParams?.status || 'all_active'}
+              initialStatusFilter={router.queryParams?.status || 'all'}
               onAssignRoom={(resId, roomId) => {
                 pmsStore.assignRoom(resId, roomId);
                 showToast('Success: Room assigned successfully');

@@ -64,7 +64,7 @@ export default function ReservationsView({
   rooms = [],
   roomTypes = [],
   initialTab = 'all',
-  initialStatusFilter = 'all_active',
+  initialStatusFilter = 'all',
   onAssignRoom,
   onCheckIn,
   onCheckOut,
@@ -108,7 +108,7 @@ export default function ReservationsView({
   const [amendStayReservation, setAmendStayReservation] = useState(null);
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState(initialStatusFilter || 'all_active');
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter || 'all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -117,7 +117,7 @@ export default function ReservationsView({
   const [filterSingleLady, setFilterSingleLady] = useState(false);
 
   const handleResetFilters = () => {
-    setStatusFilter('all_active');
+    setStatusFilter('all');
     setSourceFilter('all');
     setFilterVip(false);
     setFilterSingleLady(false);
@@ -367,11 +367,18 @@ export default function ReservationsView({
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Can user={currentUser || pmsStore.getState().currentUser} permission="reservations.create">
             <button
+              id="addNavButton"
               type="button"
               className="btn-create-reservation"
               onClick={onNewReservation}
             >
-              <Plus size={16} />
+              <span
+                className="material-symbols-outlined select-none"
+                style={{ fontSize: '18px', lineHeight: 1 }}
+                aria-hidden="true"
+              >
+                add
+              </span>
               <span>Create Reservation</span>
             </button>
           </Can>

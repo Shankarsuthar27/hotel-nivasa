@@ -5,6 +5,7 @@ export default function AddRoomModal({
   isOpen,
   onClose,
   roomTypes = [],
+  existingRooms = [],
   onAddRooms,
   showToast
 }) {
@@ -42,7 +43,8 @@ export default function AddRoomModal({
   if (!isOpen) return null;
 
   const handleStageRoom = () => {
-    if (!roomNumber.trim()) {
+    const cleanNum = roomNumber.trim();
+    if (!cleanNum) {
       setError('Please enter a room number');
       return;
     }
@@ -51,9 +53,21 @@ export default function AddRoomModal({
       return;
     }
 
+    const numLower = cleanNum.toLowerCase();
+
+    // Check duplicate against existing property rooms
+    if (
+      (existingRooms || []).some(
+        (r) => String(r.roomNumber || '').trim().toLowerCase() === numLower
+      )
+    ) {
+      setError(`Room ${cleanNum} already exists in this property`);
+      return;
+    }
+
     // Check duplicate in staged rooms
-    if (stagedRooms.some((r) => r.roomNumber.toLowerCase() === roomNumber.trim().toLowerCase())) {
-      setError(`Room ${roomNumber.trim()} is already added`);
+    if (stagedRooms.some((r) => r.roomNumber.toLowerCase() === numLower)) {
+      setError(`Room ${cleanNum} is already staged`);
       return;
     }
 
@@ -61,7 +75,7 @@ export default function AddRoomModal({
       ...prev,
       {
         id: `staged_${Date.now()}_${Math.random()}`,
-        roomNumber: roomNumber.trim(),
+        roomNumber: cleanNum,
         roomTypeId: selectedRoomType.id,
         roomTypeName: selectedRoomType.name
       }
@@ -75,16 +89,47 @@ export default function AddRoomModal({
     setStagedRooms((prev) => prev.filter((r) => r.id !== id));
   };
 
+  const canAutoStageCurrent = Boolean(roomNumber.trim() && selectedRoomType);
+  const effectiveCreateCount =
+    stagedRooms.length +
+    (canAutoStageCurrent &&
+    !stagedRooms.some((r) => r.roomNumber.toLowerCase() === roomNumber.trim().toLowerCase())
+      ? 1
+      : 0);
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (stagedRooms.length === 0) {
-      setError('Please add at least one room before submitting');
+    let roomsToCreate = [...stagedRooms];
+
+    // If user typed a room number & selected a room type without clicking "+ Add", include it automatically
+    if (canAutoStageCurrent) {
+      const cleanNum = roomNumber.trim();
+      const numLower = cleanNum.toLowerCase();
+      if (
+        (existingRooms || []).some(
+          (r) => String(r.roomNumber || '').trim().toLowerCase() === numLower
+        )
+      ) {
+        setError(`Room ${cleanNum} already exists in this property`);
+        return;
+      }
+      if (!roomsToCreate.some((r) => r.roomNumber.toLowerCase() === numLower)) {
+        roomsToCreate.push({
+          roomNumber: cleanNum,
+          roomTypeId: selectedRoomType.id,
+          roomTypeName: selectedRoomType.name
+        });
+      }
+    }
+
+    if (roomsToCreate.length === 0) {
+      setError('Please enter a room number and select a room type');
       return;
     }
 
     if (onAddRooms) {
       onAddRooms(
-        stagedRooms.map((r) => ({
+        roomsToCreate.map((r) => ({
           roomNumber: r.roomNumber,
           roomTypeId: r.roomTypeId
         }))
@@ -93,7 +138,7 @@ export default function AddRoomModal({
 
     if (showToast) {
       showToast(
-        `Success: Created ${stagedRooms.length} room${stagedRooms.length !== 1 ? 's' : ''}`
+        `Success: Created ${roomsToCreate.length} room${roomsToCreate.length !== 1 ? 's' : ''}`
       );
     }
 
@@ -409,13 +454,13 @@ export default function AddRoomModal({
             <button
               type="submit"
               className="meal-plan-drawer-btn-create"
-              disabled={stagedRooms.length === 0}
+              disabled={effectiveCreateCount === 0}
               style={{
-                opacity: stagedRooms.length === 0 ? 0.6 : 1,
-                cursor: stagedRooms.length === 0 ? 'not-allowed' : 'pointer'
+                opacity: effectiveCreateCount === 0 ? 0.6 : 1,
+                cursor: effectiveCreateCount === 0 ? 'not-allowed' : 'pointer'
               }}
             >
-              Create {stagedRooms.length} Room{stagedRooms.length === 1 ? '' : ''}
+              Create {effectiveCreateCount} Room{effectiveCreateCount === 1 ? '' : 's'}
             </button>
           </div>
         </form>
