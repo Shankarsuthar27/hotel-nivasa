@@ -149,15 +149,37 @@ export default function ReservationsView({
 
   const businessDate = property?.businessDate || '2026-10-26';
 
+  const getNormalizedStatus = (r) =>
+    String(r?.status || '').toLowerCase().replace(/[\s-]+/g, '_');
+
+  const getDepartureDate = (r) => {
+    const raw = r?.actualCheckOutDate || r?.checkOutDate || '';
+    return String(raw).split('T')[0];
+  };
+
+  const hasDateRange = Boolean(fromDate || toDate);
+
   // Calculate dynamic tab counts
   const counts = useMemo(() => {
+    const departuresList = reservations.filter((r) => {
+      const norm = getNormalizedStatus(r);
+      const depDate = getDepartureDate(r);
+      if (hasDateRange) {
+        if (norm !== 'checked_out' && norm !== 'in_house') return false;
+        if (fromDate && (!depDate || depDate < fromDate)) return false;
+        if (toDate && (!depDate || depDate > toDate)) return false;
+        return true;
+      }
+      return norm === 'checked_out';
+    });
+
     return {
       all: reservations.length,
-      arrivals: reservations.filter((r) => r.status === 'confirmed').length,
-      in_house: reservations.filter((r) => r.status === 'in_house').length,
-      departures: Math.max(1, reservations.filter((r) => r.status === 'checked_out' && (r.actualCheckOutDate === businessDate || r.checkOutDate === businessDate)).length)
+      arrivals: reservations.filter((r) => getNormalizedStatus(r) === 'confirmed').length,
+      in_house: reservations.filter((r) => getNormalizedStatus(r) === 'in_house').length,
+      departures: departuresList.length
     };
-  }, [reservations, businessDate]);
+  }, [reservations, fromDate, toDate, hasDateRange]);
 
   const statusTabs = useMemo(
     () => [
@@ -172,25 +194,46 @@ export default function ReservationsView({
   // Filter reservations
   const filteredReservations = useMemo(() => {
     return reservations.filter((r) => {
+      const normStatus = getNormalizedStatus(r);
+      const depDate = getDepartureDate(r);
+      const arrDate = String(r?.checkInDate || '').split('T')[0];
+
       // Tab filter
-      if (activeTab === 'arrivals' && r.status !== 'confirmed') return false;
-      if (activeTab === 'in_house' && r.status !== 'in_house') return false;
-      if (activeTab === 'departures' && r.status !== 'checked_out' && (r.checkOutDate !== businessDate || r.status !== 'in_house')) return false;
+      if (activeTab === 'arrivals' && normStatus !== 'confirmed') return false;
+      if (activeTab === 'in_house' && normStatus !== 'in_house') return false;
+      if (activeTab === 'departures') {
+        // Default (no date range): show recent check-outs
+        // With date range selected: show departures matching that departure/check-out date range
+        if (hasDateRange) {
+          if (normStatus !== 'checked_out' && normStatus !== 'in_house') return false;
+        } else {
+          if (normStatus !== 'checked_out') return false;
+        }
+      }
 
       // Status dropdown filter
       if (statusFilter === 'all_active') {
-        const norm = (r.status || '').toLowerCase().replace(/[\s-]/g, '_');
-        if (norm !== 'confirmed' && norm !== 'in_house') return false;
+        // Do not let the default "All Active" filter hide checked-out reservations on the Departures tab
+        if (activeTab !== 'departures' && normStatus !== 'confirmed' && normStatus !== 'in_house') {
+          return false;
+        }
       } else if (statusFilter === 'unmapped') {
         if (r.roomId && r.roomNumber && r.roomNumber !== 'Unassigned') return false;
       } else if (statusFilter !== 'all') {
-        const norm = (r.status || '').toLowerCase().replace(/[\s-]/g, '_');
-        if (norm !== statusFilter) return false;
+        if (normStatus !== statusFilter) return false;
       }
 
       // Date range filter
-      if (fromDate && r.checkInDate < fromDate) return false;
-      if (toDate && r.checkOutDate > toDate) return false;
+      if (activeTab === 'departures') {
+        if (fromDate && (!depDate || depDate < fromDate)) return false;
+        if (toDate && (!depDate || depDate > toDate)) return false;
+      } else if (activeTab === 'arrivals') {
+        if (fromDate && (!arrDate || arrDate < fromDate)) return false;
+        if (toDate && (!arrDate || arrDate > toDate)) return false;
+      } else {
+        if (fromDate && (!arrDate || arrDate < fromDate)) return false;
+        if (toDate && (!depDate || depDate > toDate)) return false;
+      }
 
       // Search query
       if (searchQuery.trim()) {
@@ -215,6 +258,14 @@ export default function ReservationsView({
 
       return true;
     }).sort((a, b) => {
+      // On Departures tab: sort by most recent check-out / departure date first
+      if (activeTab === 'departures') {
+        const depKeyA = a.checkedOutAt || a.actualCheckOutDate || a.checkOutDate || a.updatedAt || a.createdAt || '';
+        const depKeyB = b.checkedOutAt || b.actualCheckOutDate || b.checkOutDate || b.updatedAt || b.createdAt || '';
+        const cmp = String(depKeyB).localeCompare(String(depKeyA));
+        if (cmp !== 0) return cmp;
+      }
+
       const canonicalOrder = ['res_11', 'res_10', 'res_12', 'res_7', 'res_6', 'res_5', 'res_4', 'res_3', 'res_2', 'res_1'];
       const isCanonA = canonicalOrder.includes(a.id);
       const isCanonB = canonicalOrder.includes(b.id);
@@ -229,6 +280,7 @@ export default function ReservationsView({
     statusFilter,
     fromDate,
     toDate,
+    hasDateRange,
     searchQuery,
     sourceFilter,
     filterVip,

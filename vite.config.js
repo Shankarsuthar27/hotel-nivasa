@@ -25,10 +25,10 @@ export default defineConfig({
 
                 const baseRate = Number(data.baseRatePerNight || data.rate) || 2500;
                 const nights = Number(data.nights) || 1;
-                const totalRoomCharges = baseRate * nights;
-                const gstRate = baseRate >= 7500 ? 0.18 : 0.12;
-                const taxAmount = Math.round(totalRoomCharges * gstRate);
-                const totalAmount = totalRoomCharges + taxAmount;
+                const totalRoomCharges = data.totalRoomCharges !== undefined ? Number(data.totalRoomCharges) : baseRate * nights;
+                const gstRate = baseRate >= 7501 ? 0.18 : 0.05;
+                const taxAmount = data.taxAmount !== undefined ? Number(data.taxAmount) : Math.round(totalRoomCharges * gstRate * 100) / 100;
+                const totalAmount = data.totalAmount !== undefined ? Number(data.totalAmount) : Math.round((totalRoomCharges + taxAmount) * 100) / 100;
                 const paidAmount = Number(data.advanceAmount) || 0;
                 const balanceDue = Math.max(0, totalAmount - paidAmount);
 

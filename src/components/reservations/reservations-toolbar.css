@@ -180,83 +180,197 @@
   font-weight: 700;
 }
 
-/* 3. Date Range Picker [ 📅 From 📅 - To 📅 ] */
+/* 3. Date Range Picker — Exact OTAL PMS Specification (310px fluid × 36px) */
 .otal-date-range-container {
   position: relative;
   flex-shrink: 0;
 }
 
 .otal-date-range-box {
-  display: inline-flex;
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 7px;
-  height: 38px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background-color: #ffffff;
-  padding: 0 12px;
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.15s ease;
+  gap: 6px;
+  height: calc(var(--spacing, 4px) * 9);
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-family: var(
+    --font-sans,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    'Noto Sans',
+    Arial,
+    sans-serif,
+    'Apple Color Emoji',
+    'Segoe UI Emoji',
+    'Segoe UI Symbol',
+    'Noto Color Emoji'
+  );
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+  color: rgb(2, 8, 23);
+  background-color: var(--color-white, #ffffff);
+  border: 0.8px solid oklch(0.929 0.013 255.508);
+  border-radius: 6px;
   box-sizing: border-box;
+  transition: all 0.15s ease;
 }
 
 .otal-date-range-box:hover {
   border-color: #cbd5e1;
 }
 
-.otal-date-range-box.active {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+.otal-date-range-box.active,
+.otal-date-range-box:focus-within {
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
 }
 
-.otal-date-range-box .material-symbols-outlined {
-  font-size: 17px !important;
+.otal-date-range-lead-icon {
+  font-size: 16px !important;
   color: #94a3b8;
-}
-
-.otal-date-text {
-  font-size: 13.5px;
+  flex-shrink: 0;
+  user-select: none;
   line-height: 1;
 }
 
-.otal-date-text.placeholder {
-  color: #94a3b8;
-  font-weight: 400;
+.otal-date-field-trigger {
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
-.otal-date-text.has-date {
-  color: #0f172a;
-  font-weight: 500;
+.otal-date-field-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.otal-date-field-input {
+  display: flex;
+  width: 112px; /* w-28 */
+  height: 32px; /* h-8 */
+  padding: 0 28px 0 0;
+  border: none;
+  border-radius: 8px;
+  outline: none;
+  box-shadow: none;
+  background-color: var(--color-white, #ffffff);
+  font-family: inherit;
+  font-size: 13px; /* small-title-2 */
+  font-weight: 400;
+  line-height: 18px;
+  color: rgb(2, 8, 23);
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.otal-date-field-input::placeholder {
+  color: #9ca3af; /* placeholder:text-gray-400 */
+}
+
+.otal-date-field-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.otal-date-field-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  background-color: #f3f4f6;
+}
+
+@media (max-width: 1370px) {
+  .otal-date-field-input {
+    height: 28px !important; /* max-[1370px]:h-7! */
+    border-radius: 6px;
+  }
+}
+
+.otal-date-field-icon-wrap {
+  display: flex;
+  position: absolute;
+  right: 12px; /* right-3 */
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.otal-date-field-icon {
+  font-size: 18px !important;
+  color: #6b7280; /* text-gray-500 */
+  user-select: none;
+  line-height: 1;
+}
+
+.otal-date-field-trigger[data-state='open'] .otal-date-field-icon {
+  color: #2563eb;
+}
+
+.otal-date-field-helper-grid {
+  display: grid;
+  position: absolute;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+  width: 100%;
+  transition: all 200ms ease-in-out;
 }
 
 .otal-date-sep {
-  color: #94a3b8;
-  font-size: 13.5px;
+  color: #94a3b8; /* text-slate-400 */
+  font-size: 13px; /* small-title-2 */
+  line-height: 18px;
   user-select: none;
   font-weight: 400;
-  margin: 0 1px;
+  flex-shrink: 0;
 }
 
-.otal-date-clear-icon {
-  display: flex;
+.otal-date-clear-btn {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 9999px;
-  background-color: #f1f5f9;
-  color: #64748b;
-  border: none;
-  cursor: pointer;
-  margin-left: 4px;
+  gap: 8px;
+  white-space: nowrap;
+  height: 24px; /* h-6 */
+  width: 24px; /* w-6 */
   padding: 0;
-  transition: all 0.12s ease;
+  border: none;
+  border-radius: 6px; /* rounded-md */
+  background: transparent;
+  color: #94a3b8; /* text-slate-400 */
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
 }
 
-.otal-date-clear-icon:hover {
-  background-color: #e2e8f0;
-  color: #0f172a;
+.otal-date-clear-btn:hover {
+  background-color: #f1f5f9; /* hover:bg-accent */
+  color: #475569; /* hover:text-slate-600 */
+}
+
+.otal-date-clear-btn:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.otal-date-clear-btn:disabled {
+  pointer-events: none;
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.otal-date-clear-btn .material-symbols-outlined {
+  font-size: 14px !important;
+  line-height: 1;
+  user-select: none;
 }
 
 /* 4. Calendar Popup Modal (matches Image 4) */

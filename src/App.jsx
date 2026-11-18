@@ -432,6 +432,7 @@ export default function App() {
             rooms={state.rooms}
             roomTypes={state.roomTypes}
             ratePlans={state.ratePlans}
+            taxRules={state.taxRules || []}
             reservations={state.reservations}
             maintenanceBlocks={state.maintenanceBlocks}
             initialData={effectivePrefillData}

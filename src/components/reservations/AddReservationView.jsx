@@ -21,7 +21,7 @@ import {
   ChevronRight,
   Check
 } from 'lucide-react';
-import { calculateRoomTax } from '../../services/taxEngine';
+import { calculateRoomTax, isDefaultTaxInclusive } from '../../services/taxEngine';
 import ReservationConfirmationModal from './ReservationConfirmationModal';
 import CustomTimePickerModal from '../common/CustomTimePickerModal';
 import CustomDatePicker from '../common/CustomDatePicker';
@@ -140,6 +140,7 @@ export default function AddReservationView({
   rooms = [],
   roomTypes = [],
   ratePlans = [],
+  taxRules = [],
   reservations = [],
   maintenanceBlocks = [],
   initialData = null,
@@ -161,6 +162,17 @@ export default function AddReservationView({
     });
     return unsub;
   }, []);
+
+  // Live Tax Rules & Definitions from store/props
+  const liveTaxRules = useMemo(() => {
+    if (Array.isArray(storeState.taxRules) && storeState.taxRules.length > 0) return storeState.taxRules;
+    if (Array.isArray(taxRules) && taxRules.length > 0) return taxRules;
+    const storeRules = pmsStore?.getState()?.taxRules;
+    if (Array.isArray(storeRules) && storeRules.length > 0) return storeRules;
+    return undefined;
+  }, [storeState.taxRules, taxRules]);
+
+  const defaultInclTax = useMemo(() => isDefaultTaxInclusive(liveTaxRules), [liveTaxRules]);
 
   // Merge reservations from props and store
   const allReservations = useMemo(() => {
@@ -707,25 +719,44 @@ export default function AddReservationView({
   const checkInFormatted = formatDisplayDate(checkInDate);
   const checkOutFormatted = formatDisplayDate(checkOutDate);
 
-  // Financial calculations
-  const totalRoomCharges = useMemo(() => {
-    return configuredRooms.reduce((sum, r) => sum + (Number(r.rate) || 0) * nights, 0);
-  }, [configuredRooms, nights]);
+  // Financial calculations (driven dynamically by active Tax Rules & Definitions)
+  const financialSummary = useMemo(() => {
+    let roomBaseTotal = 0;
+    let taxesTotal = 0;
+    let grossTotalSum = 0;
+    const splitsMap = new Map();
 
-  const totalTaxes = useMemo(() => {
-    if (taxExempt || isComplimentary) return 0;
-    return configuredRooms.reduce((sum, r) => {
+    configuredRooms.forEach((r) => {
+      const rowInclTax = typeof r.inclTax === 'boolean' ? r.inclTax : defaultInclTax;
       const calc = calculateRoomTax(Number(r.rate) || 0, nights, {
         isComplimentary,
-        isTaxExempt: taxExempt
+        isTaxExempt: taxExempt,
+        isTaxInclusive: rowInclTax,
+        taxRules: liveTaxRules
       });
-      return sum + calc.totalTax;
-    }, 0);
-  }, [configuredRooms, nights, taxExempt, isComplimentary]);
+      roomBaseTotal += calc.taxableAmount;
+      taxesTotal += calc.totalTax;
+      grossTotalSum += calc.grossTotal;
 
-  const grandTotal = isComplimentary ? 0 : totalRoomCharges + totalTaxes;
+      (calc.splitsBreakdown || []).forEach((sp) => {
+        const key = `${sp.name}_${sp.rate}`;
+        const prev = splitsMap.get(key) || { name: sp.name, rate: sp.rate, sharePct: sp.sharePct, amount: 0 };
+        prev.amount = Math.round((prev.amount + sp.amount) * 100) / 100;
+        splitsMap.set(key, prev);
+      });
+    });
+
+    return {
+      totalRoomCharges: Math.round(roomBaseTotal * 100) / 100,
+      totalTaxes: Math.round(taxesTotal * 100) / 100,
+      grandTotal: isComplimentary ? 0 : Math.round(grossTotalSum * 100) / 100,
+      splitsSummary: Array.from(splitsMap.values())
+    };
+  }, [configuredRooms, nights, taxExempt, isComplimentary, defaultInclTax, liveTaxRules]);
+
+  const { totalRoomCharges, totalTaxes, grandTotal, splitsSummary } = financialSummary;
   const advanceVal = collectAdvance ? Number(advanceAmount) || 0 : 0;
-  const balanceDue = Math.max(0, grandTotal - advanceVal);
+  const balanceDue = Math.max(0, Math.round((grandTotal - advanceVal) * 100) / 100);
 
   // Check if all configured rooms are specifically assigned to an available room
   const isRoomAssignedAndAvailable = useMemo(() => {
@@ -794,6 +825,7 @@ export default function AddReservationView({
       roomTypeName: primaryRoomTypeName,
       ratePlanCode: primaryRoom.ratePlanCode || 'BAR_EP',
       baseRatePerNight: Number(primaryRoom.rate) || 2500,
+      isTaxInclusive: typeof primaryRoom.inclTax === 'boolean' ? primaryRoom.inclTax : defaultInclTax,
       totalRoomCharges,
       taxAmount: totalTaxes,
       totalAmount: grandTotal,
@@ -814,6 +846,7 @@ export default function AddReservationView({
           roomTypeName: rowRt?.name || cr.roomTypeName || 'Normal',
           ratePlanCode: cr.ratePlanCode,
           rate: Number(cr.rate) || 0,
+          inclTax: typeof cr.inclTax === 'boolean' ? cr.inclTax : defaultInclTax,
           adults: cr.adults,
           children: cr.children
         };
@@ -885,7 +918,7 @@ export default function AddReservationView({
       </header>
 
       {/* Main page content wrapper */}
-      <div className="add-res-content-wrap" style={{ padding: '1.25rem 2rem 3.5rem' }}>
+      <div className="add-res-content-wrap">
         {/* 2. Main 2-Column Grid */}
         <div className="add-res-layout">
         {/* Left Form Column */}
@@ -1365,15 +1398,51 @@ export default function AddReservationView({
                           </div>
                         </td>
 
-                        {/* 6. Rate (₹) */}
+                        {/* 6. Rate (₹) with Incl. tax toggle & live slab tax preview */}
                         <td>
-                          <input
-                            type="number"
-                            className="room-config-rate-input"
-                            placeholder="Enter amount"
-                            value={rm.rate}
-                            onChange={(e) => handleUpdateRoomRow(rm.id, 'rate', e.target.value)}
-                          />
+                          {(() => {
+                            const isRowInclTax =
+                              typeof rm.inclTax === 'boolean' ? rm.inclTax : defaultInclTax;
+                            const rowRateNum = Number(rm.rate) || 0;
+                            const rowTaxPreview = calculateRoomTax(rowRateNum, 1, {
+                              isComplimentary,
+                              isTaxExempt: taxExempt,
+                              isTaxInclusive: isRowInclTax,
+                              taxRules: liveTaxRules
+                            });
+                            const taxRateTag =
+                              rowTaxPreview.calculationMode === 'fixed' &&
+                              rowTaxPreview.fixedTaxPerNight > 0
+                                ? `₹${rowTaxPreview.fixedTaxPerNight}`
+                                : `${rowTaxPreview.gstRate}%`;
+                            return (
+                              <div className="room-config-rate-cell">
+                                <input
+                                  type="number"
+                                  className="room-config-rate-input"
+                                  placeholder="Enter amount"
+                                  value={rm.rate}
+                                  onChange={(e) => handleUpdateRoomRow(rm.id, 'rate', e.target.value)}
+                                />
+                                <label className="room-config-incl-tax-label">
+                                  <input
+                                    type="checkbox"
+                                    checked={isRowInclTax}
+                                    onChange={(e) =>
+                                      handleUpdateRoomRow(rm.id, 'inclTax', e.target.checked)
+                                    }
+                                  />
+                                  <span>Incl. tax</span>
+                                </label>
+                                {rowRateNum > 0 && (
+                                  <div className="room-config-tax-hint">
+                                    Tax ({taxRateTag}): {rowTaxPreview.totalTax.toFixed(2)} | Total{' '}
+                                    {rowTaxPreview.grossTotal.toFixed(2)}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* 7. Action (Red Trash Bin) */}
@@ -1545,6 +1614,19 @@ export default function AddReservationView({
             <span>Taxes</span>
             <span style={{ fontWeight: 600 }}>₹{totalTaxes.toFixed(2)}</span>
           </div>
+
+          {totalTaxes > 0 && splitsSummary.length > 0 && (
+            <div className="billing-tax-splits-list">
+              {splitsSummary.map((sp, idx) => (
+                <div key={`${sp.name}_${idx}`} className="billing-tax-split-row">
+                  <span>
+                    {sp.name} ({sp.rate > 0 ? `${sp.rate}%` : `${sp.sharePct}%`})
+                  </span>
+                  <span>₹{sp.amount.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <label className="billing-tax-exempt-row">
             <input

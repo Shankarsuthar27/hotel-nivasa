@@ -865,8 +865,10 @@ export default function EditReservationView({
     const dailyRate = Number(currentRes.baseRatePerNight ?? currentRes.rate ?? currentRes.ratePerNight ?? 2500);
     const taxCalc = calculateRoomTax(dailyRate, 1, {
       isComplimentary: currentRes.isComplimentary,
-      isTaxExempt: currentRes.isTaxExempt
+      isTaxExempt: currentRes.isTaxExempt,
+      isTaxInclusive: currentRes.isTaxInclusive
     });
+    const dailyBase = Number(taxCalc.taxableAmount) || 0;
     const dailyTax = Number(taxCalc.totalTax) || 0;
 
     const list = [];
@@ -879,9 +881,9 @@ export default function EditReservationView({
         room: currentRes.roomNumber || roomNum,
         ratePlan: currentRes.ratePlanName || currentRes.ratePlan || currentRes.ratePlanCode || 'test plan',
         pax: `${currentRes.adults || 1}/${currentRes.children || 0}`,
-        charge: dailyRate.toFixed(2),
+        charge: dailyBase.toFixed(2),
         tax: dailyTax.toFixed(2),
-        netAmount: (dailyRate + dailyTax).toFixed(2)
+        netAmount: (dailyBase + dailyTax).toFixed(2)
       });
     }
     return list;

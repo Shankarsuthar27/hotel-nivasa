@@ -13,8 +13,7 @@
   height: 100vh;
   z-index: 9999;
   background-color: #f8fafc;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
@@ -42,9 +41,10 @@ body.has-res-modal-open .add-res-page {
   display: flex;
   flex-direction: column;
   background-color: #f8fafc;
-  min-height: 100%;
+  height: 100vh;
   width: 100%;
   padding: 0;
+  overflow: hidden;
   font-family: var(--font-sans);
   color: #0f172a;
   box-sizing: border-box;
@@ -198,25 +198,98 @@ body.has-res-modal-open .add-res-page {
   font-size: 0.75rem;
 }
 
-/* 2. Main 2-Column Grid Layout */
+/* 2. Main 2-Column Grid Layout with Dedicated Left Scrollbar */
+.add-res-content-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 1.25rem 1.75rem 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
 .add-res-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 1.75rem;
-  align-items: start;
+  gap: 1.5rem;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
-@media (max-width: 1200px) {
-  .add-res-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Left Column: Form Cards */
+/* Left Column: Independently Scrollable Form Cards (Stay Details, Room Configuration, Guest Info) */
 .add-res-form-column {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  height: 100%;
+  min-height: 0;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  padding-right: 12px;
+  padding-bottom: 3.5rem;
+  box-sizing: border-box;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+
+.add-res-form-column::-webkit-scrollbar {
+  width: 8px;
+}
+
+.add-res-form-column::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+}
+
+.add-res-form-column::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+  border: 1.5px solid #f1f5f9;
+}
+
+.add-res-form-column::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+@media (max-width: 1200px) {
+  .add-res-fullscreen-overlay {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .add-res-page {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .add-res-content-wrap {
+    overflow: visible;
+    padding: 1rem 1.25rem 3rem;
+  }
+
+  .add-res-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+    align-items: start;
+  }
+
+  .add-res-form-column {
+    height: auto;
+    overflow-y: visible;
+    padding-right: 0;
+    padding-bottom: 0;
+  }
+
+  .add-res-billing-card {
+    max-height: none;
+    overflow-y: visible;
+    position: static;
+  }
 }
 
 .add-res-card {
@@ -578,7 +651,7 @@ body.has-res-modal-open .add-res-page {
 
 .room-config-table td {
   padding: 12px 8px;
-  vertical-align: middle;
+  vertical-align: top;
 }
 
 .room-config-select-btn {
@@ -787,8 +860,9 @@ body.has-res-modal-open .add-res-page {
   border: none;
   cursor: pointer;
   padding: 6px;
+  margin-top: 7px;
   border-radius: 6px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: all 0.12s ease;
@@ -796,6 +870,60 @@ body.has-res-modal-open .add-res-page {
 
 .room-config-trash-btn:hover {
   background-color: #fef2f2;
+}
+
+.room-config-rate-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 175px;
+}
+
+.room-config-incl-tax-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+  margin-top: 1px;
+}
+
+.room-config-incl-tax-label input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: #2563eb;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  cursor: pointer;
+  margin: 0;
+}
+
+.room-config-tax-hint {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #475569;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.billing-tax-splits-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: -4px 0 6px 0;
+  padding-left: 10px;
+  border-left: 2px solid #e2e8f0;
+}
+
+.billing-tax-split-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: #64748b;
 }
 
 /* Legacy fallback */
@@ -847,10 +975,24 @@ body.has-res-modal-open .add-res-page {
   border-radius: 12px;
   padding: 1.5rem;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
-  position: sticky;
-  top: 1rem;
+  align-self: start;
+  max-height: calc(100vh - 84px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
+  margin-bottom: 1.25rem;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.add-res-billing-card::-webkit-scrollbar {
+  width: 6px;
+}
+
+.add-res-billing-card::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
 }
 
 .add-res-billing-header {

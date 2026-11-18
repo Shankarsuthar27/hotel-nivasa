@@ -18,7 +18,7 @@ import {
   initialTaxRules,
   initialServiceCharges
 } from '../data/initialPmsData';
-import { calculateRoomTax } from './taxEngine';
+import { calculateRoomTax, setActiveTaxRules } from './taxEngine';
 import { getRoleDefaultPermissions } from '../data/rolePresets';
 import { normalizeDateStr, getNextDayIsoDate, getTodayIsoDate } from './dateUtils';
 import {
@@ -544,6 +544,7 @@ class PMSStore {
         this.taxRules = (parsed.taxRules && parsed.taxRules.length > 0)
           ? parsed.taxRules
           : JSON.parse(JSON.stringify(initialTaxRules));
+        setActiveTaxRules(this.taxRules);
         this.serviceCharges = parsed.serviceCharges || JSON.parse(JSON.stringify(initialServiceCharges));
         this.save();
         return;
@@ -569,6 +570,7 @@ class PMSStore {
     this.nightAudits = JSON.parse(JSON.stringify(initialNightAudits));
     this.auditTrail = JSON.parse(JSON.stringify(initialAuditTrail));
     this.taxRules = JSON.parse(JSON.stringify(initialTaxRules));
+    setActiveTaxRules(this.taxRules);
     this.serviceCharges = JSON.parse(JSON.stringify(initialServiceCharges));
     this.stopouts = {};
     this.dailyRates = {
@@ -673,7 +675,7 @@ class PMSStore {
       dailyRates: this.dailyRates,
       restrictions: this.restrictions,
       maintenanceBlocks: this.maintenanceBlocks,
-      taxRules: this.taxRules || [],
+      taxRules: Array.isArray(this.taxRules) ? this.taxRules : JSON.parse(JSON.stringify(initialTaxRules)),
       serviceCharges: this.serviceCharges || [],
       propertiesList: (this.propertiesList || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT'),
       currentUser: this.currentUser || { id: 'usr_owner', name: 'Astha India', role: 'Owner', email: 'owner@hotelastha.com', initials: 'AI', status: 'ACTIVE' },
@@ -1214,14 +1216,23 @@ class PMSStore {
 
     const taxCalc = calculateRoomTax(bookingData.baseRatePerNight, bookingData.nights, {
       isComplimentary: bookingData.isComplimentary,
-      isTaxExempt: bookingData.isTaxExempt
+      isTaxExempt: bookingData.isTaxExempt,
+      isTaxInclusive: bookingData.isTaxInclusive,
+      taxRules: this.taxRules
     });
 
-    const totalRoomCharges = bookingData.baseRatePerNight * bookingData.nights;
-    const taxAmount = taxCalc.totalTax;
-    const totalAmount = totalRoomCharges + taxAmount;
+    const totalRoomCharges =
+      bookingData.totalRoomCharges !== undefined
+        ? Number(bookingData.totalRoomCharges)
+        : taxCalc.taxableAmount;
+    const taxAmount =
+      bookingData.taxAmount !== undefined ? Number(bookingData.taxAmount) : taxCalc.totalTax;
+    const totalAmount =
+      bookingData.totalAmount !== undefined
+        ? Number(bookingData.totalAmount)
+        : Math.round((totalRoomCharges + taxAmount) * 100) / 100;
     const paidAmount = Number(bookingData.advanceAmount) || 0;
-    const balanceDue = Math.max(0, totalAmount - paidAmount);
+    const balanceDue = Math.max(0, Math.round((totalAmount - paidAmount) * 100) / 100);
 
     const checkInIso = normalizeDateStr(bookingData.checkInDate) ||
       (this.property?.businessDate || getTodayIsoDate());
@@ -1288,14 +1299,17 @@ class PMSStore {
       const d = new Date(startDate);
       d.setDate(d.getDate() + i);
       const iso = d.toISOString().split('T')[0];
-      const dailyTax = Math.round(taxAmount / newRes.nights);
+      const dailyBase = Math.round((totalRoomCharges / newRes.nights) * 100) / 100;
+      const dailyTax = Math.round((taxAmount / newRes.nights) * 100) / 100;
       transactions.push({
         id: `tx_${Date.now()}_${i}`,
         date: iso,
         type: 'ROOM_CHARGE',
         desc: `Room Tariff - Room ${roomNumber}`,
-        amount: newRes.baseRatePerNight,
+        amount: dailyBase,
         tax: dailyTax,
+        taxRate: taxCalc.gstRate,
+        isTaxInclusive: Boolean(bookingData.isTaxInclusive),
         direction: 'DEBIT'
       });
     }
@@ -3800,6 +3814,7 @@ class PMSStore {
       createdAt: new Date().toISOString()
     };
     this.taxRules = [...(this.taxRules || []), newRule];
+    setActiveTaxRules(this.taxRules);
     this.logAudit('CREATE_TAX_RULE', 'PROPERTIES', newRule.id, `Created tax rule ${newRule.name}`);
     this.save();
     this.syncDocToFirestore('taxRules', newRule.id, newRule);
@@ -3823,6 +3838,7 @@ class PMSStore {
     });
 
     if (updatedRule) {
+      setActiveTaxRules(this.taxRules);
       this.logAudit('UPDATE_TAX_RULE', 'PROPERTIES', updatedRule.id, `Updated tax rule ${updatedRule.name}`);
       this.save();
       this.syncDocToFirestore('taxRules', updatedRule.id, updatedRule);
@@ -3834,6 +3850,7 @@ class PMSStore {
   deleteTaxRule(ruleId) {
     const rule = (this.taxRules || []).find(r => r.id === ruleId);
     this.taxRules = (this.taxRules || []).filter(r => r.id !== ruleId);
+    setActiveTaxRules(this.taxRules);
     if (rule) {
       this.logAudit('DELETE_TAX_RULE', 'PROPERTIES', rule.id, `Deleted tax rule ${rule.name}`);
       this.deleteDocFromFirestore('taxRules', rule.id);

@@ -143,8 +143,8 @@ export default function CreateReservationModal({
     });
   }, [baseRate, nights, isComplimentary, isTaxExempt]);
 
-  const totalRoomCharges = (Number(baseRate) || 0) * nights;
-  const grandTotal = isComplimentary ? 0 : totalRoomCharges + billingTax.totalTax;
+  const totalRoomCharges = isComplimentary ? 0 : billingTax.taxableAmount;
+  const grandTotal = isComplimentary ? 0 : billingTax.grossTotal;
 
   // Auto-populate advance amount on first load
   useEffect(() => {

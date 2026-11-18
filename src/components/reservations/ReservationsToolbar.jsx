@@ -57,7 +57,8 @@ export default function ReservationsToolbar({
   // Dropdown states
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [isSourceOpen, setIsSourceOpen] = useState(false);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [activeCalendarField, setActiveCalendarField] = useState(null); // null | 'from' | 'to'
+  const isCalendarOpen = activeCalendarField !== null;
 
   // Calendar View Date: defaults to October 2026 or fromDate's month
   const [calendarViewDate, setCalendarViewDate] = useState(() => {
@@ -82,7 +83,7 @@ export default function ReservationsToolbar({
         setIsSourceOpen(false);
       }
       if (calendarRef.current && !calendarRef.current.contains(e.target)) {
-        setIsCalendarOpen(false);
+        setActiveCalendarField(null);
       }
     };
 
@@ -90,7 +91,7 @@ export default function ReservationsToolbar({
       if (e.key === 'Escape') {
         setIsStatusOpen(false);
         setIsSourceOpen(false);
-        setIsCalendarOpen(false);
+        setActiveCalendarField(null);
       }
     };
 
@@ -146,8 +147,10 @@ export default function ReservationsToolbar({
     if (!dateStr) return '';
     const d = new Date(dateStr + 'T00:00:00');
     if (isNaN(d.getTime())) return dateStr;
-    const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${d.getDate()} ${monthsShort[d.getMonth()]}`;
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
   };
 
   const handlePrevMonth = () => {
@@ -204,23 +207,50 @@ export default function ReservationsToolbar({
 
   // Click on a day in calendar
   const handleDayClick = (clickedDateStr) => {
-    if (!fromDate || (fromDate && toDate)) {
-      // Start new selection range with From date
+    if (activeCalendarField === 'to') {
+      if (fromDate && clickedDateStr < fromDate) {
+        if (onFromDateChange) onFromDateChange(clickedDateStr);
+        if (onToDateChange) onToDateChange('');
+      } else {
+        if (onToDateChange) onToDateChange(clickedDateStr);
+        setTimeout(() => {
+          setActiveCalendarField(null);
+        }, 200);
+      }
+      return;
+    }
+
+    // Selecting From date
+    if (!fromDate || (fromDate && toDate) || activeCalendarField === 'from') {
       if (onFromDateChange) onFromDateChange(clickedDateStr);
-      if (onToDateChange) onToDateChange('');
+      if (toDate && clickedDateStr > toDate) {
+        if (onToDateChange) onToDateChange('');
+      }
+      setActiveCalendarField('to');
     } else if (fromDate && !toDate) {
       if (clickedDateStr < fromDate) {
-        // If clicked earlier date, reset From date to clicked
         if (onFromDateChange) onFromDateChange(clickedDateStr);
       } else {
-        // Set To date and finish range
         if (onToDateChange) onToDateChange(clickedDateStr);
-        // Automatically close calendar after selecting range
         setTimeout(() => {
-          setIsCalendarOpen(false);
-        }, 220);
+          setActiveCalendarField(null);
+        }, 200);
       }
     }
+  };
+
+  const handleToggleDateField = (field) => {
+    setActiveCalendarField((prev) => {
+      if (prev === field) return null;
+      const targetStr = field === 'to' ? toDate || fromDate : fromDate;
+      if (targetStr) {
+        const parsed = new Date(targetStr + 'T00:00:00');
+        if (!isNaN(parsed.getTime())) {
+          setCalendarViewDate(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
+        }
+      }
+      return field;
+    });
   };
 
   return (
@@ -278,53 +308,126 @@ export default function ReservationsToolbar({
         )}
       </div>
 
-      {/* 3. Date Range Picker [ 📅 From 📅 - To 📅 ] with Interactive Calendar Popup */}
+      {/* 3. Date Range Picker — Rebuilt to Exact OTAL PMS Specification */}
       <div className="relative otal-date-range-container" ref={calendarRef}>
         <div
-          className={`otal-date-range-box ${isCalendarOpen ? 'active' : ''}`}
-          onClick={() => setIsCalendarOpen((prev) => !prev)}
-          role="button"
-          tabIndex={0}
+          className={`otal-date-range-box flex items-center gap-1.5 bg-white border border-slate-200 rounded-md px-2 py-0.5 h-9 shrink-0 ${
+            isCalendarOpen ? 'active' : ''
+          }`}
         >
-          {/* Calendar icon 1 */}
-          <Calendar size={15} className="text-slate-400 shrink-0" />
-
-          {/* From Label / Value */}
-          <span className={`otal-date-text ${fromDate ? 'has-date' : 'placeholder'}`}>
-            {fromDate ? formatDisplayDate(fromDate) : 'From'}
+          {/* Leading calendar_month icon (16px, slate-400) */}
+          <span
+            className="material-symbols-outlined select-none text-slate-400 shrink-0 otal-date-range-lead-icon"
+            style={{ fontSize: '16px' }}
+          >
+            calendar_month
           </span>
 
-          {/* Calendar icon 2 */}
-          <Calendar size={15} className="text-slate-400 shrink-0" />
+          {/* From Date Input Trigger */}
+          <div
+            className="w-full cursor-pointer otal-date-field-trigger"
+            role="button"
+            tabIndex={0}
+            aria-haspopup="dialog"
+            aria-expanded={activeCalendarField === 'from'}
+            data-state={activeCalendarField === 'from' ? 'open' : 'closed'}
+            onClick={() => handleToggleDateField('from')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleToggleDateField('from');
+              }
+            }}
+          >
+            <div className="w-full relative">
+              <div className="flex items-center justify-between" />
+              <div className="relative flex otal-date-field-inner">
+                <input
+                  className="otal-date-field-input flex max-[1370px]:rounded-md rounded-lg bg-white max-[1370px]:h-9 small-title-4 outline-none border focus:border-[#3B82F6]/20 focus:bg-white transition-all placeholder:text-gray-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-100 cursor-pointer select-none max-[1370px]:h-7! h-8 w-28 border-none shadow-none small-title-2 p-0 focus:ring-0"
+                  readOnly
+                  tabIndex={-1}
+                  placeholder="From"
+                  value={formatDisplayDate(fromDate)}
+                />
+                <div className="flex absolute right-3 top-1/2 -translate-y-1/2 z-10 pointer-events-none otal-date-field-icon-wrap">
+                  <span
+                    className="material-symbols-outlined select-none text-gray-500 otal-date-field-icon"
+                    style={{ fontSize: '18px' }}
+                  >
+                    calendar_month
+                  </span>
+                </div>
+              </div>
+              <div className="otal-date-field-helper-grid grid absolute transition-all duration-200 ease-in-out grid-rows-[0fr] opacity-0 pointer-events-none w-full">
+                <div className="overflow-hidden small-title-2" />
+              </div>
+            </div>
+          </div>
 
-          {/* Separator - To */}
-          <span className="otal-date-sep">
-            - To
-          </span>
+          {/* Hyphen Separator */}
+          <span className="text-slate-400 small-title-2 otal-date-sep">-</span>
 
-          {/* Calendar icon 3 */}
-          <Calendar size={15} className="text-slate-400 shrink-0" />
+          {/* To Date Input Trigger */}
+          <div
+            className="w-full cursor-pointer otal-date-field-trigger"
+            role="button"
+            tabIndex={0}
+            aria-haspopup="dialog"
+            aria-expanded={activeCalendarField === 'to'}
+            data-state={activeCalendarField === 'to' ? 'open' : 'closed'}
+            onClick={() => handleToggleDateField('to')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleToggleDateField('to');
+              }
+            }}
+          >
+            <div className="w-full relative">
+              <div className="flex items-center justify-between" />
+              <div className="relative flex otal-date-field-inner">
+                <input
+                  className="otal-date-field-input flex max-[1370px]:rounded-md rounded-lg bg-white max-[1370px]:h-9 small-title-4 outline-none border focus:border-[#3B82F6]/20 focus:bg-white transition-all placeholder:text-gray-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-100 cursor-pointer select-none max-[1370px]:h-7! h-8 w-28 border-none shadow-none small-title-2 p-0 focus:ring-0"
+                  readOnly
+                  tabIndex={-1}
+                  placeholder="To"
+                  value={formatDisplayDate(toDate)}
+                />
+                <div className="flex absolute right-3 top-1/2 -translate-y-1/2 z-10 pointer-events-none otal-date-field-icon-wrap">
+                  <span
+                    className="material-symbols-outlined select-none text-gray-500 otal-date-field-icon"
+                    style={{ fontSize: '18px' }}
+                  >
+                    calendar_month
+                  </span>
+                </div>
+              </div>
+              <div className="otal-date-field-helper-grid grid absolute transition-all duration-200 ease-in-out grid-rows-[0fr] opacity-0 pointer-events-none w-full">
+                <div className="overflow-hidden small-title-2" />
+              </div>
+            </div>
+          </div>
 
-          {/* Optional To Date Label */}
-          {toDate && (
-            <span className="otal-date-text has-date ml-0.5">
-              {formatDisplayDate(toDate)}
-            </span>
-          )}
-
-          {/* Quick Clear button if dates selected */}
+          {/* Trailing Clear Button (24px × 24px, close icon 14px) */}
           {(fromDate || toDate) && (
             <button
               type="button"
-              className="otal-date-clear-icon"
+              className="otal-date-clear-btn inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md small-title-4 font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent h-6 w-6 text-slate-400 hover:text-slate-600 p-0"
               title="Clear Dates"
+              aria-label="Clear date range"
               onClick={(e) => {
                 e.stopPropagation();
                 if (onFromDateChange) onFromDateChange('');
                 if (onToDateChange) onToDateChange('');
+                setActiveCalendarField(null);
               }}
             >
-              <X size={14} />
+              <span
+                className="material-symbols-outlined select-none"
+                style={{ fontSize: '14px' }}
+              >
+                close
+              </span>
             </button>
           )}
         </div>
