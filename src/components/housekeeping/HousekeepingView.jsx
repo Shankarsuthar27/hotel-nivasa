@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Wrench, PlusCircle, User, Clock, Moon, Calendar, X, AlertCircle, Ban, ChevronDown } from 'lucide-react';
+import { Wrench, PlusCircle, User, Clock, Moon, Calendar, X, AlertCircle, Ban, ChevronDown, CheckCircle2 } from 'lucide-react';
 import RoomCard from './RoomCard';
 import BlockRoomDrawer from './BlockRoomDrawer.jsx';
 import BookingDetailsDrawer from '../reservations/BookingDetailsDrawer';
@@ -97,6 +97,20 @@ export default function HousekeepingView({
     };
   }, []);
 
+  // Helper: strictly determines whether a reservation actively occupies a physical room
+  const isResOccupyingRoom = (res, room) => {
+    if (!res || !room) return false;
+    const normStatus = String(res.status || '').toLowerCase().replace(/[\s-]+/g, '_');
+    if (normStatus !== 'in_house' && normStatus !== 'checked_in') return false;
+
+    const rNum = String(room.roomNumber || '').trim();
+    const resNum = String(res.roomNumber || res.roomNum || '').trim();
+    return (
+      (res.roomId && (res.roomId === room.id || res.roomId === `rm_${rNum}` || res.roomId === rNum)) ||
+      (rNum && resNum && resNum === rNum)
+    );
+  };
+
   // Compute counts for top status legend
   const counts = useMemo(() => {
     let avail = 0;
@@ -105,9 +119,7 @@ export default function HousekeepingView({
     let dirty = 0;
 
     rooms.forEach((r) => {
-      const isOcc = reservations.some(
-        (res) => (res.roomId === r.id || res.roomNumber === r.roomNumber) && res.status === 'in_house'
-      );
+      const isOcc = reservations.some((res) => isResOccupyingRoom(res, r));
 
       if (isOcc) {
         occ++;
@@ -128,11 +140,18 @@ export default function HousekeepingView({
     };
   }, [rooms, reservations]);
 
-  // Unassigned reservations (booked without a room number allocated)
+  // Unassigned reservations (active bookings without a physical room allocated)
   const unassignedReservations = useMemo(() => {
-    return reservations.filter(
-      (r) => (r.status === 'confirmed' || r.status === 'in_house') && (!r.roomId || r.roomId === '')
-    );
+    return reservations.filter((r) => {
+      if (!r) return false;
+      const st = String(r.status || '').toLowerCase().replace(/[\s-]+/g, '_');
+      if (st === 'cancelled' || st === 'canceled' || st === 'checked_out' || st === 'no_show' || st === 'departed') {
+        return false;
+      }
+      const hasRoomId = Boolean(r.roomId && String(r.roomId).trim() !== '' && String(r.roomId).toLowerCase() !== 'unassigned');
+      const hasRoomNum = Boolean(r.roomNumber && String(r.roomNumber).trim() !== '' && String(r.roomNumber).toLowerCase() !== 'unassigned');
+      return !hasRoomId && !hasRoomNum;
+    });
   }, [reservations]);
 
   // Filtered rooms list
@@ -144,11 +163,10 @@ export default function HousekeepingView({
       }
       // Status filter
       if (selectedStatus === 'ALL') return true;
-      if (selectedStatus === 'clean') return r.status === 'clean' || !r.status;
-      if (selectedStatus === 'occupied') {
-        return reservations.some((res) => res.roomId === r.id && res.status === 'in_house');
-      }
-      return r.status === selectedStatus;
+      const isOcc = reservations.some((res) => isResOccupyingRoom(res, r));
+      if (selectedStatus === 'occupied') return isOcc;
+      if (selectedStatus === 'clean') return !isOcc && (r.status === 'clean' || r.status === 'occupied' || !r.status);
+      return !isOcc && r.status === selectedStatus;
     });
   }, [rooms, reservations, selectedRoomType, selectedStatus]);
 
@@ -395,21 +413,8 @@ export default function HousekeepingView({
           </div>
         </div>
 
-        {/* Right Controls: Unassigned Button + Status Legend */}
+        {/* Right Controls: Status Legend */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          
-          {/* Unassigned Button */}
-          <button
-            type="button"
-            onClick={() => setIsUnassignedOpen(true)}
-            className="room-view-unassigned-btn"
-          >
-            <span className="material-symbols-outlined text-amber-600 select-none" style={{ fontSize: '16px' }}>
-              assignment_late
-            </span>
-            <span>Unassigned ({unassignedReservations.length || 1})</span>
-          </button>
-
           {/* Status Legend Pills */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px', fontWeight: 600, color: '#475569' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -498,16 +503,14 @@ export default function HousekeepingView({
                 <span className="hk-category-count-badge">
                   {group.rooms.length} Rooms
                 </span>
-                {(unassignedCount > 0 || rt.name.toLowerCase().includes('delux')) && (
+                {unassignedCount > 0 && (
                   <div
                     onClick={() => setIsUnassignedOpen(true)}
                     className="hk-category-unassigned-badge"
                     title="View unassigned bookings"
                   >
-                    <span className="material-symbols-outlined select-none" style={{ fontSize: '14px' }}>
-                      assignment_late
-                    </span>
-                    <span>{unassignedCount || 1} Unassigned</span>
+                    <AlertCircle size={13} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+                    <span>{unassignedCount} Unassigned</span>
                   </div>
                 )}
               </div>
@@ -515,61 +518,9 @@ export default function HousekeepingView({
               {/* Room Cards Grid */}
               <div className="hk-cards-grid">
                 {group.rooms.map((room) => {
-                  const activeRes = reservations.find(
-                    (r) => (r.roomId === room.id || r.roomNumber === room.roomNumber || r.roomNum === room.roomNumber) &&
-                           (r.status === 'in_house' || r.status === 'checked_in')
-                  ) || reservations.find(
-                    (r) => (r.roomId === room.id || r.roomNumber === room.roomNumber || r.roomNum === room.roomNumber) &&
-                           (r.status === 'confirmed' || room.status === 'occupied')
-                  ) || (room.roomNumber === '102' ? (reservations.find(r => r.id === 'res_12') || {
-                    id: 'res_12',
-                    bookingReference: '#RES_12',
-                    primaryGuest: {
-                      name: 'Mr Shankar Suthar',
-                      title: 'Mr.',
-                      firstName: 'Shankar',
-                      lastName: 'Suthar',
-                      phone: '+91 98932938982',
-                      email: 'ss2137789@gmail.com',
-                      country: 'India'
-                    },
-                    guestName: 'Mr Shankar Suthar',
-                    guestPhone: '+91 98932938982',
-                    guestEmail: 'ss2137789@gmail.com',
-                    checkInDate: '2026-11-12',
-                    checkOutDate: '2026-11-13',
-                    checkInTime: '12:30',
-                    checkOutTime: '11:00',
-                    bookingSource: 'walk-in',
-                    ratePlanName: 'test plan',
-                    ratePlanCode: 'BAR_EP',
-                    specialRequests: '',
-                    status: 'in_house'
-                  }) : null) || (room.roomNumber === '101' && room.status === 'occupied' ? (reservations.find(r => r.id === 'res_5') || {
-                    id: 'res_sample_unassigned',
-                    bookingReference: '#RES_101',
-                    primaryGuest: {
-                      name: 'Priya Sharma',
-                      title: 'Ms.',
-                      firstName: 'Priya',
-                      lastName: 'Sharma',
-                      phone: '9876543210',
-                      email: 'priya.sharma@gmail.com',
-                      country: 'India'
-                    },
-                    guestName: 'Priya Sharma',
-                    guestPhone: '9876543210',
-                    guestEmail: 'priya.sharma@gmail.com',
-                    checkInDate: '2026-10-31',
-                    checkOutDate: '2026-11-02',
-                    checkInTime: '12:30',
-                    checkOutTime: '11:00',
-                    bookingSource: 'walk-in',
-                    ratePlanName: 'test plan',
-                    ratePlanCode: 'test_plan',
-                    specialRequests: '...',
-                    status: 'in_house'
-                  }) : null);
+                  // Only actively checked-in / in-house reservations occupy a room.
+                  // Checked-out, cancelled, no-show, or un-checked-in reservations never mark a room Occupied.
+                  const activeRes = reservations.find((r) => isResOccupyingRoom(r, room)) || null;
 
                   return (
                     <RoomCard
@@ -611,108 +562,183 @@ export default function HousekeepingView({
         })}
       </div>
 
-      {/* 4. Unassigned Bookings Drawer / Modal */}
+      {/* 4. Unassigned Bookings Modal */}
       {isUnassignedOpen && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.45)',
-          backdropFilter: 'blur(3px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999
-        }}>
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '14px',
-            width: '90%',
-            maxWidth: '520px',
-            padding: '24px',
-            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className="material-symbols-outlined text-amber-600" style={{ fontSize: '22px' }}>
-                  assignment_late
-                </span>
+        <div
+          onClick={() => setIsUnassignedOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.45)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '14px',
+              width: '100%',
+              maxWidth: '520px',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.14)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '8px',
+                    backgroundColor: unassignedReservations.length > 0 ? '#fffbeb' : '#f0fdf4',
+                    border: `1px solid ${unassignedReservations.length > 0 ? '#fde68a' : '#bbf7d0'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  {unassignedReservations.length > 0 ? (
+                    <AlertCircle size={18} color="#d97706" />
+                  ) : (
+                    <CheckCircle2 size={18} color="#16a34a" />
+                  )}
+                </div>
                 <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#0f172a' }}>
-                  Unassigned Reservations ({unassignedReservations.length || 1})
+                  Unassigned Reservations ({unassignedReservations.length})
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsUnassignedOpen(false)}
-                style={{ border: 'none', background: 'transparent', fontSize: '18px', cursor: 'pointer', color: '#64748b' }}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                aria-label="Close"
               >
-                ✕
+                <X size={18} />
               </button>
             </div>
 
-            <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '18px', lineHeight: 1.4 }}>
+            <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 18px 0', lineHeight: 1.5 }}>
               These reservations have confirmed dates and room types but have not been assigned a specific room number yet.
             </p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-              {(unassignedReservations.length > 0 ? unassignedReservations : [
-                {
-                  id: 'res_sample_unassigned',
-                  bookingReference: '#RES_UNASSIGNED',
-                  primaryGuest: { name: 'Priya Sharma', phone: '9876543210' },
-                  roomTypeName: 'Delux Room',
-                  checkInDate: '2026-10-31',
-                  checkOutDate: '2026-11-02'
-                }
-              ]).map((res) => (
-                <div
-                  key={res.id}
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid #fed7aa',
-                    backgroundColor: '#fffbeb',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#1e293b' }}>
-                      {res.primaryGuest?.name || 'Guest'} ({res.bookingReference})
-                    </div>
-                    <div style={{ fontSize: '11.5px', color: '#92400e', marginTop: '2px' }}>
-                      {res.roomTypeName} • {res.checkInDate} to {res.checkOutDate}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsUnassignedOpen(false);
-                      if (onUpdateStatus) {
-                        onUpdateStatus('rm_101', 'clean');
-                      }
-                      const toast = document.createElement('div');
-                      toast.className = 'pms-toast-notification';
-                      toast.innerHTML = '<span>✅ Room 101 allocated to reservation.</span>';
-                      document.body.appendChild(toast);
-                      setTimeout(() => toast.remove(), 2800);
-                    }}
-                    style={{
-                      padding: '6px 14px',
-                      backgroundColor: '#2563eb',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Assign Room 101
-                  </button>
+            {unassignedReservations.length === 0 ? (
+              <div
+                style={{
+                  padding: '24px 16px',
+                  borderRadius: '10px',
+                  border: '1px solid #dcfce7',
+                  backgroundColor: '#f0fdf4',
+                  textAlign: 'center',
+                  marginBottom: '20px'
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: '14px', color: '#166534', marginBottom: '4px' }}>
+                  All rooms are assigned
                 </div>
-              ))}
-            </div>
+                <div style={{ fontSize: '12.5px', color: '#15803d' }}>
+                  There are currently no unassigned reservations pending room allocation.
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px', maxHeight: '320px', overflowY: 'auto' }}>
+                {unassignedReservations.map((res) => {
+                  const candidateRoom =
+                    rooms.find(
+                      (rm) =>
+                        rm.roomTypeId === res.roomTypeId &&
+                        rm.status !== 'maintenance' &&
+                        !reservations.some((other) => isResOccupyingRoom(other, rm))
+                    ) ||
+                    rooms.find(
+                      (rm) =>
+                        rm.status !== 'maintenance' &&
+                        !reservations.some((other) => isResOccupyingRoom(other, rm))
+                    );
+
+                  const rtLabel =
+                    res.roomTypeName ||
+                    roomTypes.find((t) => t.id === res.roomTypeId)?.name ||
+                    'Room';
+
+                  return (
+                    <div
+                      key={res.id}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid #fed7aa',
+                        backgroundColor: '#fffbeb',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px'
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#1e293b' }}>
+                          {res.primaryGuest?.name || res.guestName || 'Guest'}{' '}
+                          <span style={{ color: '#64748b', fontWeight: 600 }}>
+                            ({res.bookingReference || res.id})
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#92400e', marginTop: '3px' }}>
+                          {rtLabel} • {res.checkInDate} to {res.checkOutDate}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={!candidateRoom}
+                        onClick={() => {
+                          if (!candidateRoom) return;
+                          const assigned = pmsStore.assignRoom(res.id, candidateRoom.id);
+                          if (assigned) {
+                            if (unassignedReservations.length <= 1) {
+                              setIsUnassignedOpen(false);
+                            }
+                            const toast = document.createElement('div');
+                            toast.className = 'pms-toast-notification';
+                            toast.innerHTML = `<span>✅ Room ${candidateRoom.roomNumber} assigned to ${res.primaryGuest?.name || 'reservation'}.</span>`;
+                            document.body.appendChild(toast);
+                            setTimeout(() => toast.remove(), 2800);
+                          }
+                        }}
+                        style={{
+                          padding: '7px 14px',
+                          backgroundColor: candidateRoom ? '#2563eb' : '#cbd5e1',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                          cursor: candidateRoom ? 'pointer' : 'not-allowed',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0
+                        }}
+                      >
+                        {candidateRoom ? `Assign Room ${candidateRoom.roomNumber}` : 'No Room Free'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button

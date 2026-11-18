@@ -49,11 +49,14 @@
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --spacing: 4px;
   --color-gray-50: oklab(0.985 -0.00075442 -0.00185226);
+  --color-gray-100: oklch(0.967 0.003 264.542);
+  --color-muted-foreground: #64748b;
   --color-red-50: oklch(0.971 0.013 17.38);
   --color-red-500: oklch(0.637 0.237 25.331);
   --color-amber-50: oklch(0.987 0.022 95.277);
   --color-amber-200: oklch(0.924 0.12 95.746);
   --color-amber-600: oklch(0.666 0.179 58.318);
+  --color-green-500: #22c55e;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-heading: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-sidebar: 'Mulish', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -98,9 +101,9 @@
   --purple-border: #ddd6fe;
 
   /* Tape Chart Dimensions */
-  --cell-width-cozy: 52px;
-  --cell-width-wide: 84px;
-  --cell-height: 48px;
+  --cell-width-cozy: 72px;
+  --cell-width-wide: 144px;
+  --cell-height: 50px;
 
   /* Shadows */
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
@@ -595,19 +598,19 @@ h1, h2, h3, h4, h5, h6,
 
 .tape-chart-table th,
 .tape-chart-table td {
-  border-right: 1px solid var(--border-subtle);
-  border-bottom: 1px solid var(--border-subtle);
+  border-right: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
   padding: 0;
 }
 
-/* Column Width Enforcement for Perfect Grid Alignment */
+/* Column Width Enforcement for Perfect Grid Alignment (14-day Cozy / 7-day Wide) */
 .tape-chart-container.cozy .tape-chart-table th.date-col-header,
 .tape-chart-container.cozy .tape-chart-table td.timeline-slot,
 .tape-chart-container.cozy .tape-chart-table td.date-col-cell,
 .tape-chart-container.cozy .tape-chart-table td.date-col-foot {
-  width: 52px;
-  min-width: 52px;
-  max-width: 52px;
+  width: var(--tape-cell-width, var(--cell-width-cozy));
+  min-width: var(--tape-cell-width, var(--cell-width-cozy));
+  max-width: var(--tape-cell-width, var(--cell-width-cozy));
   box-sizing: border-box;
 }
 
@@ -615,9 +618,9 @@ h1, h2, h3, h4, h5, h6,
 .tape-chart-container.wide .tape-chart-table td.timeline-slot,
 .tape-chart-container.wide .tape-chart-table td.date-col-cell,
 .tape-chart-container.wide .tape-chart-table td.date-col-foot {
-  width: 84px;
-  min-width: 84px;
-  max-width: 84px;
+  width: var(--tape-cell-width, var(--cell-width-wide));
+  min-width: var(--tape-cell-width, var(--cell-width-wide));
+  max-width: var(--tape-cell-width, var(--cell-width-wide));
   box-sizing: border-box;
 }
 
@@ -630,8 +633,8 @@ h1, h2, h3, h4, h5, h6,
   width: 180px;
   min-width: 180px;
   max-width: 180px;
-  border-right: 2px solid var(--border-light) !important;
-  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.04);
+  border-right: 1px solid #e2e8f0 !important;
+  box-shadow: 2px 0 6px rgba(15, 23, 42, 0.03);
   box-sizing: border-box;
 }
 
@@ -640,8 +643,21 @@ h1, h2, h3, h4, h5, h6,
   top: 0;
   background-color: #ffffff;
   z-index: 25;
-  border-bottom: 2px solid var(--border-light) !important;
+  border-bottom: 1px solid #e2e8f0 !important;
   box-sizing: border-box;
+}
+
+.sticky-header-row th.date-col-header.is-today {
+  border-bottom-color: #fecdd3 !important;
+}
+
+.sticky-header-row th.date-col-header.is-weekend {
+  border-bottom-color: #fed7aa !important;
+}
+
+.tape-nav-circle-btn:hover {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
 }
 
 .sticky-header-row th.sticky-room-col {
@@ -707,28 +723,60 @@ h1, h2, h3, h4, h5, h6,
 .timeline-slot {
   position: relative;
   height: var(--cell-height);
+  background-color: #ffffff;
   cursor: pointer;
   transition: background-color 0.1s ease;
 }
 
 .tape-chart-container.cozy .timeline-slot {
-  width: var(--cell-width-cozy);
-  min-width: var(--cell-width-cozy);
-  max-width: var(--cell-width-cozy);
+  width: var(--tape-cell-width, var(--cell-width-cozy));
+  min-width: var(--tape-cell-width, var(--cell-width-cozy));
+  max-width: var(--tape-cell-width, var(--cell-width-cozy));
 }
 
 .tape-chart-container.wide .timeline-slot {
-  width: var(--cell-width-wide);
-  min-width: var(--cell-width-wide);
-  max-width: var(--cell-width-wide);
+  width: var(--tape-cell-width, var(--cell-width-wide));
+  min-width: var(--tape-cell-width, var(--cell-width-wide));
+  max-width: var(--tape-cell-width, var(--cell-width-wide));
 }
 
 .timeline-slot:hover {
-  background-color: #eff6ff;
+  background-color: #f8fafc;
 }
 
 .timeline-slot.weekend {
-  background-color: #fafaf9;
+  background-color: #ffffff;
+}
+
+/* Sleek Half-Day Booking Pills (Cozy & Wide OTAL Spec) */
+.tape-booking-pill {
+  position: absolute;
+  top: 7px;
+  height: 36px;
+  border-radius: 6px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  color: #ffffff;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  box-shadow:
+    0 2px 6px rgba(15, 23, 42, 0.14),
+    0 1px 2px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  z-index: 12;
+  box-sizing: border-box;
+  overflow: hidden;
+  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+}
+
+.tape-booking-pill:hover {
+  transform: translateY(-0.5px);
+  filter: brightness(1.06);
+  box-shadow:
+    0 4px 10px rgba(15, 23, 42, 0.18),
+    0 2px 4px rgba(15, 23, 42, 0.1);
+  z-index: 18;
 }
 
 /* Spanning Booking Blocks */

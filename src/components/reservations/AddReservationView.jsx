@@ -189,7 +189,7 @@ export default function AddReservationView({
     return Array.from(map.values());
   }, [reservations, storeState.reservations]);
 
-  // Merge rooms from props and store (deduplicated by physical room number)
+  // Merge rooms from props and store (deduplicated by physical room number; live store wins)
   const allRooms = useMemo(() => {
     const listProps = Array.isArray(rooms) ? rooms : [];
     const listStore = Array.isArray(storeState.rooms)
@@ -199,9 +199,7 @@ export default function AddReservationView({
     [...listProps, ...listStore].forEach((rm) => {
       if (rm && (rm.id || rm.roomNumber)) {
         const key = String(rm.roomNumber || rm.id).trim().toLowerCase().replace(/^rm_/, '');
-        if (!map.has(key)) {
-          map.set(key, rm);
-        }
+        map.set(key, rm);
       }
     });
     return Array.from(map.values());
@@ -458,48 +456,65 @@ export default function AddReservationView({
     const reqIn = normalizeDateStr(checkInDate);
     const reqOut = normalizeDateStr(checkOutDate);
 
-    // 3. Exclude rooms with maintenance blocks overlapping stay dates
+    // 3. Exclude rooms with active maintenance blocks overlapping stay dates
     const hasConflictingBlock = allMaintenanceBlocks.some((mb) => {
+      if (!mb) return false;
+      const mbStatus = String(mb.status || '').toLowerCase();
+      if (mbStatus === 'cancelled' || mbStatus === 'completed' || mbStatus === 'released') return false;
       const match = isResMatchingRoom({ roomId: mb.roomId, roomNumber: mb.roomNumber }, room);
       if (!match) return false;
       const mbStart = normalizeDateStr(mb.startDate);
-      const mbEnd = normalizeDateStr(mb.endDate);
-      return reqIn <= mbEnd && reqOut >= mbStart;
+      const mbEnd = normalizeDateStr(mb.endDate || mb.startDate);
+      if (!mbStart || !mbEnd) return false;
+      return reqIn <= mbEnd && reqOut > mbStart;
     });
     if (hasConflictingBlock) return false;
 
-    // 4. Exclude rooms currently marked as occupied in inventory
+    const isInactiveResStatus = (statusVal) => {
+      const s = String(statusVal || '').toLowerCase().replace(/[\s-]+/g, '_');
+      return (
+        s === 'cancelled' ||
+        s === 'canceled' ||
+        s === 'no_show' ||
+        s === 'noshow' ||
+        s === 'checked_out' ||
+        s === 'checkedout' ||
+        s === 'departed'
+      );
+    };
+
+    // 4. Exclude rooms currently held by an active in-house guest whose stay overlaps requested dates
     if (
       room.operational === 'occupied' ||
       room.status === 'occupied'
     ) {
-      // Find the holding reservation if any
       const holdingRes = room.currentReservationId
         ? allReservations.find(
             (r) =>
               r.id === room.currentReservationId ||
               r.bookingReference === room.currentReservationId
           )
-        : null;
+        : allReservations.find((r) => {
+            const st = String(r?.status || '').toLowerCase().replace(/[\s-]+/g, '_');
+            return (st === 'in_house' || st === 'checked_in') && isResMatchingRoom(r, room);
+          });
 
-      if (holdingRes) {
+      if (holdingRes && !isInactiveResStatus(holdingRes.status)) {
         const hIn = normalizeDateStr(holdingRes.checkInDate);
         const hOut = normalizeDateStr(holdingRes.checkOutDate);
-        if (doDateRangesOverlap(reqIn, reqOut, hIn, hOut)) {
+        const today = getTodayIsoDate();
+        const effectiveHOut = hOut < today ? getNextDayIsoDate(today) : hOut;
+        if (doDateRangesOverlap(reqIn, reqOut, hIn, effectiveHOut)) {
           return false;
         }
       }
-      const today = getTodayIsoDate();
-      if (reqIn <= today && reqOut >= today) {
-        return false;
-      }
     }
 
-    // 5. Exclude rooms with conflicting active bookings in the system
+    // 5. Exclude rooms with conflicting active bookings in the system (ignore checked-out, cancelled, no-show)
     const hasConflictingRes = allReservations.some((res) => {
       if (!res) return false;
-      const statusNorm = (res.status || '').toLowerCase().replace(/[\s-]/g, '_');
-      if (statusNorm === 'cancelled' || statusNorm === 'no_show') return false;
+      const statusNorm = String(res.status || '').toLowerCase().replace(/[\s-]+/g, '_');
+      if (isInactiveResStatus(statusNorm)) return false;
 
       // Check if this reservation is for this room
       if (!isResMatchingRoom(res, room)) return false;
@@ -507,7 +522,7 @@ export default function AddReservationView({
       const resIn = normalizeDateStr(res.checkInDate);
       const resOut = normalizeDateStr(res.checkOutDate);
 
-      if (statusNorm === 'in_house') {
+      if (statusNorm === 'in_house' || statusNorm === 'checked_in') {
         const today = getTodayIsoDate();
         const effectiveResOut = resOut < today ? getNextDayIsoDate(today) : resOut;
         return doDateRangesOverlap(reqIn, reqOut, resIn, effectiveResOut);

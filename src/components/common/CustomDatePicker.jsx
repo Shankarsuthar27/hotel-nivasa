@@ -100,6 +100,7 @@ export function CustomCalendar({
   highlightDate,
   outputFormat = 'iso', // 'iso' ('YYYY-MM-DD') or 'dmy' ('DD/MM/YYYY')
   onClose,
+  ignoreRef = null,
   className = '',
   style = {},
   placement = 'bottom'
@@ -142,9 +143,16 @@ export function CustomCalendar({
     const rect = popoverRef.current.getBoundingClientRect();
     const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
     const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const popoverHeight = rect.height || 340;
+    const triggerTopApprox = rect.top - 52;
+    const spaceBelow = viewportHeight - rect.top;
 
     const isRight = placement.includes('right') || rect.right > viewportWidth - 12;
-    const isTop = placement.includes('top') || (rect.bottom > viewportHeight - 12 && rect.top > 350);
+    const isTop =
+      placement.includes('top') ||
+      (rect.bottom > viewportHeight - 12 &&
+        triggerTopApprox >= popoverHeight + 16 &&
+        triggerTopApprox > spaceBelow);
 
     const calculated = `${isTop ? 'top' : 'bottom'}-${isRight ? 'right' : 'left'}`;
     setAutoPlacement(calculated);
@@ -161,13 +169,16 @@ export function CustomCalendar({
   // Outside click listener
   useEffect(() => {
     function handleDocClick(e) {
+      if (ignoreRef?.current && ignoreRef.current.contains(e.target)) {
+        return;
+      }
       if (popoverRef.current && !popoverRef.current.contains(e.target)) {
         if (onClose) onClose();
       }
     }
     document.addEventListener('mousedown', handleDocClick);
     return () => document.removeEventListener('mousedown', handleDocClick);
-  }, [onClose]);
+  }, [onClose, ignoreRef]);
 
   // Navigation handlers
   const handlePrevMonth = (e) => {
@@ -646,6 +657,7 @@ export default function CustomDatePicker({
                 highlightDate={highlightDate}
                 outputFormat={outputFormat}
                 onClose={() => setIsOpen(false)}
+                ignoreRef={containerRef}
                 className="portal-popover"
                 placement="portal"
               />

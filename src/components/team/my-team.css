@@ -428,6 +428,10 @@
   cursor: pointer;
   padding: 6px;
   border-radius: 6px;
+  outline: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.15s;
 }
 
@@ -436,17 +440,21 @@
   color: #0f172a;
 }
 
+.my-team-action-dots-btn:focus-visible {
+  background-color: #eff6ff;
+  color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
 .my-team-action-menu {
-  position: absolute;
-  top: 100%;
-  right: 18px;
+  position: fixed;
   background-color: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  min-width: 175px;
-  z-index: 50;
-  padding: 4px;
+  border-radius: 10px;
+  box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.14), 0 4px 10px -2px rgba(15, 23, 42, 0.06);
+  min-width: 190px;
+  z-index: 1150;
+  padding: 5px;
 }
 
 .my-team-action-item {

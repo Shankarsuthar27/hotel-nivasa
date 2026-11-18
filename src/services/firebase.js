@@ -12,17 +12,23 @@ import { getStorage } from "firebase/storage";
 const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : (typeof process !== 'undefined' && process.env ? process.env : {});
 
 export const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyAdHlCHjFIZuS9LyiO0HTUL4DFhg7XO3yE",
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "hotel-263a3.firebaseapp.com",
-  projectId: env.VITE_FIREBASE_PROJECT_ID || "hotel-263a3",
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "hotel-263a3.firebasestorage.app",
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "172374373154",
-  appId: env.VITE_FIREBASE_APP_ID || "1:172374373154:web:6747af4581d2d678abeb7b",
-  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || "G-LTCZMXG0XN"
+  apiKey: env.VITE_FIREBASE_API_KEY || "",
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "",
+  projectId: env.VITE_FIREBASE_PROJECT_ID || "",
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "",
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: env.VITE_FIREBASE_APP_ID || "",
+  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || ""
 };
 
-// Initialize Firebase App
-export const app = initializeApp(firebaseConfig);
+export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+
+if (!isFirebaseConfigured && typeof console !== 'undefined') {
+  console.warn('[Firebase] Missing VITE_FIREBASE_* environment variables in .env. Running in local offline mode.');
+}
+
+// Initialize Firebase App only when environment credentials are provided
+export const app = isFirebaseConfigured ? initializeApp(firebaseConfig) : null;
 
 // Clean up stale Firestore multi-tab state keys from localStorage that exceed the 5MB browser quota
 if (typeof window !== 'undefined' && window.localStorage) {
@@ -42,15 +48,17 @@ if (typeof window !== 'undefined' && window.localStorage) {
 // and prevent localStorage quota exhaustion. The PMS maintains its own instant offline persistence
 // in localStorage (hotel_astha_pms_v5), while Firestore operates purely as a live cloud synchronization engine.
 let firestoreInstance = null;
-try {
-  firestoreInstance = initializeFirestore(app, {
-    localCache: memoryLocalCache()
-  });
-} catch (e) {
+if (app) {
   try {
-    firestoreInstance = getFirestore(app);
-  } catch (err) {
-    console.warn('[Firebase] Firestore fallback initialization error:', err);
+    firestoreInstance = initializeFirestore(app, {
+      localCache: memoryLocalCache()
+    });
+  } catch (e) {
+    try {
+      firestoreInstance = getFirestore(app);
+    } catch (err) {
+      console.warn('[Firebase] Firestore fallback initialization error:', err);
+    }
   }
 }
 export const db = firestoreInstance;
@@ -59,7 +67,7 @@ export const db = firestoreInstance;
 // when Authentication has not yet been activated in the Firebase Console.
 let _authInstance = null;
 export const getFirebaseAuth = () => {
-  if (!_authInstance && typeof window !== 'undefined') {
+  if (!_authInstance && app && typeof window !== 'undefined') {
     try {
       _authInstance = getAuth(app);
     } catch (e) {
@@ -79,11 +87,11 @@ export const auth = new Proxy({}, {
 });
 
 // Initialize Cloud Storage
-export const storage = getStorage(app);
+export const storage = app ? getStorage(app) : null;
 
 // Initialize Analytics safely
 export let analytics = null;
-if (typeof window !== 'undefined') {
+if (app && typeof window !== 'undefined') {
   isAnalyticsSupported().then((supported) => {
     if (supported) {
       analytics = getAnalytics(app);

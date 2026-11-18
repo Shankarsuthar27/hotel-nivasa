@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   UserPlus,
@@ -51,8 +51,44 @@ export default function MyTeamView({
   const [previewEmailMember, setPreviewEmailMember] = useState(null);
   const [createdCredentials, setCreatedCredentials] = useState(null);
 
-  // Action Menu dropdown state: memberId or null
+  // Action Menu dropdown state: memberId or null + fixed viewport position (avoids clipping inside overflow table)
   const [openActionMenuId, setOpenActionMenuId] = useState(null);
+  const [actionMenuPos, setActionMenuPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (!openActionMenuId) return;
+    const handleDismiss = () => setOpenActionMenuId(null);
+    const handleKey = (e) => {
+      if (e.key === 'Escape') setOpenActionMenuId(null);
+    };
+    window.addEventListener('scroll', handleDismiss, true);
+    window.addEventListener('resize', handleDismiss);
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      window.removeEventListener('scroll', handleDismiss, true);
+      window.removeEventListener('resize', handleDismiss);
+      window.removeEventListener('keydown', handleKey);
+    };
+  }, [openActionMenuId]);
+
+  const handleToggleActionMenu = (e, memberId) => {
+    e.stopPropagation();
+    if (openActionMenuId === memberId) {
+      setOpenActionMenuId(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 196;
+    const menuHeight = 172;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpward = spaceBelow < menuHeight + 16;
+
+    setActionMenuPos({
+      top: openUpward ? Math.max(10, rect.top - menuHeight - 6) : rect.bottom + 6,
+      left: Math.max(10, Math.min(window.innerWidth - menuWidth - 12, rect.right - menuWidth))
+    });
+    setOpenActionMenuId(memberId);
+  };
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -354,121 +390,14 @@ export default function MyTeamView({
                         </td>
 
                         {/* 6. Action Menu */}
-                        <td style={{ textAlign: 'center', position: 'relative' }}>
+                        <td style={{ textAlign: 'center' }}>
                           <button
                             type="button"
                             className="my-team-action-dots-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenActionMenuId(openActionMenuId === member.id ? null : member.id);
-                            }}
+                            onClick={(e) => handleToggleActionMenu(e, member.id)}
                           >
                             <MoreVertical size={16} />
                           </button>
-
-                          {/* Action Popover Menu */}
-                          {openActionMenuId === member.id && (
-                            <div
-                              className="my-team-action-menu"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {isInvited && (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="my-team-action-item"
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      setPreviewEmailMember(member);
-                                    }}
-                                  >
-                                    <Mail size={14} color="#2563EB" />
-                                    <span>Preview Invite Email</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="my-team-action-item"
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      if (onNavigateToAccept && member.invitationToken) {
-                                        onNavigateToAccept(member.invitationToken);
-                                      }
-                                    }}
-                                  >
-                                    <ExternalLink size={14} color="#059669" />
-                                    <span>Open Accept Flow</span>
-                                  </button>
-                                  <div className="my-team-menu-divider" />
-                                  <button
-                                    type="button"
-                                    className="my-team-action-item danger"
-                                    onClick={() => handleRemoveInvite(member)}
-                                  >
-                                    <Trash2 size={14} />
-                                    <span>Remove Invitation</span>
-                                  </button>
-                                </>
-                              )}
-
-                              {(isActive || isSuspended) && (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="my-team-action-item"
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      setEditingMember(member);
-                                    }}
-                                  >
-                                    <Pencil size={14} color="#334155" />
-                                    <span>Edit Member</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="my-team-action-item"
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      if (onManagePermissions) {
-                                        onManagePermissions(member.id);
-                                      }
-                                    }}
-                                  >
-                                    <Lock size={14} color="#334155" />
-                                    <span>Manage Permissions</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="my-team-action-item"
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      if (onToggleStaffStatus) {
-                                        onToggleStaffStatus(member.id);
-                                      }
-                                      if (showToast) {
-                                        showToast(
-                                          isSuspended
-                                            ? `Reactivated ${member.name}'s account.`
-                                            : `Suspended ${member.name}'s account.`
-                                        );
-                                      }
-                                    }}
-                                  >
-                                    <Ban size={14} color={isSuspended ? '#059669' : '#D97706'} />
-                                    <span>{isSuspended ? 'Reactivate Account' : 'Suspend Account'}</span>
-                                  </button>
-                                  <div className="my-team-menu-divider" />
-                                  <button
-                                    type="button"
-                                    className="my-team-action-item danger"
-                                    onClick={() => handleRemoveActiveMember(member)}
-                                  >
-                                    <Trash2 size={14} color="#EF4444" />
-                                    <span>Remove Member</span>
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          )}
                         </td>
                       </tr>
                     );
@@ -476,6 +405,122 @@ export default function MyTeamView({
                 </tbody>
               </table>
             </div>
+
+            {/* Fixed-position Action Popover (rendered outside overflow table so it never clips or causes scrollbars) */}
+            {openActionMenuId && (() => {
+              const member = visibleMembers.find((m) => m.id === openActionMenuId);
+              if (!member) return null;
+              const isInvited = member.status === 'INVITED';
+              const isSuspended = member.status === 'SUSPENDED' || member.status === 'INACTIVE';
+              const isActive = !isInvited && !isSuspended;
+
+              return (
+                <div
+                  className="my-team-action-menu"
+                  style={{
+                    top: `${actionMenuPos.top}px`,
+                    left: `${actionMenuPos.left}px`
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {isInvited && (
+                    <>
+                      <button
+                        type="button"
+                        className="my-team-action-item"
+                        onClick={() => {
+                          setOpenActionMenuId(null);
+                          setPreviewEmailMember(member);
+                        }}
+                      >
+                        <Mail size={14} color="#2563EB" />
+                        <span>Preview Invite Email</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="my-team-action-item"
+                        onClick={() => {
+                          setOpenActionMenuId(null);
+                          if (onNavigateToAccept && member.invitationToken) {
+                            onNavigateToAccept(member.invitationToken);
+                          }
+                        }}
+                      >
+                        <ExternalLink size={14} color="#059669" />
+                        <span>Open Accept Flow</span>
+                      </button>
+                      <div className="my-team-menu-divider" />
+                      <button
+                        type="button"
+                        className="my-team-action-item danger"
+                        onClick={() => handleRemoveInvite(member)}
+                      >
+                        <Trash2 size={14} />
+                        <span>Remove Invitation</span>
+                      </button>
+                    </>
+                  )}
+
+                  {(isActive || isSuspended) && (
+                    <>
+                      <button
+                        type="button"
+                        className="my-team-action-item"
+                        onClick={() => {
+                          setOpenActionMenuId(null);
+                          setEditingMember(member);
+                        }}
+                      >
+                        <Pencil size={14} color="#334155" />
+                        <span>Edit Member</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="my-team-action-item"
+                        onClick={() => {
+                          setOpenActionMenuId(null);
+                          if (onManagePermissions) {
+                            onManagePermissions(member.id);
+                          }
+                        }}
+                      >
+                        <Lock size={14} color="#334155" />
+                        <span>Manage Permissions</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="my-team-action-item"
+                        onClick={() => {
+                          setOpenActionMenuId(null);
+                          if (onToggleStaffStatus) {
+                            onToggleStaffStatus(member.id);
+                          }
+                          if (showToast) {
+                            showToast(
+                              isSuspended
+                                ? `Reactivated ${member.name}'s account.`
+                                : `Suspended ${member.name}'s account.`
+                            );
+                          }
+                        }}
+                      >
+                        <Ban size={14} color={isSuspended ? '#059669' : '#D97706'} />
+                        <span>{isSuspended ? 'Reactivate Account' : 'Suspend Account'}</span>
+                      </button>
+                      <div className="my-team-menu-divider" />
+                      <button
+                        type="button"
+                        className="my-team-action-item danger"
+                        onClick={() => handleRemoveActiveMember(member)}
+                      >
+                        <Trash2 size={14} color="#EF4444" />
+                        <span>Remove Member</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Pagination Footer */}
             <div className="my-team-pagination-footer">

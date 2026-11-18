@@ -129,10 +129,13 @@ service cloud.firestore {
           || (isActiveStaff(propertyId) && staffData(propertyId).permissions.reservations.nightAudit == true);
       }
 
-      // Audit Trail (append-only for active staff, read for Owner / Auditors)
+      // Audit Trail (append-only for active staff, read for Owner / Auditors / Reservations staff)
       match /auditTrail/{logId} {
         allow read: if isOwner(propertyId)
-          || (isActiveStaff(propertyId) && staffData(propertyId).permissions.reports.accessReports == true);
+          || (isActiveStaff(propertyId) && (
+            staffData(propertyId).permissions.reports.accessReports == true
+            || staffData(propertyId).permissions.reservations.view == true
+          ));
         allow create: if isActiveStaff(propertyId);
         allow update, delete: if false;
       }

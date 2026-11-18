@@ -133,15 +133,12 @@ export default function App() {
     return unsubscribe;
   }, []);
 
-  // Listen to live Firebase Auth state
+  // Keep Firebase Auth cleanly synchronized: NEVER auto-login from cached/anonymous Firebase sessions
   useEffect(() => {
     const unsubscribeAuth = subscribeToStaffAuth((firebaseUser) => {
       if (firebaseUser && !pmsStore.isAuthenticated) {
-        pmsStore.loginUser({
-          id: firebaseUser.uid,
-          email: firebaseUser.email,
-          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Staff Member'
-        });
+        // Clear lingering Firebase Auth / anonymous session so refresh never auto-logs into a ghost "Staff Member"
+        logoutStaff();
       }
     });
     return () => {
@@ -182,9 +179,9 @@ export default function App() {
     navigate('/login');
   };
 
-  // Route Protection Guard: Require authentication for PMS routes
+  // Route Protection Guard: Require authentication for PMS routes & respect RBAC on redirect
   useEffect(() => {
-    if (!state.isAuthenticated) {
+    if (!state.isAuthenticated || !state.currentUser) {
       if (activeTab !== 'login' && activeTab !== 'accept-invite') {
         try {
           const intended = window.location.pathname + window.location.search;
@@ -196,18 +193,22 @@ export default function App() {
       }
     } else {
       if (activeTab === 'login') {
-        let dest = '/dashboard';
+        const firstAllowed = getFirstAllowedTab(state.currentUser);
+        let dest = firstAllowed === 'myteam' ? '/my-team' : `/${firstAllowed}`;
         try {
           const intended = sessionStorage.getItem('pms_intended_dest');
           if (intended && intended !== '/login' && intended !== '/') {
-            dest = intended;
+            const intendedTab = intended.replace(/^\//, '').split(/[/?]/)[0].replace('my-team', 'myteam');
+            if (canAccessRoute(state.currentUser, intendedTab)) {
+              dest = intended;
+            }
             sessionStorage.removeItem('pms_intended_dest');
           }
         } catch (e) {}
         navigate(dest, { replace: true });
       }
     }
-  }, [state.isAuthenticated, activeTab]);
+  }, [state.isAuthenticated, state.currentUser, activeTab]);
 
   // Update browser document title based on endpoint URL
   useEffect(() => {
@@ -303,8 +304,8 @@ export default function App() {
     if (updated) setSelectedReservation(updated);
   };
 
-  const handleSettleFolio = (resId, mode, ref) => {
-    pmsStore.settleFolio(resId, mode, ref);
+  const handleSettleFolio = (resId, mode, ref, date, amount) => {
+    pmsStore.settleFolio(resId, mode, ref, date, amount);
     showToast(`✅ Folio balance settled in full via ${mode}`);
     const updated = pmsStore.getState().reservations.find((r) => r.id === resId);
     if (updated) setSelectedReservation(updated);
@@ -378,7 +379,7 @@ export default function App() {
       )}
 
       {/* Auth Gate: If not authenticated and not on public accept-invite, show Staff Sign In */}
-      {!state.isAuthenticated && activeTab !== 'accept-invite' ? (
+      {(!state.isAuthenticated || !state.currentUser) && activeTab !== 'accept-invite' ? (
         <LoginView onLoginSuccess={handleLoginSuccess} teamMembers={state.teamMembers} />
       ) : activeTab === 'login' ? (
         <LoginView onLoginSuccess={handleLoginSuccess} teamMembers={state.teamMembers} />

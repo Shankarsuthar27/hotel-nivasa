@@ -24,7 +24,12 @@ export default function RoomCard({
   activeReservation
 }) {
   const roomNumber = room?.roomNumber || '101';
-  const isOccupied = !!activeReservation;
+  const activeResStatus = String(activeReservation?.status || '')
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  const isOccupied =
+    !!activeReservation &&
+    (activeResStatus === 'in_house' || activeResStatus === 'checked_in');
   const isDirty = !isOccupied && room?.status === 'dirty';
   const isMaintenance = !isOccupied && room?.status === 'maintenance';
   const isAvailable = !isOccupied && !isDirty && !isMaintenance;

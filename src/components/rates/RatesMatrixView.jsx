@@ -1,15 +1,40 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import {
   ChevronLeft,
   ChevronRight,
-  ChevronsRight,
   ChevronDown,
   Calendar as CalendarIcon,
   BedDouble,
   Info
 } from 'lucide-react';
 import BulkUpdateModal from './BulkUpdateModal';
+import SlidingTabBar from '../common/SlidingTabBar';
+import { CustomCalendar } from '../common/CustomDatePicker';
+import { getTodayIsoDate, normalizeDateStr } from '../../services/dateUtils';
 import './rates-inventory.css';
+
+const COL_WIDTH = 78;
+const BUFFER_PAST_DAYS = 7;
+const BUFFER_FUTURE_DAYS = 45;
+const TOTAL_DAYS = BUFFER_PAST_DAYS + BUFFER_FUTURE_DAYS;
+const ARROW_SCROLL_DAYS = 5;
+
+const MATRIX_TABS = [
+  { id: 'rates', label: 'Rates' },
+  { id: 'min_nights', label: 'Minimum Nights' },
+  { id: 'stop_sell', label: 'Stop Sell' }
+];
+
+function parseIsoToLocalDate(isoStr) {
+  const clean = normalizeDateStr(isoStr);
+  if (clean && /^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+    const [y, m, d] = clean.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
 
 export default function RatesMatrixView({
   roomTypes = [],
@@ -26,58 +51,59 @@ export default function RatesMatrixView({
   onSaveRates,
   ratePlans = []
 }) {
+  // Top matrix tab: 'rates' | 'min_nights' | 'stop_sell'
+  const [activeMatrixTab, setActiveMatrixTab] = useState('rates');
+
   // Radio button for rate tier: 'base' | 'extra_adult' | 'extra_child'
   const [rateTier, setRateTier] = useState('base');
 
-  // Room filter dropdown: 'ALL' | 'rt_deluxe' | 'rt_standard'
+  // Room filter dropdown: 'ALL' | roomTypeId
   const [selectedRoomFilter, setSelectedRoomFilter] = useState('ALL');
 
   // Modals & Popovers
   const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [datePickerPos, setDatePickerPos] = useState({ top: 0, left: 0 });
   const [activeInfoId, setActiveInfoId] = useState(null);
 
-  // Base date initialized to 3 Nov 2026 (matching system date & screenshot)
-  const [baseDate, setBaseDate] = useState(() => {
-    if (property?.businessDate) {
-      const [y, m, d] = property.businessDate.split('-').map(Number);
-      return new Date(y, m - 1, d);
-    }
-    return new Date(2026, 10, 3); // 3 Nov 2026
-  });
+  const todayIsoStr = property?.businessDate || getTodayIsoDate();
 
-  const todayIsoStr = property?.businessDate || '2026-11-03';
+  // Anchor base date for the continuous horizontal timeline buffer
+  const [baseDate, setBaseDate] = useState(() => parseIsoToLocalDate(todayIsoStr));
+  const [visibleDate, setVisibleDate] = useState(() => parseIsoToLocalDate(todayIsoStr));
 
-  // Exactly 12 visible days in matrix as shown in reference image (3 Nov to 14 Nov)
-  const daysCount = 12;
-
-  // Unsaved local edits: { [rateTier]: { [cellKey]: val } }
+  // Unsaved local edits: { [tierKey]: { [cellKey]: val } }
   const [localRateEdits, setLocalRateEdits] = useState({});
 
-  // Close datepicker popover on outside click
-  const datePickerRef = useRef(null);
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (datePickerRef.current && !datePickerRef.current.contains(event.target)) {
-        setIsDatePickerOpen(false);
-      }
-    }
-    if (isDatePickerOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isDatePickerOpen]);
+  // Scroll container & elevation cue states
+  const scrollViewportRef = useRef(null);
+  const headerRowRef = useRef(null);
+  const datePickerTriggerRef = useRef(null);
+  const isInitialScrollDone = useRef(false);
+  const lastVisibleIsoRef = useRef('');
+  const scrollDateTimerRef = useRef(null);
 
-  // Generate 12 date columns starting from baseDate
+  const [scrollEdges, setScrollEdges] = useState({
+    scrolledX: false,
+    scrolledY: false,
+    hasScrollBelow: false
+  });
+
+  // Compute start date of the 52-day horizontal timeline buffer
+  const bufferStartDate = useMemo(() => {
+    const d = new Date(baseDate);
+    d.setDate(d.getDate() - BUFFER_PAST_DAYS);
+    return d;
+  }, [baseDate]);
+
+  // Generate continuous date columns for smooth multi-week horizontal scrolling
   const dateColumns = useMemo(() => {
     const cols = [];
     const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
     const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
-    for (let i = 0; i < daysCount; i++) {
-      const d = new Date(baseDate);
+    for (let i = 0; i < TOTAL_DAYS; i++) {
+      const d = new Date(bufferStartDate);
       d.setDate(d.getDate() + i);
 
       const year = d.getFullYear();
@@ -87,7 +113,7 @@ export default function RatesMatrixView({
 
       const isoStr = `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
       const isToday = isoStr === todayIsoStr;
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
       cols.push({
         date: d,
@@ -100,48 +126,190 @@ export default function RatesMatrixView({
       });
     }
     return cols;
-  }, [baseDate, todayIsoStr]);
+  }, [bufferStartDate, todayIsoStr]);
 
-  // Formatted date string for input pill: DD/MM/YYYY (e.g. 03/11/2026)
+  // Formatted date string for top-left input pill: DD/MM/YYYY
   const formattedDateDisplay = useMemo(() => {
-    const d = baseDate.getDate();
-    const m = baseDate.getMonth() + 1;
-    const y = baseDate.getFullYear();
+    const target = visibleDate || baseDate;
+    const d = target.getDate();
+    const m = target.getMonth() + 1;
+    const y = target.getFullYear();
     return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
-  }, [baseDate]);
+  }, [visibleDate, baseDate]);
 
-  // Navigation handlers
-  const handlePrevDay = () => {
-    const d = new Date(baseDate);
-    d.setDate(d.getDate() - 1);
-    setBaseDate(d);
-  };
+  // Sync elevation shadow cues + visible leftmost date on scroll
+  const updateScrollState = useCallback(() => {
+    const el = scrollViewportRef.current;
+    if (!el) return;
 
-  const handleNextDay = () => {
-    const d = new Date(baseDate);
-    d.setDate(d.getDate() + 1);
-    setBaseDate(d);
-  };
+    const scrolledX = el.scrollLeft > 2;
+    const scrolledY = el.scrollTop > 2;
+    const hasScrollBelow = el.scrollTop + el.clientHeight < el.scrollHeight - 2;
 
-  const handleFastForward = () => {
-    const d = new Date(baseDate);
-    d.setDate(d.getDate() + 12);
-    setBaseDate(d);
-  };
+    setScrollEdges((prev) => {
+      if (
+        prev.scrolledX === scrolledX &&
+        prev.scrolledY === scrolledY &&
+        prev.hasScrollBelow === hasScrollBelow
+      ) {
+        return prev;
+      }
+      return { scrolledX, scrolledY, hasScrollBelow };
+    });
 
-  const handleSelectDate = (newDate) => {
-    setBaseDate(new Date(newDate));
-    setIsDatePickerOpen(false);
-  };
+    if (scrollDateTimerRef.current) {
+      clearTimeout(scrollDateTimerRef.current);
+    }
+    scrollDateTimerRef.current = setTimeout(() => {
+      const colIdx = Math.max(0, Math.min(dateColumns.length - 1, Math.round(el.scrollLeft / COL_WIDTH)));
+      const col = dateColumns[colIdx];
+      if (col && col.isoStr !== lastVisibleIsoRef.current) {
+        lastVisibleIsoRef.current = col.isoStr;
+        setVisibleDate(col.date);
+      }
+    }, 60);
+  }, [dateColumns]);
 
-  // Rooms configuration: dynamically mapped from roomTypes and physical rooms in store
-  const allRooms = useMemo(() => {
-    if (!roomTypes || roomTypes.length === 0) {
-      return [];
+  // Initial scroll alignment: align baseDate to the left edge of the scrollable timeline
+  useEffect(() => {
+    const el = scrollViewportRef.current;
+    if (!el) return;
+    if (!isInitialScrollDone.current) {
+      el.scrollLeft = BUFFER_PAST_DAYS * COL_WIDTH;
+      isInitialScrollDone.current = true;
+    }
+    updateScrollState();
+  }, [updateScrollState]);
+
+  // Attach passive scroll + ResizeObserver listeners for dynamic depth cues
+  useEffect(() => {
+    const el = scrollViewportRef.current;
+    if (!el) return;
+
+    const onScroll = () => updateScrollState();
+    el.addEventListener('scroll', onScroll, { passive: true });
+
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => updateScrollState());
+      ro.observe(el);
     }
 
-    // Default sort order: Delux Room first, Normal second, then others
-    const priorityOrder = { 'Delux Room': 1, 'Normal': 2, 'Premium': 3 };
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      if (ro) ro.disconnect();
+      if (scrollDateTimerRef.current) clearTimeout(scrollDateTimerRef.current);
+    };
+  }, [updateScrollState]);
+
+  // Allow scrolling mouse wheel while hovering the sticky date header to smoothly pan horizontally
+  useEffect(() => {
+    const headerEl = headerRowRef.current;
+    if (!headerEl) return;
+
+    const onWheel = (e) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && scrollViewportRef.current) {
+        if (e.cancelable) e.preventDefault();
+        scrollViewportRef.current.scrollLeft += e.deltaY;
+      }
+    };
+
+    headerEl.addEventListener('wheel', onWheel, { passive: false });
+    return () => headerEl.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // Arrow Pagination (< / >): Smooth scrollBy by 5 days; seamlessly extends buffer near edges
+  const handleScrollPrev = useCallback(() => {
+    const el = scrollViewportRef.current;
+    if (!el) return;
+    const stepPx = ARROW_SCROLL_DAYS * COL_WIDTH;
+
+    if (el.scrollLeft < stepPx) {
+      const shiftDays = 14;
+      setBaseDate((prev) => {
+        const next = new Date(prev);
+        next.setDate(next.getDate() - shiftDays);
+        return next;
+      });
+      requestAnimationFrame(() => {
+        if (scrollViewportRef.current) {
+          scrollViewportRef.current.scrollLeft += shiftDays * COL_WIDTH;
+          scrollViewportRef.current.scrollBy({ left: -stepPx, behavior: 'smooth' });
+        }
+      });
+      return;
+    }
+
+    el.scrollBy({ left: -stepPx, behavior: 'smooth' });
+  }, []);
+
+  const handleScrollNext = useCallback(() => {
+    const el = scrollViewportRef.current;
+    if (!el) return;
+    const stepPx = ARROW_SCROLL_DAYS * COL_WIDTH;
+    const remainingRight = el.scrollWidth - el.clientWidth - el.scrollLeft;
+
+    if (remainingRight < stepPx) {
+      const shiftDays = 14;
+      setBaseDate((prev) => {
+        const next = new Date(prev);
+        next.setDate(next.getDate() + shiftDays);
+        return next;
+      });
+      requestAnimationFrame(() => {
+        if (scrollViewportRef.current) {
+          scrollViewportRef.current.scrollLeft = Math.max(0, scrollViewportRef.current.scrollLeft - shiftDays * COL_WIDTH);
+          scrollViewportRef.current.scrollBy({ left: stepPx, behavior: 'smooth' });
+        }
+      });
+      return;
+    }
+
+    el.scrollBy({ left: stepPx, behavior: 'smooth' });
+  }, []);
+
+  // Portal DatePicker toggle & selection
+  const openDatePicker = () => {
+    if (isDatePickerOpen) {
+      setIsDatePickerOpen(false);
+      return;
+    }
+    if (datePickerTriggerRef.current) {
+      const rect = datePickerTriggerRef.current.getBoundingClientRect();
+      const left = Math.min(Math.max(12, rect.left), (window.innerWidth || 1200) - 332);
+      const top = Math.min(rect.bottom + 8, (window.innerHeight || 800) - 350);
+      setDatePickerPos({ top: Math.max(12, top), left });
+    }
+    setIsDatePickerOpen(true);
+  };
+
+  const handleSelectDate = (isoStr) => {
+    const picked = parseIsoToLocalDate(isoStr);
+    setIsDatePickerOpen(false);
+
+    const targetIdx = dateColumns.findIndex((c) => c.isoStr === isoStr);
+    if (targetIdx >= 0 && scrollViewportRef.current) {
+      scrollViewportRef.current.scrollTo({
+        left: targetIdx * COL_WIDTH,
+        behavior: 'smooth'
+      });
+      setVisibleDate(picked);
+    } else {
+      setBaseDate(picked);
+      setVisibleDate(picked);
+      requestAnimationFrame(() => {
+        if (scrollViewportRef.current) {
+          scrollViewportRef.current.scrollLeft = BUFFER_PAST_DAYS * COL_WIDTH;
+        }
+      });
+    }
+  };
+
+  // Rooms & Rate Plans configuration
+  const allRooms = useMemo(() => {
+    if (!roomTypes || roomTypes.length === 0) return [];
+
+    const priorityOrder = { 'Delux Room': 1, 'Deluxe Room': 1, 'Normal': 2, 'Premium': 3, 'Ultra Premium': 4 };
     const sorted = [...roomTypes].sort((a, b) => (priorityOrder[a.name] || 99) - (priorityOrder[b.name] || 99));
 
     return sorted.map((rt) => {
@@ -152,18 +320,52 @@ export default function RatesMatrixView({
           (rt.id === 'rt_normal' && r.roomTypeId === 'rt_standard')
       );
 
+      // Find active rate plans configured for this room type (e.g. STR, 132)
+      const activePlans = (ratePlans || [])
+        .filter((rp) => {
+          if (!rp || String(rp.status || 'ACTIVE').toUpperCase() === 'INACTIVE') return false;
+          if (!rp.roomTypeRates) return true;
+          const rtEntry = rp.roomTypeRates[rt.id];
+          return rtEntry ? rtEntry.active !== false : true;
+        })
+        .map((rp) => ({
+          id: rp.id || rp.code,
+          code: rp.code || rp.name || rt.code || 'BAR',
+          name: rp.name || rp.code || 'Standard Rate',
+          mealPlanName: rp.mealPlanName || 'Room Only (EP)',
+          basePrice: rp.roomTypeRates?.[rt.id]?.basePrice ?? rt.basePrice ?? 1000,
+          extraAdult: rp.roomTypeRates?.[rt.id]?.extraAdult ?? rt.extraAdultPrice ?? 800,
+          extraChild: rp.roomTypeRates?.[rt.id]?.extraChild ?? rt.extraChildPrice ?? 400
+        }));
+
+      const resolvedPlans =
+        activePlans.length > 0
+          ? activePlans
+          : [
+              {
+                id: `${rt.id}_default`,
+                code: rt.code || 'STR',
+                name: 'Standard Rate Plan',
+                mealPlanName: 'European Plan (EP) - Room Only',
+                basePrice: rt.basePrice || 1000,
+                extraAdult: rt.extraAdultPrice || 800,
+                extraChild: rt.extraChildPrice || 400
+              }
+            ];
+
       return {
         id: rt.id,
         name: rt.name,
-        code: rt.code || '132',
-        rateCode: rt.code || '132',
+        code: rt.code || 'STR',
+        rateCode: resolvedPlans[0].code,
+        plans: resolvedPlans,
         totalRooms: matchingPhysicalRooms.length,
         basePrice: rt.basePrice || 1000,
         extraAdultPrice: rt.extraAdultPrice || 800,
         extraChildPrice: rt.extraChildPrice || 400
       };
     });
-  }, [roomTypes, rooms]);
+  }, [roomTypes, rooms, ratePlans]);
 
   // Filtered rooms based on dropdown
   const visibleRooms = useMemo(() => {
@@ -171,123 +373,148 @@ export default function RatesMatrixView({
     return allRooms.filter((r) => r.id === selectedRoomFilter);
   }, [allRooms, selectedRoomFilter]);
 
-  // Inventory numbers: dynamically computed from total physical rooms, active reservations, and maintenance blocks
-  const getRoomInventory = (room, col) => {
-    const matchingPhysicalRooms = (rooms || []).filter(
-      (r) =>
-        r.roomTypeId === room.id ||
-        (room.id === 'rt_standard' && r.roomTypeId === 'rt_normal') ||
-        (room.id === 'rt_normal' && r.roomTypeId === 'rt_standard')
-    );
-    const total = matchingPhysicalRooms.length;
+  // Inventory computation per room type & date
+  const getRoomInventory = useCallback(
+    (room, col) => {
+      const matchingPhysicalRooms = (rooms || []).filter(
+        (r) =>
+          r.roomTypeId === room.id ||
+          (room.id === 'rt_standard' && r.roomTypeId === 'rt_normal') ||
+          (room.id === 'rt_normal' && r.roomTypeId === 'rt_standard')
+      );
+      const total = matchingPhysicalRooms.length;
 
-    // Check active reservations overlapping col.isoStr
-    const bookedCount = (reservations || []).filter((r) => {
-      if (r.status === 'cancelled' || r.status === 'no_show') return false;
-      const isRoomTypeMatch =
-        r.roomTypeId === room.id ||
-        (room.id === 'rt_standard' && r.roomTypeId === 'rt_normal') ||
-        (room.id === 'rt_normal' && r.roomTypeId === 'rt_standard') ||
-        matchingPhysicalRooms.some((rm) => rm.id === r.roomId);
+      const bookedCount = (reservations || []).filter((r) => {
+        if (!r) return false;
+        const st = String(r.status || '').toLowerCase().replace(/[\s-]+/g, '_');
+        if (st === 'cancelled' || st === 'canceled' || st === 'no_show' || st === 'checked_out' || st === 'departed') {
+          return false;
+        }
+        const isRoomTypeMatch =
+          r.roomTypeId === room.id ||
+          (room.id === 'rt_standard' && r.roomTypeId === 'rt_normal') ||
+          (room.id === 'rt_normal' && r.roomTypeId === 'rt_standard') ||
+          matchingPhysicalRooms.some((rm) => rm.id === r.roomId || String(rm.roomNumber) === String(r.roomNumber));
 
-      if (!isRoomTypeMatch) return false;
-      return col.isoStr >= r.checkInDate && col.isoStr < r.checkOutDate;
-    }).length;
+        if (!isRoomTypeMatch) return false;
+        const cIn = normalizeDateStr(r.checkInDate);
+        const cOut = normalizeDateStr(r.checkOutDate);
+        return col.isoStr >= cIn && col.isoStr < cOut;
+      }).length;
 
-    // Check maintenance blocks on col.isoStr
-    const maintenanceCount = (maintenanceBlocks || []).filter((mb) => {
-      const isRoomMatch = matchingPhysicalRooms.some((rm) => rm.id === mb.roomId);
-      if (!isRoomMatch) return false;
-      const start = mb.startDate;
-      const end = mb.endDate || mb.startDate;
-      return col.isoStr >= start && col.isoStr <= end;
-    }).length;
+      const maintenanceCount = (maintenanceBlocks || []).filter((mb) => {
+        if (!mb) return false;
+        const mbSt = String(mb.status || '').toLowerCase();
+        if (mbSt === 'cancelled' || mbSt === 'completed' || mbSt === 'released') return false;
+        const isRoomMatch = matchingPhysicalRooms.some(
+          (rm) => rm.id === mb.roomId || String(rm.roomNumber) === String(mb.roomNumber)
+        );
+        if (!isRoomMatch) return false;
+        const start = normalizeDateStr(mb.startDate);
+        const end = normalizeDateStr(mb.endDate || mb.startDate);
+        return col.isoStr >= start && col.isoStr <= end;
+      }).length;
 
-    const available = Math.max(0, total - bookedCount - maintenanceCount);
+      const available = Math.max(0, total - bookedCount - maintenanceCount);
 
-    return {
-      available,
-      total,
-      sold: bookedCount
-    };
+      return { available, total, sold: bookedCount };
+    },
+    [rooms, reservations, maintenanceBlocks]
+  );
+
+  // Resolve cell key for primary plan vs additional rate plan
+  const getCellKey = (rtId, plan, planIndex, dateStr) => {
+    if (planIndex === 0) return `${rtId}_${dateStr}`;
+    return `${rtId}_${plan.code}_${dateStr}`;
   };
 
-  // Helper to get effective rate for a cell
-  const getRateForCell = (rtId, dateStr, tier = rateTier) => {
-    const key = `${rtId}_${dateStr}`;
-    // 1. Check local unsaved edits
-    if (localRateEdits[tier] && localRateEdits[tier][key] !== undefined) {
-      return localRateEdits[tier][key];
+  // Effective rate or min-nights value for a cell
+  const getCellValue = (room, plan, planIndex, dateStr, tierKey) => {
+    const key = getCellKey(room.id, plan, planIndex, dateStr);
+    if (localRateEdits[tierKey] && localRateEdits[tierKey][key] !== undefined) {
+      return localRateEdits[tierKey][key];
     }
-    // 2. Check store dailyRates
-    if (dailyRates && dailyRates[tier] && dailyRates[tier][key] !== undefined) {
-      return dailyRates[tier][key];
+    if (dailyRates && dailyRates[tierKey] && dailyRates[tierKey][key] !== undefined) {
+      return dailyRates[tierKey][key];
     }
-    if (rtId === 'rt_standard') {
+    if (planIndex === 0 && room.id === 'rt_standard') {
       const altKey = `rt_normal_${dateStr}`;
-      if (dailyRates && dailyRates[tier] && dailyRates[tier][altKey] !== undefined) {
-        return dailyRates[tier][altKey];
+      if (dailyRates && dailyRates[tierKey] && dailyRates[tierKey][altKey] !== undefined) {
+        return dailyRates[tierKey][altKey];
       }
     }
 
-    // 3. Fallback to room type configured base/extra rates
-    const currentRt = (roomTypes || []).find((r) => r.id === rtId);
-    if (tier === 'base') {
-      if (rtId === 'rt_deluxe') {
-        if (dateStr === '2026-11-05' || dateStr === '2026-11-06') {
-          return 1000;
-        }
-        return currentRt?.basePrice || 2500;
-      }
-      return currentRt?.basePrice || 1000;
+    if (tierKey === 'min_nights') {
+      const resKey = `${room.id}_${dateStr}`;
+      return restrictions?.[resKey]?.minStay ?? 1;
     }
-    if (tier === 'extra_adult') return currentRt?.extraAdultPrice || (rtId === 'rt_deluxe' ? 1000 : 800);
-    if (tier === 'extra_child') return currentRt?.extraChildPrice || (rtId === 'rt_deluxe' ? 500 : 400);
+
+    if (tierKey === 'base') {
+      if (planIndex === 0 && room.id === 'rt_deluxe' && (dateStr === '2026-11-05' || dateStr === '2026-11-06')) {
+        return 1000;
+      }
+      return plan.basePrice ?? room.basePrice ?? 1000;
+    }
+    if (tierKey === 'extra_adult') return plan.extraAdult ?? room.extraAdultPrice ?? 800;
+    if (tierKey === 'extra_child') return plan.extraChild ?? room.extraChildPrice ?? 400;
     return 1000;
   };
 
-  // Rate change handler
-  const handleRateChange = (roomId, dateStr, val) => {
+  const activeTierKey = activeMatrixTab === 'min_nights' ? 'min_nights' : rateTier;
+  const hasUnsavedEdits = Object.keys(localRateEdits[activeTierKey] || {}).length > 0;
+
+  const handleCellEdit = (cellKey, val) => {
     setLocalRateEdits((prev) => ({
       ...prev,
-      [rateTier]: {
-        ...(prev[rateTier] || {}),
-        [`${roomId}_${dateStr}`]: val
+      [activeTierKey]: {
+        ...(prev[activeTierKey] || {}),
+        [cellKey]: val
       }
     }));
   };
 
-  // Save handler: commits rates to store & persists
+  // Save handler: commits edited cells to store & persists
   const handleSaveRates = () => {
-    const currentEdits = localRateEdits[rateTier] || {};
+    const currentEdits = localRateEdits[activeTierKey] || {};
     const payloadRates = {};
 
     visibleRooms.forEach((room) => {
-      dateColumns.forEach((col) => {
-        const key = `${room.id}_${col.isoStr}`;
-        const val = getRateForCell(room.id, col.isoStr, rateTier);
-        payloadRates[key] = Number(val);
+      room.plans.forEach((plan, pIdx) => {
+        dateColumns.forEach((col) => {
+          const key = getCellKey(room.id, plan, pIdx, col.isoStr);
+          if (currentEdits[key] !== undefined || pIdx === 0) {
+            const val = getCellValue(room, plan, pIdx, col.isoStr, activeTierKey);
+            payloadRates[key] = Number(val);
+          }
+        });
       });
     });
 
     Object.assign(payloadRates, currentEdits);
 
     if (onSaveRates) {
-      onSaveRates(payloadRates, rateTier);
+      onSaveRates(payloadRates, activeTierKey);
     } else if (onBulkUpdate) {
-      onBulkUpdate({ rates: payloadRates, tier: rateTier });
+      onBulkUpdate({ rates: payloadRates, tier: activeTierKey });
     }
 
     setLocalRateEdits((prev) => {
       const copy = { ...prev };
-      delete copy[rateTier];
+      delete copy[activeTierKey];
       return copy;
     });
 
-    const tierLabel = rateTier === 'base' ? 'Base Rates' : rateTier === 'extra_adult' ? 'Extra Adult Rates' : 'Extra Child Rates';
+    const label =
+      activeTierKey === 'min_nights'
+        ? 'Minimum Nights'
+        : activeTierKey === 'base'
+        ? 'Base Rates'
+        : activeTierKey === 'extra_adult'
+        ? 'Extra Adult Rates'
+        : 'Extra Child Rates';
     const toast = document.createElement('div');
     toast.className = 'pms-toast-notification';
-    toast.innerHTML = `<span>✅ ${tierLabel} saved successfully!</span>`;
+    toast.innerHTML = `<span>✅ ${label} saved successfully!</span>`;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 2500);
   };
@@ -301,7 +528,7 @@ export default function RatesMatrixView({
     setIsBulkOpen(false);
   };
 
-  // Calculate bottom summary values for each column
+  // Bottom 3 summary rows (Sold, Available, Total) aligned 1:1 with dateColumns
   const summaryData = useMemo(() => {
     return dateColumns.map((col) => {
       let total = 0;
@@ -317,19 +544,33 @@ export default function RatesMatrixView({
 
       return {
         isoStr: col.isoStr,
+        isWeekend: col.isWeekend,
+        isToday: col.isToday,
         sold,
         available,
         total
       };
     });
-  }, [dateColumns, visibleRooms]);
+  }, [dateColumns, visibleRooms, getRoomInventory]);
 
   return (
-    <div className="rates-page-container">
-      {/* 1. Top Sub-Toolbar: Filter + Radios + Bulk Update & Save Buttons */}
+    <div
+      className="rates-page-container"
+      style={{ '--rates-col-width': `${COL_WIDTH}px` }}
+    >
+      {/* Region 0A: Fixed Top Tab Bar (Rates, Minimum Nights, Stop Sell) */}
+      <div className="rates-top-tabs-bar">
+        <SlidingTabBar
+          tabs={MATRIX_TABS}
+          activeTab={activeMatrixTab}
+          onTabChange={setActiveMatrixTab}
+        />
+      </div>
+
+      {/* Region 0B: Fixed Secondary Filter & Action Toolbar */}
       <div className="rates-sub-toolbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
-          {/* Room Filter Dropdown */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
+          {/* All Room Types Dropdown */}
           <div style={{ position: 'relative' }}>
             <select
               value={selectedRoomFilter}
@@ -356,45 +597,53 @@ export default function RatesMatrixView({
             />
           </div>
 
-          {/* Rate Tier Radio Buttons: Base Rates | Extra Adult | Extra Child */}
-          <div className="rates-radio-group">
-            <label className={`rates-radio-label ${rateTier === 'base' ? 'active' : ''}`}>
-              <input
-                type="radio"
-                name="rateTier"
-                value="base"
-                checked={rateTier === 'base'}
-                onChange={() => setRateTier('base')}
-              />
-              <span>Base Rates</span>
-            </label>
+          {/* Rate Tier Radio Buttons on Rates tab */}
+          {activeMatrixTab === 'rates' ? (
+            <div className="rates-radio-group">
+              <label className={`rates-radio-label ${rateTier === 'base' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="rateTier"
+                  value="base"
+                  checked={rateTier === 'base'}
+                  onChange={() => setRateTier('base')}
+                />
+                <span>Base Rates</span>
+              </label>
 
-            <label className={`rates-radio-label ${rateTier === 'extra_adult' ? 'active' : ''}`}>
-              <input
-                type="radio"
-                name="rateTier"
-                value="extra_adult"
-                checked={rateTier === 'extra_adult'}
-                onChange={() => setRateTier('extra_adult')}
-              />
-              <span>Extra Adult</span>
-            </label>
+              <label className={`rates-radio-label ${rateTier === 'extra_adult' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="rateTier"
+                  value="extra_adult"
+                  checked={rateTier === 'extra_adult'}
+                  onChange={() => setRateTier('extra_adult')}
+                />
+                <span>Extra Adult</span>
+              </label>
 
-            <label className={`rates-radio-label ${rateTier === 'extra_child' ? 'active' : ''}`}>
-              <input
-                type="radio"
-                name="rateTier"
-                value="extra_child"
-                checked={rateTier === 'extra_child'}
-                onChange={() => setRateTier('extra_child')}
-              />
-              <span>Extra Child</span>
-            </label>
-          </div>
+              <label className={`rates-radio-label ${rateTier === 'extra_child' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="rateTier"
+                  value="extra_child"
+                  checked={rateTier === 'extra_child'}
+                  onChange={() => setRateTier('extra_child')}
+                />
+                <span>Extra Child</span>
+              </label>
+            </div>
+          ) : (
+            <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
+              {activeMatrixTab === 'min_nights'
+                ? 'Configure minimum length of stay per room type and date'
+                : 'Click any date cell to toggle Open / Closed stop-sell inventory'}
+            </span>
+          )}
         </div>
 
         {/* Right Action Buttons: Bulk Update + Save */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
             className="rates-action-btn-secondary"
@@ -402,163 +651,58 @@ export default function RatesMatrixView({
           >
             Bulk Update
           </button>
-          <button
-            type="button"
-            className="rates-action-btn-primary"
-            onClick={handleSaveRates}
-          >
-            Save
-          </button>
+          {activeMatrixTab !== 'stop_sell' && (
+            <button
+              type="button"
+              className={`rates-action-btn-primary ${hasUnsavedEdits ? '' : 'idle'}`}
+              onClick={handleSaveRates}
+            >
+              Save
+            </button>
+          )}
         </div>
       </div>
 
-      {/* 2. Main Rates & Inventory Grid Viewport */}
-      <div className="rates-grid-viewport">
+      {/* Synchronized Multi-Axis 4-Region Scroll Container */}
+      <div
+        ref={scrollViewportRef}
+        className={`rates-grid-viewport ${scrollEdges.scrolledX ? 'scrolled-x' : ''} ${
+          scrollEdges.scrolledY ? 'scrolled-y' : ''
+        } ${scrollEdges.hasScrollBelow ? 'has-scroll-below' : ''}`}
+      >
         <div className="rates-grid-table">
-          
-          {/* Header Row: Date Controls and 12 Date Cards */}
-          <div className="rates-header-row">
-            
-            {/* Left Sticky Date Navigation Column */}
+          {/* Region 1: Top Sticky Date Header Row */}
+          <div className="rates-header-row" ref={headerRowRef}>
+            {/* Top-Left Corner Cell (Pinned to BOTH top & left, highest z-index) */}
             <div className="rates-col-left rates-header-left">
-              {/* Prev < button */}
-              <button
-                type="button"
-                onClick={handlePrevDay}
-                title="Previous Day"
-                className="rates-nav-circle-btn"
-              >
-                <ChevronLeft size={16} />
-              </button>
-
-              {/* Date Pill Input displaying 03/11/2026 */}
+              {/* Date Pill Input (18/11/2026) */}
               <div
-                ref={datePickerRef}
-                style={{ position: 'relative', flex: 1, minWidth: 0 }}
+                ref={datePickerTriggerRef}
+                className="rates-date-pill"
+                onClick={openDatePicker}
+                title="Jump to date"
               >
-                <div
-                  className="rates-date-pill"
-                  onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
-                >
-                  <span className="rates-date-pill-text">
-                    {formattedDateDisplay}
-                  </span>
-                  <CalendarIcon size={14} style={{ color: '#64748b', flexShrink: 0 }} />
-                </div>
-
-                {/* Calendar Dropdown Popover */}
-                {isDatePickerOpen && (
-                  <div className="rates-datepicker-dropdown">
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>
-                      <span style={{ fontWeight: 700, fontSize: '13px', color: '#1e293b' }}>
-                        {baseDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                      </span>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const d = new Date(baseDate);
-                            d.setMonth(d.getMonth() - 1);
-                            setBaseDate(d);
-                          }}
-                          style={{ padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: '4px', background: '#fff', cursor: 'pointer' }}
-                        >
-                          <ChevronLeft size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const d = new Date(baseDate);
-                            d.setMonth(d.getMonth() + 1);
-                            setBaseDate(d);
-                          }}
-                          style={{ padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: '4px', background: '#fff', cursor: 'pointer' }}
-                        >
-                          <ChevronRight size={13} />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center', fontSize: '11px', marginBottom: '8px' }}>
-                      {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
-                        <div key={d} style={{ color: '#94a3b8', fontWeight: 700, padding: '2px 0' }}>{d}</div>
-                      ))}
-                      {Array.from({ length: 31 }, (_, idx) => {
-                        const dayNum = idx + 1;
-                        const testDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), dayNum);
-                        const isSelected = testDate.getDate() === baseDate.getDate();
-                        const isToday = testDate.toISOString().split('T')[0] === todayIsoStr;
-                        return (
-                          <button
-                            key={dayNum}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectDate(testDate);
-                            }}
-                            style={{
-                              aspectRatio: '1',
-                              border: isToday ? '1px solid #f43f5e' : 'none',
-                              borderRadius: '4px',
-                              background: isSelected ? '#3b82f6' : 'transparent',
-                              color: isSelected ? '#ffffff' : (isToday ? '#f43f5e' : '#1e293b'),
-                              fontWeight: isSelected || isToday ? 700 : 500,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {dayNum}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '6px', borderTop: '1px solid #f1f5f9', fontSize: '11px' }}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectDate(new Date('2026-11-03'));
-                        }}
-                        style={{ border: 'none', background: 'transparent', color: '#2563eb', fontWeight: 700, cursor: 'pointer', padding: 0 }}
-                      >
-                        Today
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsDatePickerOpen(false);
-                        }}
-                        style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', padding: 0 }}
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <span className="rates-date-pill-text">{formattedDateDisplay}</span>
+                <CalendarIcon size={15} style={{ color: '#64748b', flexShrink: 0 }} />
               </div>
 
-              {/* Next > button */}
+              {/* Left Pagination Arrow (<) */}
               <button
                 type="button"
-                onClick={handleNextDay}
-                title="Next Day"
+                onClick={handleScrollPrev}
+                title={`Scroll back ${ARROW_SCROLL_DAYS} days`}
                 className="rates-nav-circle-btn"
               >
-                <ChevronRight size={16} />
+                <ChevronLeft size={16} strokeWidth={2.2} />
               </button>
             </div>
 
-            {/* Date Header Cards (12 columns) */}
-            <div style={{ display: 'flex', flex: 1 }}>
-              {dateColumns.map((col, idx) => {
-                const isLast = idx === dateColumns.length - 1;
-
+            {/* Scrollable Horizontal Date Columns */}
+            <div className="rates-cells-track">
+              {dateColumns.map((col) => {
                 if (col.isToday) {
                   return (
-                    <div key={col.isoStr} className="rates-date-cell">
+                    <div key={col.isoStr} className="rates-date-cell is-today">
                       <div className="rates-card-today">
                         <span className="rates-card-dayname" style={{ color: '#e11d48' }}>
                           TODAY
@@ -576,7 +720,7 @@ export default function RatesMatrixView({
 
                 if (col.isWeekend) {
                   return (
-                    <div key={col.isoStr} className="rates-date-cell" style={{ position: 'relative' }}>
+                    <div key={col.isoStr} className="rates-date-cell is-weekend">
                       <div className="rates-card-weekend">
                         <span className="rates-card-dayname" style={{ color: '#ea580c' }}>
                           {col.dayName}
@@ -588,16 +732,6 @@ export default function RatesMatrixView({
                           {col.month}
                         </span>
                       </div>
-                      {isLast && (
-                        <button
-                          type="button"
-                          onClick={handleFastForward}
-                          title="Jump forward 12 days"
-                          className="rates-fast-forward-btn"
-                        >
-                          <ChevronsRight size={16} />
-                        </button>
-                      )}
                     </div>
                   );
                 }
@@ -619,144 +753,242 @@ export default function RatesMatrixView({
                 );
               })}
             </div>
+
+            {/* Right Pagination Arrow (>) Pinned to Right Edge of Date Header */}
+            <div className="rates-header-right-nav">
+              <button
+                type="button"
+                onClick={handleScrollNext}
+                title={`Scroll forward ${ARROW_SCROLL_DAYS} days`}
+                className="rates-nav-circle-btn"
+              >
+                <ChevronRight size={16} strokeWidth={2.2} />
+              </button>
+            </div>
           </div>
 
-          {/* 3. Room Rows Section */}
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {visibleRooms.map((room) => {
-              const infoPopoverKey = `info_${room.id}`;
-              const isInfoOpen = activeInfoId === infoPopoverKey;
-
-              return (
-                <React.Fragment key={room.id}>
-                  {/* Row A: Room Name & Daily Inventory */}
-                  <div className="rates-grid-row">
-                    {/* Left Sticky Cell: Bed icon + Room Name */}
-                    <div className="rates-col-left rates-room-name-cell">
-                      <BedDouble size={18} className="text-slate-700 shrink-0" />
-                      <span className="rates-room-title">{room.name}</span>
-                    </div>
-
-                    {/* Day Cells: Centered Inventory Numbers */}
-                    <div style={{ display: 'flex', flex: 1 }}>
-                      {dateColumns.map((col) => {
-                        const inv = getRoomInventory(room, col);
-
-                        return (
-                          <div key={col.isoStr} className="rates-cell">
-                            <span className="rates-inv-num">
-                              {inv.available}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
+          {/* Region 3: Vertically Scrollable Room Categories & Rate Plan Rows */}
+          <div className="rates-body-rows">
+            {visibleRooms.map((room) => (
+              <React.Fragment key={room.id}>
+                {/* Row A: Room Category Header & Daily Available Inventory */}
+                <div className="rates-grid-row rates-room-header-row">
+                  <div className="rates-col-left rates-room-name-cell">
+                    <BedDouble size={17} color="#334155" style={{ flexShrink: 0 }} />
+                    <span className="rates-room-title">{room.name}</span>
                   </div>
 
-                  {/* Row B: Rate Plan Code & Editable Matrix Cells */}
-                  <div className="rates-grid-row" style={{ borderBottom: '1px solid #eef2f6' }}>
-                    {/* Left Sticky Cell: Rate Code 132 + Info Icon */}
-                    <div className="rates-col-left rates-ratecode-cell" style={{ position: 'relative' }}>
-                      <span className="rates-ratecode-text">{room.rateCode}</span>
-                      
-                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                        <Info
-                          size={14}
-                          className="text-slate-400 hover:text-slate-600 cursor-pointer"
-                          onClick={() => setActiveInfoId(isInfoOpen ? null : infoPopoverKey)}
-                        />
+                  <div className="rates-cells-track">
+                    {dateColumns.map((col) => {
+                      const inv = getRoomInventory(room, col);
+                      return (
+                        <div
+                          key={col.isoStr}
+                          className={`rates-cell ${col.isToday ? 'is-today' : col.isWeekend ? 'is-weekend' : ''}`}
+                        >
+                          <span className={`rates-inv-num ${inv.available === 0 ? 'zero' : ''}`}>
+                            {inv.available}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
 
-                        {isInfoOpen && (
-                          <div className="rates-info-tooltip">
-                            <div style={{ fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>
-                              Rate Plan: {room.rateCode}
+                  <div className="rates-right-spacer" />
+                </div>
+
+                {/* Row B+: Rate Plan Rows (e.g. STR, 132) */}
+                {room.plans.map((plan, pIdx) => {
+                  const infoKey = `info_${room.id}_${plan.id}`;
+                  const isInfoOpen = activeInfoId === infoKey;
+                  const isLastPlan = pIdx === room.plans.length - 1;
+
+                  return (
+                    <div
+                      key={`${room.id}_${plan.id}`}
+                      className={`rates-grid-row ${isLastPlan ? 'rates-plan-last-row' : ''}`}
+                    >
+                      {/* Sticky Left Column: Rate Plan Code + Info Icon */}
+                      <div className="rates-col-left rates-ratecode-cell">
+                        <span className="rates-ratecode-text" title={plan.name}>
+                          {plan.code}
+                        </span>
+
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            className="rates-info-btn"
+                            onClick={() => setActiveInfoId(isInfoOpen ? null : infoKey)}
+                            title={`Rate Plan Info: ${plan.name}`}
+                          >
+                            <Info size={14} />
+                          </button>
+
+                          {isInfoOpen && (
+                            <div className="rates-info-tooltip">
+                              <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '12.5px', marginBottom: '4px' }}>
+                                {plan.name} ({plan.code})
+                              </div>
+                              <div style={{ color: '#64748b', fontSize: '11.5px', lineHeight: 1.45 }}>
+                                {plan.mealPlanName} · Base ₹{Number(plan.basePrice || 0).toLocaleString('en-IN')}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setActiveInfoId(null)}
+                                style={{
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#2563eb',
+                                  fontWeight: 600,
+                                  fontSize: '11.5px',
+                                  marginTop: '6px',
+                                  cursor: 'pointer',
+                                  padding: 0
+                                }}
+                              >
+                                Close
+                              </button>
                             </div>
-                            <div style={{ color: '#64748b', fontSize: '11.5px', lineHeight: 1.4 }}>
-                              European Plan (EP) - Room Only rate. Non-refundable rate policy.
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setActiveInfoId(null)}
-                              style={{ border: 'none', background: 'transparent', color: '#2563eb', fontWeight: 600, fontSize: '11px', marginTop: '6px', cursor: 'pointer', padding: 0 }}
-                            >
-                              Close
-                            </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Day Cells: Editable Rate Inputs */}
-                    <div style={{ display: 'flex', flex: 1 }}>
-                      {dateColumns.map((col) => {
-                        const currentVal = getRateForCell(room.id, col.isoStr, rateTier);
+                      {/* Scrollable Rate / Minimum Nights / Stop Sell Cells */}
+                      <div className="rates-cells-track">
+                        {dateColumns.map((col) => {
+                          const cellKey = getCellKey(room.id, plan, pIdx, col.isoStr);
+                          const isWeekendClass = col.isToday ? 'is-today' : col.isWeekend ? 'is-weekend' : '';
 
-                        return (
-                          <div key={col.isoStr} className="rates-cell">
-                            <input
-                              type="number"
-                              className="rates-cell-input-card"
-                              value={currentVal}
-                              onChange={(e) => handleRateChange(room.id, col.isoStr, e.target.value)}
-                              title={`Edit ${room.name} rate on ${col.isoStr}`}
-                            />
-                          </div>
-                        );
-                      })}
+                          if (activeMatrixTab === 'stop_sell') {
+                            const stopKey = `${room.id}_${col.isoStr}`;
+                            const isClosed = Boolean(stopouts?.[stopKey]);
+                            return (
+                              <div key={col.isoStr} className={`rates-cell ${isWeekendClass}`}>
+                                <button
+                                  type="button"
+                                  className={`rates-stopsell-btn ${isClosed ? 'is-closed' : ''}`}
+                                  onClick={() => onToggleStopout && onToggleStopout(room.id, col.isoStr)}
+                                  title={`Toggle stop-sell for ${room.name} on ${col.isoStr}`}
+                                >
+                                  {isClosed ? 'Closed' : 'Open'}
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          const currentVal = getCellValue(room, plan, pIdx, col.isoStr, activeTierKey);
+                          const isDirty = localRateEdits[activeTierKey]?.[cellKey] !== undefined;
+
+                          return (
+                            <div key={col.isoStr} className={`rates-cell ${isWeekendClass}`}>
+                              <input
+                                type="number"
+                                min={activeMatrixTab === 'min_nights' ? 1 : 0}
+                                className={`rates-cell-input-card ${isDirty ? 'is-dirty' : ''}`}
+                                value={currentVal}
+                                onChange={(e) => handleCellEdit(cellKey, e.target.value)}
+                                title={`Edit ${room.name} (${plan.code}) on ${col.isoStr}`}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="rates-right-spacer" />
                     </div>
-                  </div>
-                </React.Fragment>
-              );
-            })}
+                  );
+                })}
+              </React.Fragment>
+            ))}
           </div>
 
-          {/* 4. Bottom Summary Rows: Sold Rooms, Available Rooms, Total Rooms */}
+          {/* Region 4: Bottom Sticky Summary Footer (Sold, Available, Total Rooms) */}
           <div className="rates-summary-section">
-            {/* Row 1: Sold Rooms */}
+            {/* Summary Row 1: Sold Rooms */}
             <div className="rates-summary-row">
               <div className="rates-col-left rates-summary-title-cell">
                 <span className="rates-summary-title">Sold Rooms</span>
               </div>
-              <div style={{ display: 'flex', flex: 1 }}>
+              <div className="rates-cells-track">
                 {summaryData.map((item) => (
-                  <div key={item.isoStr} className="rates-summary-cell">
-                    <span className="rates-summary-num">{item.sold}</span>
+                  <div
+                    key={item.isoStr}
+                    className={`rates-summary-cell ${item.isToday ? 'is-today' : item.isWeekend ? 'is-weekend' : ''}`}
+                  >
+                    <span className="rates-summary-num sold">{item.sold}</span>
                   </div>
                 ))}
               </div>
+              <div className="rates-summary-right-spacer" />
             </div>
 
-            {/* Row 2: Available Rooms */}
+            {/* Summary Row 2: Available Rooms */}
             <div className="rates-summary-row">
               <div className="rates-col-left rates-summary-title-cell">
                 <span className="rates-summary-title">Available Rooms</span>
               </div>
-              <div style={{ display: 'flex', flex: 1 }}>
+              <div className="rates-cells-track">
                 {summaryData.map((item) => (
-                  <div key={item.isoStr} className="rates-summary-cell">
-                    <span className="rates-summary-num">{item.available}</span>
+                  <div
+                    key={item.isoStr}
+                    className={`rates-summary-cell ${item.isToday ? 'is-today' : item.isWeekend ? 'is-weekend' : ''}`}
+                  >
+                    <span className="rates-summary-num avail">{item.available}</span>
                   </div>
                 ))}
               </div>
+              <div className="rates-summary-right-spacer" />
             </div>
 
-            {/* Row 3: Total Rooms */}
-            <div className="rates-summary-row" style={{ borderBottom: 'none' }}>
+            {/* Summary Row 3: Total Rooms */}
+            <div className="rates-summary-row">
               <div className="rates-col-left rates-summary-title-cell">
                 <span className="rates-summary-title">Total Rooms</span>
               </div>
-              <div style={{ display: 'flex', flex: 1 }}>
+              <div className="rates-cells-track">
                 {summaryData.map((item) => (
-                  <div key={item.isoStr} className="rates-summary-cell">
+                  <div
+                    key={item.isoStr}
+                    className={`rates-summary-cell ${item.isToday ? 'is-today' : item.isWeekend ? 'is-weekend' : ''}`}
+                  >
                     <span className="rates-summary-num">{item.total}</span>
                   </div>
                 ))}
               </div>
+              <div className="rates-summary-right-spacer" />
             </div>
           </div>
-
         </div>
       </div>
+
+      {/* Portal Calendar Date Picker (never clipped by sticky headers or scroll containers) */}
+      {isDatePickerOpen &&
+        typeof document !== 'undefined' &&
+        ReactDOM.createPortal(
+          <div
+            className="custom-calendar-portal-wrapper"
+            style={{
+              position: 'fixed',
+              top: `${datePickerPos.top}px`,
+              left: `${datePickerPos.left}px`,
+              zIndex: 9999999,
+              width: '320px'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CustomCalendar
+              value={visibleDate || baseDate}
+              highlightDate={todayIsoStr}
+              outputFormat="iso"
+              ignoreRef={datePickerTriggerRef}
+              onChange={handleSelectDate}
+              onClose={() => setIsDatePickerOpen(false)}
+              className="portal-popover"
+              placement="portal"
+            />
+          </div>,
+          document.body
+        )}
 
       {/* Bulk Update Modal */}
       {isBulkOpen && (

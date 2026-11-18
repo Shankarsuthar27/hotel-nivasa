@@ -51,17 +51,27 @@ class PMSStore {
   load() {
     this.deletedReservationIds = new Set();
     this.deletedRoomIds = new Set();
+    this.deletedTeamMemberIds = new Set();
     const authSaved = localStorage.getItem('pms_is_authenticated');
+    let savedSessionUser = null;
+    try {
+      const rawUser = localStorage.getItem('pms_current_user');
+      if (rawUser) savedSessionUser = JSON.parse(rawUser);
+    } catch (_) {}
+
     this.isAuthenticated = authSaved === 'true';
+    this.currentUser = this.isAuthenticated ? savedSessionUser : null;
+
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.isAuthenticated !== undefined && authSaved === null) {
-          this.isAuthenticated = parsed.isAuthenticated === true;
+        if (parsed.isAuthenticated === true && authSaved === null && (savedSessionUser || parsed.currentUser)) {
+          this.isAuthenticated = true;
         }
         this.deletedReservationIds = new Set(parsed.deletedReservationIds || []);
         this.deletedRoomIds = new Set(parsed.deletedRoomIds || []);
+        this.deletedTeamMemberIds = new Set(parsed.deletedTeamMemberIds || []);
         this.property = parsed.property || initialProperty;
         if (this.property) {
           const todayStr = getTodayIsoDate();
@@ -298,52 +308,25 @@ class PMSStore {
           return (b.createdAt || b.checkInDate || '').localeCompare(a.createdAt || a.checkInDate || '');
         });
 
-        // Ensure Room 101 has active in_house reservation for Mr Kkk Suthar (Checkout: Tue 27, Oct 2026)
+        // Preserve real user check-outs/cancellations on res_5 & res_12 — never force checked_out bookings back to in_house
         const res101 = this.reservations.find(r => r.id === 'res_5');
-        if (res101) {
-          res101.roomId = 'rm_101';
-          res101.roomNumber = '101';
-          res101.roomTypeId = 'rt_standard';
-          res101.roomTypeName = 'Standard Room';
-          res101.status = 'in_house';
-          res101.checkOutDate = '2026-10-27';
-          res101.primaryGuest = {
-            ...(res101.primaryGuest || {}),
-            name: 'Mr Kkk Suthar',
-            title: 'Mr.',
-            firstName: 'Kkk',
-            lastName: 'Suthar'
-          };
+        if (res101 && !['checked_out', 'cancelled', 'no_show'].includes(String(res101.status || '').toLowerCase())) {
+          res101.roomId = res101.roomId || 'rm_101';
+          res101.roomNumber = res101.roomNumber || '101';
         }
 
-        // Ensure Room 102 has active in_house reservation for Mr Shankar Suthar (#RES_12, Checkout: Fri 13, Nov 2026)
-        let res102 = this.reservations.find(r => r.id === 'res_12');
-        if (!res102) {
-          const initRes12 = initialReservations.find(r => r.id === 'res_12');
-          if (initRes12) {
-            this.reservations.unshift(initRes12);
-            res102 = initRes12;
-          }
+        const res102 = this.reservations.find(r => r.id === 'res_12');
+        if (res102 && !['checked_out', 'cancelled', 'no_show'].includes(String(res102.status || '').toLowerCase())) {
+          res102.roomId = res102.roomId || 'rm_102';
+          res102.roomNumber = res102.roomNumber || '102';
+          res102.bookingReference = res102.bookingReference || '#RES_12';
         }
-        if (res102) {
-          res102.roomId = 'rm_102';
-          res102.roomNumber = '102';
-          res102.roomTypeId = 'rt_deluxe';
-          res102.roomTypeName = 'Delux Room';
-          res102.status = 'in_house';
-          res102.checkInDate = '2026-11-12';
-          res102.checkOutDate = '2026-11-13';
-          res102.bookingReference = '#RES_12';
-          res102.primaryGuest = {
-            ...(res102.primaryGuest || {}),
-            name: 'Mr Shankar Suthar',
-            title: 'Mr.',
-            firstName: 'Shankar',
-            lastName: 'Suthar',
-            phone: '+91 98932938982',
-            email: 'ss2137789@gmail.com'
-          };
-        }
+
+        // Sanitize any room left with stale "occupied" status OR operational="occupied" when no active in_house reservation exists for it
+        this.rooms = this.dedupeRoomsByNumber(
+          this.sanitizeStaleOccupiedRooms(this.rooms, this.reservations),
+          false
+        );
 
         // Ensure old historical reservations res_4 / res_1 do not hold room 102
         this.reservations.forEach(r => {
@@ -356,23 +339,6 @@ class PMSStore {
           }
         });
 
-        // Ensure 1 Unassigned reservation exists for Delux Room
-        const unassignedDlx = this.reservations.filter(
-          r => (r.status === 'confirmed' || r.status === 'in_house') && (!r.roomId || r.roomId === '') && r.roomTypeId === 'rt_deluxe'
-        );
-        if (unassignedDlx.length === 0) {
-          const res3 = initialReservations.find(r => r.id === 'res_3');
-          if (res3) {
-            this.reservations.push({
-              ...res3,
-              roomId: '',
-              roomNumber: '',
-              roomTypeId: 'rt_deluxe',
-              roomTypeName: 'Delux Room',
-              status: 'confirmed'
-            });
-          }
-        }
         // Ensure rooms 201, 202 are tied to rt_standard / Normal, rooms 101, 102 to rt_deluxe, and rooms 301, 302 to rt_premium
         const r201 = this.rooms.find(r => r.roomNumber === '201' || r.id === 'rm_201');
         if (r201) r201.roomTypeId = 'rt_standard';
@@ -470,9 +436,7 @@ class PMSStore {
           const seenKeys = new Set();
           this.auditTrail = this.auditTrail.filter(entry => {
             if (!entry) return false;
-            const ref = entry.meta?.bookingReference || entry.entityId || '';
-            const act = entry.meta?.actionType || entry.action || '';
-            const key = `${act}_${ref}_${entry.timestamp}`;
+            const key = entry.id || `${entry.meta?.actionType || entry.action || ''}_${entry.meta?.bookingReference || entry.entityId || ''}_${entry.timestamp}_${entry.details || ''}`;
             if (seenKeys.has(key)) return false;
             seenKeys.add(key);
             return true;
@@ -502,14 +466,10 @@ class PMSStore {
             properties: (tm.properties || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT')
           }));
         }
-        this.currentUser = parsed.currentUser || {
-          id: 'usr_owner',
-          name: 'Astha India',
-          email: 'owner@hotelastha.com',
-          role: 'Owner',
-          initials: 'AI',
-          status: 'ACTIVE'
-        };
+        this.currentUser = this.isAuthenticated
+          ? (savedSessionUser || parsed.currentUser || null)
+          : null;
+        this.syncCurrentUserWithTeamMembers();
         this.invitationTokens = parsed.invitationTokens || [];
         if (!parsed.ratePlans || parsed.ratePlans.length === 0 || !parsed.ratePlans.some(rp => rp.code === 'STR')) {
           this.ratePlans = JSON.parse(JSON.stringify(initialRatePlans));
@@ -554,6 +514,109 @@ class PMSStore {
       }
     }
     this.resetToDefaults();
+  }
+
+  dedupeRoomsByNumber(roomsList, pruneCloudDuplicates = false) {
+    const byNum = new Map();
+    const duplicateDocIdsToPrune = [];
+    const deletedSet = this.deletedRoomIds || new Set();
+
+    const getRoomUpdatedMs = (r) => {
+      const ts = r?.updatedAt || r?.lastSyncedAt || '';
+      const ms = ts ? Date.parse(ts) : 0;
+      return isNaN(ms) ? 0 : ms;
+    };
+
+    (roomsList || []).forEach((rm) => {
+      if (!rm) return;
+      const rawNum = String(rm.roomNumber || rm.id || '').trim();
+      const numKey = rawNum.toLowerCase().replace(/^rm_/, '');
+      if (!numKey) return;
+
+      if (
+        deletedSet.has(String(rm.id)) ||
+        deletedSet.has(String(rm.roomNumber || '')) ||
+        deletedSet.has(numKey)
+      ) {
+        return;
+      }
+
+      const canonicalId = `rm_${numKey}`;
+      const existing = byNum.get(numKey);
+      if (!existing) {
+        byNum.set(numKey, { ...rm, roomNumber: String(rm.roomNumber || numKey).trim() });
+        return;
+      }
+
+      const existingIsCanonical = String(existing.id || '').toLowerCase() === canonicalId;
+      const incomingIsCanonical = String(rm.id || '').toLowerCase() === canonicalId;
+      const existingMs = getRoomUpdatedMs(existing);
+      const incomingMs = getRoomUpdatedMs(rm);
+
+      // Keep canonical id if either has it, while taking the freshest operational/housekeeping fields
+      const winnerId = incomingIsCanonical
+        ? rm.id
+        : existingIsCanonical
+        ? existing.id
+        : incomingMs >= existingMs
+        ? rm.id
+        : existing.id;
+
+      const loserId = winnerId === rm.id ? existing.id : rm.id;
+      if (loserId && loserId !== winnerId) {
+        duplicateDocIdsToPrune.push(loserId);
+      }
+
+      const base = incomingMs > existingMs ? { ...existing, ...rm } : { ...rm, ...existing };
+      byNum.set(numKey, {
+        ...base,
+        id: winnerId,
+        roomNumber: String(base.roomNumber || numKey).trim()
+      });
+    });
+
+    if (pruneCloudDuplicates && duplicateDocIdsToPrune.length > 0) {
+      Array.from(new Set(duplicateDocIdsToPrune)).forEach((dupId) => {
+        this.deleteDocFromFirestore('rooms', dupId);
+      });
+    }
+
+    return Array.from(byNum.values());
+  }
+
+  sanitizeStaleOccupiedRooms(roomsList, reservationsList) {
+    const resList = Array.isArray(reservationsList) ? reservationsList : [];
+    return (roomsList || []).map((rm) => {
+      if (!rm) return rm;
+      const isMarkedOccupied =
+        rm.status === 'occupied' ||
+        rm.operational === 'occupied' ||
+        !!rm.currentReservationId;
+      if (!isMarkedOccupied) return rm;
+
+      const rNum = String(rm.roomNumber || '').trim();
+      const hasActiveGuest = resList.some((r) => {
+        if (!r) return false;
+        const st = String(r.status || '').toLowerCase().replace(/[\s-]+/g, '_');
+        if (st !== 'in_house' && st !== 'checked_in') return false;
+        return (
+          (rm.id && r.roomId === rm.id) ||
+          (rNum && String(r.roomNumber || '').trim() === rNum) ||
+          (rNum && r.roomId === `rm_${rNum}`)
+        );
+      });
+
+      if (!hasActiveGuest) {
+        return {
+          ...rm,
+          status: rm.status === 'occupied' ? 'dirty' : (rm.status || 'clean'),
+          operational: rm.operational === 'occupied' ? 'available' : (rm.operational || 'available'),
+          currentReservationId: null,
+          currentGuestName: null
+        };
+      }
+      return rm;
+    });
   }
 
   resetToDefaults() {
@@ -618,13 +681,18 @@ class PMSStore {
       taxRules: this.taxRules,
       serviceCharges: this.serviceCharges,
       propertiesList: (this.propertiesList || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT'),
-      currentUser: this.currentUser || { id: 'usr_owner', name: 'Astha India', role: 'Owner', email: 'owner@hotelastha.com', initials: 'AI', status: 'ACTIVE' },
-      isAuthenticated: this.isAuthenticated === true,
+      currentUser: this.isAuthenticated ? this.currentUser : null,
+      isAuthenticated: this.isAuthenticated === true && !!this.currentUser,
       invitationTokens: this.invitationTokens || [],
       deletedReservationIds: Array.from(this.deletedReservationIds || []),
-      deletedRoomIds: Array.from(this.deletedRoomIds || [])
+      deletedRoomIds: Array.from(this.deletedRoomIds || []),
+      deletedTeamMemberIds: Array.from(this.deletedTeamMemberIds || [])
     };
     try {
+      if (this.isAuthenticated && this.currentUser) {
+        localStorage.setItem('pms_is_authenticated', 'true');
+        localStorage.setItem('pms_current_user', JSON.stringify(this.currentUser));
+      }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (e) {
       console.warn('LocalStorage write warning:', e);
@@ -632,7 +700,9 @@ class PMSStore {
         try {
           for (let i = localStorage.length - 1; i >= 0; i--) {
             const k = localStorage.key(i);
-            if (k && k !== STORAGE_KEY) localStorage.removeItem(k);
+            if (k && k !== STORAGE_KEY && k !== 'pms_is_authenticated' && k !== 'pms_current_user') {
+              localStorage.removeItem(k);
+            }
           }
           payload.auditTrail = (payload.auditTrail || []).slice(0, 20);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -679,8 +749,8 @@ class PMSStore {
       taxRules: Array.isArray(this.taxRules) ? this.taxRules : JSON.parse(JSON.stringify(initialTaxRules)),
       serviceCharges: this.serviceCharges || [],
       propertiesList: (this.propertiesList || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT'),
-      currentUser: this.currentUser || { id: 'usr_owner', name: 'Astha India', role: 'Owner', email: 'owner@hotelastha.com', initials: 'AI', status: 'ACTIVE' },
-      isAuthenticated: this.isAuthenticated === true,
+      currentUser: this.isAuthenticated ? this.currentUser : null,
+      isAuthenticated: this.isAuthenticated === true && !!this.currentUser,
       invitationTokens: this.invitationTokens || [],
       cloudStatus: this.cloudStatus,
       isCloudLive: this.cloudStatus === 'LIVE'
@@ -841,6 +911,7 @@ class PMSStore {
           });
 
           this.reservations = merged;
+          this.rooms = this.sanitizeStaleOccupiedRooms(this.rooms, this.reservations);
           this.cloudStatus = 'LIVE';
           this.save();
           this.notify();
@@ -869,20 +940,10 @@ class PMSStore {
       const unsubRooms = onSnapshot(
         roomsCol,
         (snapshot) => {
-          const cloudRooms = snapshot.docs.map((d) => d.data());
-          const map = new Map();
-          (this.rooms || []).forEach((r) => {
-            const key = r.id || r.roomNumber;
-            if (key) map.set(key, r);
-          });
-          cloudRooms.forEach((r) => {
-            const key = r.id || r.roomNumber;
-            if (key) {
-              const existing = map.get(key);
-              map.set(key, existing ? { ...existing, ...r } : r);
-            }
-          });
-          this.rooms = Array.from(map.values());
+          const cloudRooms = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const combined = [...(this.rooms || []), ...cloudRooms];
+          const deduped = this.dedupeRoomsByNumber(combined, true);
+          this.rooms = this.sanitizeStaleOccupiedRooms(deduped, this.reservations);
           this.cloudStatus = 'LIVE';
           this.save();
           this.notify();
@@ -1019,22 +1080,36 @@ class PMSStore {
       );
       this.unsubscribers.push(unsubRt);
 
-      // 10. Real-time Listener: Team Members
+      // 10. Real-time Listener: Team Members (merge local + cloud so newly provisioned staff are never wiped)
       const tmCol = collection(db, 'properties', this.propertyId, 'teamMembers');
       const unsubTm = onSnapshot(
         tmCol,
         (snapshot) => {
-          const cloudTm = snapshot.docs.map((d) => d.data());
-          if (cloudTm.length > 0) {
-            const map = new Map();
-            cloudTm.forEach((tm) => {
-              const key = tm.id || tm.email;
-              if (key && !map.has(key)) map.set(key, tm);
-            });
-            this.teamMembers = Array.from(map.values());
-            this.save();
-            this.notify();
-          }
+          const cloudTm = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const deletedTm = this.deletedTeamMemberIds || new Set();
+          const map = new Map();
+
+          (this.teamMembers || []).forEach((tm) => {
+            if (!tm) return;
+            const key = tm.id || tm.staffId || tm.email;
+            if (key && !deletedTm.has(String(tm.id))) {
+              map.set(key, tm);
+            }
+          });
+
+          cloudTm.forEach((tm) => {
+            if (!tm) return;
+            const key = tm.id || tm.staffId || tm.email;
+            if (key && !deletedTm.has(String(tm.id))) {
+              const existing = map.get(key);
+              map.set(key, existing ? { ...existing, ...tm } : tm);
+            }
+          });
+
+          this.teamMembers = Array.from(map.values());
+          this.syncCurrentUserWithTeamMembers();
+          this.save();
+          this.notify();
         },
         () => {}
       );
@@ -1056,6 +1131,57 @@ class PMSStore {
       );
       this.unsubscribers.push(unsubAnn);
 
+      // 12. Real-time Listener: Audit Trail (persisted in Cloud Firestore across refreshes & devices)
+      const auditCol = collection(db, 'properties', this.propertyId, 'auditTrail');
+      const unsubAudit = onSnapshot(
+        auditCol,
+        (snapshot) => {
+          const cloudAudits = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const mergedMap = new Map();
+
+          (this.auditTrail || []).forEach((item) => {
+            if (item && item.id) mergedMap.set(item.id, item);
+          });
+          cloudAudits.forEach((item) => {
+            if (item && item.id) mergedMap.set(item.id, item);
+          });
+
+          const parseAuditTime = (entry) => {
+            if (typeof entry?.createdAtMs === 'number' && !isNaN(entry.createdAtMs)) {
+              return entry.createdAtMs;
+            }
+            if (entry?.timestamp) {
+              const iso = String(entry.timestamp).includes('T')
+                ? String(entry.timestamp)
+                : String(entry.timestamp).replace(' ', 'T');
+              const ms = Date.parse(iso);
+              if (!isNaN(ms)) return ms;
+            }
+            return 0;
+          };
+
+          const mergedList = Array.from(mergedMap.values())
+            .sort((a, b) => parseAuditTime(b) - parseAuditTime(a))
+            .slice(0, 300);
+
+          this.auditTrail = mergedList;
+          this.save();
+          this.notify();
+
+          // Backfill any local-only audit entries (e.g., created while offline) up to Cloud Firestore
+          const cloudIds = new Set(cloudAudits.map((c) => c.id));
+          mergedList.forEach((entry) => {
+            if (entry?.id && String(entry.id).startsWith('at_') && !cloudIds.has(entry.id)) {
+              this.syncDocToFirestore('auditTrail', entry.id, entry);
+            }
+          });
+        },
+        (err) => {
+          console.warn('[Firebase Firestore] Audit Trail listener note:', err?.message);
+        }
+      );
+      this.unsubscribers.push(unsubAudit);
+
       this.cloudStatus = 'LIVE';
       this.notify();
     } catch (e) {
@@ -1066,7 +1192,7 @@ class PMSStore {
   }
 
   async syncDocToFirestore(collectionName, docId, data) {
-    if (!data) return;
+    if (!data || !db) return;
     try {
       const payload = this.cleanDataForFirestore({
         ...data,
@@ -1110,7 +1236,7 @@ class PMSStore {
   }
 
   async deleteDocFromFirestore(collectionName, docId) {
-    if (!docId || !collectionName) return;
+    if (!docId || !collectionName || !db) return;
     try {
       const nestedRef = doc(db, 'properties', this.propertyId, collectionName, String(docId));
       await deleteDoc(nestedRef);
@@ -1143,25 +1269,42 @@ class PMSStore {
     const pad = (n) => String(n).padStart(2, '0');
     const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
-    const resRef = entity === 'RESERVATION' ? entityId : (meta?.bookingReference || meta?.reservationId);
+    const fallbackRef = entity === 'RESERVATION' ? entityId : (meta?.bookingReference || meta?.reservationId || '');
+    const resolvedResId = meta?.reservationId || fallbackRef;
+    const resolvedBookingRef = meta?.bookingReference || fallbackRef;
 
     const entry = {
       id: `at_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       timestamp,
+      createdAtMs: now.getTime(),
       actor: actor || 'Astha India',
       userName: actor || 'Astha India',
       action,
       entity,
       entityId,
-      reservationId: resRef,
-      bookingReference: resRef,
+      reservationId: resolvedResId,
+      bookingReference: resolvedBookingRef,
       details,
       meta: meta || {}
     };
     if (!this.auditTrail) this.auditTrail = [];
-    this.auditTrail = [entry, ...this.auditTrail.slice(0, 199)];
+    this.auditTrail = [entry, ...this.auditTrail.slice(0, 299)];
 
-    // Async write to Firestore
+    // Also persist reservation-linked audit entries directly on the reservation document in Firestore
+    if (resolvedResId || resolvedBookingRef) {
+      const targetRes = (this.reservations || []).find(
+        (r) =>
+          (resolvedResId && r.id === resolvedResId) ||
+          (resolvedBookingRef && r.bookingReference === resolvedBookingRef)
+      );
+      if (targetRes) {
+        const existingLogs = Array.isArray(targetRes.auditLogs) ? targetRes.auditLogs : [];
+        targetRes.auditLogs = [entry, ...existingLogs.filter((l) => l?.id !== entry.id).slice(0, 99)];
+        this.syncDocToFirestore('reservations', targetRes.id, targetRes);
+      }
+    }
+
+    // Async write to Firestore auditTrail collection
     this.syncDocToFirestore('auditTrail', entry.id, entry);
     return entry;
   }
@@ -2152,9 +2295,15 @@ class PMSStore {
     });
 
     // Automatic Housekeeping Trigger: Checked-out room automatically becomes DIRTY!
-    if (res.roomId) {
+    if (res.roomId || res.roomNumber) {
+      const targetRmNum = String(res.roomNumber || '').trim();
+      const targetRmId = String(res.roomId || '').trim();
+      const isMatchingRm = (rm) =>
+        (targetRmId && (rm.id === targetRmId || rm.roomNumber === targetRmId)) ||
+        (targetRmNum && (String(rm.roomNumber || '').trim() === targetRmNum || rm.id === `rm_${targetRmNum}`));
+
       this.rooms = this.rooms.map(rm =>
-        (rm.id === res.roomId || rm.roomNumber === res.roomNumber) ? {
+        isMatchingRm(rm) ? {
           ...rm,
           status: 'dirty',
           operational: 'available',
@@ -2164,7 +2313,7 @@ class PMSStore {
           updatedAt: nowIso
         } : rm
       );
-      const dirtyRoom = this.rooms.find(rm => rm.id === res.roomId || rm.roomNumber === res.roomNumber);
+      const dirtyRoom = this.rooms.find(isMatchingRm);
       if (dirtyRoom) {
         this.syncDocToFirestore('rooms', dirtyRoom.id, dirtyRoom);
       }
@@ -2177,7 +2326,26 @@ class PMSStore {
       this.syncDocToFirestore('folios', res.folioId, this.folios[res.folioId]);
     }
 
-    this.logAudit('CHECK_OUT', 'RESERVATION', targetRef, `Guest ${guestName} checked out. Room ${res.roomNumber} auto-flagged DIRTY.`);
+    const checkoutDateStr = this.property?.businessDate || nowIso.split('T')[0];
+    this.logAudit(
+      'CHECK_OUT',
+      'RESERVATION',
+      targetRef,
+      `Guest ${guestName} checked out from Room ${res.roomNumber || 'Unassigned'}. Room auto-flagged DIRTY.`,
+      this.currentUser?.name || 'Astha India',
+      {
+        actionType: 'CHECK_OUT',
+        reservationId: targetId,
+        bookingReference: targetRef,
+        guestName,
+        roomNumber: res.roomNumber || '',
+        oldStatus: 'CHECKED_IN',
+        newStatus: 'CHECKED_OUT',
+        actualCheckOutDate: checkoutDateStr,
+        folioStatus: 'CLOSED',
+        affectedDates: [checkoutDateStr]
+      }
+    );
     this.save();
 
     const updatedRes = this.getReservation(targetId) || this.getReservation(targetRef);
@@ -2375,44 +2543,7 @@ class PMSStore {
   }
 
 
-  loginUser(userProfile) {
-    this.isAuthenticated = true;
-    if (userProfile) {
-      const rolePresets = getRoleDefaultPermissions();
-      const userRole = userProfile.role || 'Owner';
-      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
 
-      this.currentUser = {
-        id: userProfile.id || `usr_${Date.now()}`,
-        name: userProfile.name || 'Astha India',
-        email: userProfile.email || 'owner@hotelastha.com',
-        role: userRole,
-        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
-        avatar: userProfile.avatar || '👑',
-        status: 'ACTIVE',
-        properties: userProfile.properties || ['HOTEL ASTHA'],
-        permissions: userProfile.permissions || defaultPerms
-      };
-    }
-    try {
-      localStorage.setItem('pms_is_authenticated', 'true');
-    } catch (e) {}
-    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
-    this.save();
-    this.notify();
-    return { success: true, user: this.currentUser };
-  }
-
-  logoutUser() {
-    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
-    this.isAuthenticated = false;
-    try {
-      localStorage.setItem('pms_is_authenticated', 'false');
-    } catch (e) {}
-    this.save();
-    this.notify();
-    return { success: true };
-  }
 
   // --- FOLIO & SETTLEMENT ENGINE ---
 
@@ -2757,9 +2888,21 @@ class PMSStore {
 
     this.logAudit(
       'VOID_PAYMENT',
-      'FOLIO',
-      folio.folioNumber,
-      `VOIDED payment of ₹${Math.abs(tx.amount)} (${tx.paymentMethod || 'Payment'}). Reason: "${tx.voidReason}". Balance restored.`
+      'RESERVATION',
+      res.bookingReference || res.id,
+      `VOIDED payment of ₹${Math.abs(tx.amount)} (${tx.paymentMethod || 'Payment'}) on ${folio.folioNumber}. Reason: "${tx.voidReason}". Balance restored.`,
+      this.currentUser?.name || 'Astha India',
+      {
+        actionType: 'VOID_PAYMENT',
+        reservationId: res.id,
+        bookingReference: res.bookingReference,
+        folioNumber: folio.folioNumber,
+        amount: Math.abs(tx.amount || 0),
+        paymentMethod: tx.paymentMethod || 'Payment',
+        voidReason: tx.voidReason,
+        date: tx.date || getTodayIsoDate(),
+        affectedDates: [tx.date || getTodayIsoDate()]
+      }
     );
     this.save();
 
@@ -2777,12 +2920,20 @@ class PMSStore {
     const tx = folio.transactions.find(t => t.id === transactionId);
     if (!tx || tx.isVoided) return false;
 
-    const isCredit = tx.direction === 'CREDIT' || tx.direction === 'Credit' || (tx.type && tx.type.toUpperCase() === 'PAYMENT');
-    const oldAmt = Math.abs(tx.amount || 0);
-    const newAmt = Number(amount);
+    const isCredit =
+      tx.direction === 'CREDIT' ||
+      tx.direction === 'Credit' ||
+      (tx.category && String(tx.category).toUpperCase().includes('PAYMENT')) ||
+      (tx.type && String(tx.type).toUpperCase().includes('PAYMENT'));
 
-    if (!isNaN(newAmt) && newAmt >= 0) {
-      tx.amount = isCredit ? -Math.abs(newAmt) : Math.abs(newAmt);
+    const oldAmt = Math.abs(Number(tx.amount || 0));
+    const oldDate = normalizeDateStr(tx.date) || getTodayIsoDate();
+    const oldDesc = String(tx.desc || tx.description || '').trim();
+    const parsedNewAmt = Number(amount);
+    const finalNewAmt = !isNaN(parsedNewAmt) && parsedNewAmt >= 0 ? parsedNewAmt : oldAmt;
+
+    if (!isNaN(parsedNewAmt) && parsedNewAmt >= 0) {
+      tx.amount = isCredit ? -Math.abs(parsedNewAmt) : Math.abs(parsedNewAmt);
     }
     if (description !== undefined) {
       tx.desc = description;
@@ -2791,15 +2942,55 @@ class PMSStore {
     if (date !== undefined && date) {
       tx.date = normalizeDateStr(date);
     }
+    const newDate = normalizeDateStr(tx.date) || oldDate;
+    const newDesc = String(tx.desc || tx.description || '').trim();
     tx.updatedAt = new Date().toISOString();
 
     this.recomputeFolioTotals(res.id);
 
+    const updatedRes = this.reservations.find(r => r.id === res.id);
+    const actionType = isCredit ? 'PAYMENT_UPDATED' : 'CHARGE_UPDATED';
+    const paymentMethod = tx.paymentMethod || (isCredit ? 'UPI' : '-');
+    const affectedDates = Array.from(new Set([oldDate, newDate].filter(Boolean)));
+    const actorName = this.currentUser?.name || 'Astha India';
+
+    const changeParts = [];
+    if (oldAmt !== finalNewAmt) {
+      changeParts.push(`Amount: ₹${oldAmt.toFixed(2)} → ₹${finalNewAmt.toFixed(2)}`);
+    } else {
+      changeParts.push(`Amount: ₹${finalNewAmt.toFixed(2)}`);
+    }
+    if (oldDate !== newDate) {
+      changeParts.push(`Date: ${oldDate} → ${newDate}`);
+    }
+    if (oldDesc !== newDesc) {
+      changeParts.push(`Description: "${oldDesc || '-'}" → "${newDesc || '-'}"`);
+    }
+
     this.logAudit(
-      'UPDATE_TRANSACTION',
-      'FOLIO',
-      folio.folioNumber,
-      `Updated ${isCredit ? 'payment' : 'charge'} transaction from ₹${oldAmt} to ₹${newAmt} (Date: ${tx.date}). Description: "${description || tx.desc || ''}"`
+      actionType,
+      'RESERVATION',
+      res.bookingReference || res.id,
+      `Edited folio ${isCredit ? 'payment' : 'charge'} (${folio.folioNumber}) — ${changeParts.join(' | ')}. Outstanding: ₹${Number(updatedRes?.balanceDue || 0).toFixed(2)}`,
+      actorName,
+      {
+        actionType,
+        reservationId: res.id,
+        bookingReference: res.bookingReference,
+        folioNumber: folio.folioNumber,
+        transactionId: tx.id,
+        isPayment: isCredit,
+        paymentMethod,
+        voucherNumber: tx.voucherNumber || '',
+        oldAmount: oldAmt,
+        newAmount: finalNewAmt,
+        oldDate,
+        newDate,
+        oldDescription: oldDesc,
+        newDescription: newDesc,
+        date: newDate,
+        affectedDates
+      }
     );
     this.save();
     this.notify();
@@ -2849,16 +3040,41 @@ class PMSStore {
     return true;
   }
 
-  settleFolio(reservationId, paymentMode = 'UPI', reference = 'Direct Settlement', date) {
+  settleFolio(reservationId, paymentMode = 'UPI', reference = 'Direct Settlement', date, explicitAmount) {
     const res = this.reservations.find(r => r.id === reservationId || r.bookingReference === reservationId);
     if (!res) return false;
 
-    if (Number(res.balanceDue) > 0) {
+    // Determine exact outstanding amount from explicit amount, live folio transactions, or res.balanceDue
+    let settleAmt = Number(explicitAmount);
+    if (!settleAmt || isNaN(settleAmt) || settleAmt <= 0) {
+      const folio = res.folioId ? this.folios[res.folioId] : null;
+      if (folio && Array.isArray(folio.transactions) && folio.transactions.length > 0) {
+        let debits = 0;
+        let credits = 0;
+        folio.transactions.forEach((tx) => {
+          if (!tx || tx.isVoided) return;
+          const isCred =
+            String(tx.direction || '').toUpperCase() === 'CREDIT' ||
+            tx.type === 'PAYMENT' ||
+            Number(tx.amount || 0) < 0;
+          if (isCred) {
+            credits += Math.abs(Number(tx.amount) || 0);
+          } else {
+            debits += (Number(tx.amount) || 0) + (Number(tx.tax) || 0);
+          }
+        });
+        settleAmt = Math.max(0, Math.round((debits - credits) * 100) / 100);
+      } else {
+        settleAmt = Math.max(0, Number(res.balanceDue) || 0);
+      }
+    }
+
+    if (settleAmt > 0) {
       this.addFolioPayment(res.id, {
         date: date ? normalizeDateStr(date) : getTodayIsoDate(),
         type: 'Settlement',
         paymentMethod: paymentMode,
-        amount: res.balanceDue,
+        amount: settleAmt,
         description: `Folio Settlement (${paymentMode}) Ref: ${reference}`,
         reference
       });
@@ -2872,7 +3088,21 @@ class PMSStore {
       };
       this.syncDocToFirestore('folios', res.folioId, this.folios[res.folioId]);
     }
-    this.logAudit('SETTLE_FOLIO', 'FOLIO', res.folioId || res.id, `Folio ${res.folioId || res.id} settled and marked CLOSED.`);
+
+    this.logAudit(
+      'SETTLE_FOLIO',
+      'FOLIO',
+      res.folioId || res.id,
+      `Folio ${res.folioId || res.id} settled (₹${settleAmt.toFixed(2)} via ${paymentMode}) and marked CLOSED.`,
+      this.currentUser?.name || 'Astha India',
+      {
+        actionType: 'SETTLE_FOLIO',
+        reservationId: res.id,
+        bookingReference: res.bookingReference,
+        amount: settleAmt,
+        paymentMethod: paymentMode
+      }
+    );
     this.save();
     this.notify();
     return true;
@@ -3240,96 +3470,30 @@ class PMSStore {
   }
 
 
-  loginUser(userProfile) {
-    this.isAuthenticated = true;
-    if (userProfile) {
-      const rolePresets = getRoleDefaultPermissions();
-      const userRole = userProfile.role || 'Owner';
-      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
 
-      this.currentUser = {
-        id: userProfile.id || `usr_${Date.now()}`,
-        name: userProfile.name || 'Astha India',
-        email: userProfile.email || 'owner@hotelastha.com',
-        role: userRole,
-        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
-        avatar: userProfile.avatar || '👑',
-        status: 'ACTIVE',
-        properties: userProfile.properties || ['HOTEL ASTHA'],
-        permissions: userProfile.permissions || defaultPerms
-      };
-    }
-    try {
-      localStorage.setItem('pms_is_authenticated', 'true');
-    } catch (e) {}
-    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
-    this.save();
-    this.notify();
-    return { success: true, user: this.currentUser };
-  }
-
-  logoutUser() {
-    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
-    this.isAuthenticated = false;
-    try {
-      localStorage.setItem('pms_is_authenticated', 'false');
-    } catch (e) {}
-    this.save();
-    this.notify();
-    return { success: true };
-  }
 
   removeTeamMember(memberId) {
     const member = this.teamMembers.find(m => m.id === memberId);
+    if (!this.deletedTeamMemberIds) this.deletedTeamMemberIds = new Set();
+    this.deletedTeamMemberIds.add(String(memberId));
     this.teamMembers = this.teamMembers.filter(m => m.id !== memberId);
     if (member) {
       this.logAudit('REMOVE_MEMBER', 'TEAM', member.email, `Member removed from organization.`);
       this.deleteDocFromFirestore('teamMembers', memberId);
+      if (member.uid && member.uid !== memberId) {
+        this.deleteDocFromFirestore('staff', member.uid);
+      } else {
+        this.deleteDocFromFirestore('staff', memberId);
+      }
     }
+    this.syncCurrentUserWithTeamMembers();
     this.save();
     this.notify();
     return { success: true };
   }
 
 
-  loginUser(userProfile) {
-    this.isAuthenticated = true;
-    if (userProfile) {
-      const rolePresets = getRoleDefaultPermissions();
-      const userRole = userProfile.role || 'Owner';
-      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
 
-      this.currentUser = {
-        id: userProfile.id || `usr_${Date.now()}`,
-        name: userProfile.name || 'Astha India',
-        email: userProfile.email || 'owner@hotelastha.com',
-        role: userRole,
-        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
-        avatar: userProfile.avatar || '👑',
-        status: 'ACTIVE',
-        properties: userProfile.properties || ['HOTEL ASTHA'],
-        permissions: userProfile.permissions || defaultPerms
-      };
-    }
-    try {
-      localStorage.setItem('pms_is_authenticated', 'true');
-    } catch (e) {}
-    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
-    this.save();
-    this.notify();
-    return { success: true, user: this.currentUser };
-  }
-
-  logoutUser() {
-    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
-    this.isAuthenticated = false;
-    try {
-      localStorage.setItem('pms_is_authenticated', 'false');
-    } catch (e) {}
-    this.save();
-    this.notify();
-    return { success: true };
-  }
 
   updateTeamMember(memberId, patch) {
     let updatedMember = null;
@@ -3442,44 +3606,7 @@ class PMSStore {
   }
 
 
-  loginUser(userProfile) {
-    this.isAuthenticated = true;
-    if (userProfile) {
-      const rolePresets = getRoleDefaultPermissions();
-      const userRole = userProfile.role || 'Owner';
-      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
 
-      this.currentUser = {
-        id: userProfile.id || `usr_${Date.now()}`,
-        name: userProfile.name || 'Astha India',
-        email: userProfile.email || 'owner@hotelastha.com',
-        role: userRole,
-        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
-        avatar: userProfile.avatar || '👑',
-        status: 'ACTIVE',
-        properties: userProfile.properties || ['HOTEL ASTHA'],
-        permissions: userProfile.permissions || defaultPerms
-      };
-    }
-    try {
-      localStorage.setItem('pms_is_authenticated', 'true');
-    } catch (e) {}
-    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
-    this.save();
-    this.notify();
-    return { success: true, user: this.currentUser };
-  }
-
-  logoutUser() {
-    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
-    this.isAuthenticated = false;
-    try {
-      localStorage.setItem('pms_is_authenticated', 'false');
-    } catch (e) {}
-    this.save();
-    this.notify();
-    return { success: true };
-  }
 
   hasPermission(permissionPath) {
     return checkUserPermission(this.currentUser, permissionPath);
@@ -3575,67 +3702,196 @@ class PMSStore {
     return { success: true };
   }
 
-  loginUser(userProfile) {
-    if (userProfile) {
-      const cleanEmail = String(userProfile.email || userProfile.loginEmail || '').toLowerCase();
-      const cleanStaffId = String(userProfile.staffId || '').toLowerCase();
+  syncCurrentUserWithTeamMembers() {
+    if (!this.isAuthenticated) {
+      this.currentUser = null;
+      return;
+    }
 
-      // Match live record from teamMembers so Owner-configured permissions & status always win
-      const liveRecord = (this.teamMembers || []).find((m) => {
-        if (!m) return false;
-        if (userProfile.id && m.id === userProfile.id) return true;
-        if (cleanStaffId && String(m.staffId || '').toLowerCase() === cleanStaffId) return true;
-        if (
-          cleanEmail &&
-          (String(m.email || '').toLowerCase() === cleanEmail ||
-            String(m.loginEmail || '').toLowerCase() === cleanEmail)
-        ) {
-          return true;
-        }
-        return false;
-      });
+    const cur = this.currentUser;
+    if (!cur) {
+      this.isAuthenticated = false;
+      try {
+        localStorage.setItem('pms_is_authenticated', 'false');
+      } catch (e) {}
+      return;
+    }
 
-      const merged = liveRecord ? { ...userProfile, ...liveRecord } : userProfile;
-      const mergedStatus = String(merged.status || 'ACTIVE').toUpperCase();
-      if (mergedStatus === 'SUSPENDED' || mergedStatus === 'INACTIVE') {
+    const curEmail = String(cur.email || cur.loginEmail || '').trim().toLowerCase();
+    const curStaffId = String(cur.staffId || '').trim().toLowerCase();
+    const curName = String(cur.name || '').trim();
+
+    // Purge any stale anonymous "Staff Member" ghost session created by legacy auto-login
+    if (curName === 'Staff Member' && !curStaffId && !curEmail) {
+      this.isAuthenticated = false;
+      this.currentUser = null;
+      try {
+        localStorage.setItem('pms_is_authenticated', 'false');
+        localStorage.removeItem('pms_current_user');
+      } catch (e) {}
+      return;
+    }
+
+    // If explicitly removed by Owner, force sign out
+    if (this.deletedTeamMemberIds && cur.id && this.deletedTeamMemberIds.has(String(cur.id))) {
+      this.isAuthenticated = false;
+      this.currentUser = null;
+      try {
+        localStorage.setItem('pms_is_authenticated', 'false');
+        localStorage.removeItem('pms_current_user');
+      } catch (e) {}
+      return;
+    }
+
+    // Match live record from teamMembers so Owner edits / suspensions apply immediately
+    const liveMember = (this.teamMembers || []).find((m) => {
+      if (!m) return false;
+      if (cur.id && (m.id === cur.id || m.uid === cur.id)) return true;
+      if (cur.uid && (m.uid === cur.uid || m.id === cur.uid)) return true;
+      if (curStaffId && String(m.staffId || '').trim().toLowerCase() === curStaffId) return true;
+      if (
+        curEmail &&
+        (String(m.email || '').trim().toLowerCase() === curEmail ||
+          String(m.loginEmail || '').trim().toLowerCase() === curEmail)
+      ) {
+        return true;
+      }
+      return false;
+    });
+
+    if (liveMember) {
+      const st = String(liveMember.status || 'ACTIVE').toUpperCase();
+      if (st === 'SUSPENDED' || st === 'INACTIVE') {
         this.isAuthenticated = false;
-        return { success: false, error: 'Account has been suspended by the Owner.' };
+        this.currentUser = null;
+        try {
+          localStorage.setItem('pms_is_authenticated', 'false');
+          localStorage.removeItem('pms_current_user');
+        } catch (e) {}
+        return;
       }
 
       const rolePresets = getRoleDefaultPermissions();
-      const userRole = merged.role || 'Owner';
-      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
+      const liveRole = liveMember.role || cur.role || 'Front Desk / Receptionist';
+      const defaultPerms = rolePresets[liveRole] || rolePresets['Front Desk / Receptionist'];
 
       this.currentUser = {
-        id: merged.id || `usr_${Date.now()}`,
-        uid: merged.uid || merged.id || `usr_${Date.now()}`,
-        staffId: merged.staffId || '',
-        name: merged.name || 'Astha India',
-        email: merged.email || merged.loginEmail || 'owner@hotelastha.com',
-        loginEmail: merged.loginEmail || merged.email || 'owner@hotelastha.com',
-        role: userRole,
-        initials:
-          merged.initials ||
-          (merged.name
-            ? merged.name
-                .split(/\s+/)
-                .map((p) => p[0])
-                .join('')
-                .toUpperCase()
-                .slice(0, 2)
-            : 'AI'),
-        avatar: merged.avatar || (userRole === 'Owner' ? '👑' : '👤'),
+        ...cur,
+        id: liveMember.id || cur.id,
+        uid: liveMember.uid || liveMember.id || cur.uid || cur.id,
+        staffId: liveMember.staffId || cur.staffId || '',
+        name: liveMember.name || cur.name,
+        email: liveMember.email || liveMember.loginEmail || cur.email,
+        loginEmail: liveMember.loginEmail || liveMember.email || cur.loginEmail,
+        role: liveRole,
         status: 'ACTIVE',
-        properties: merged.properties || ['HOTEL ASTHA'],
-        permissions: merged.permissions
-          ? JSON.parse(JSON.stringify(merged.permissions))
-          : JSON.parse(JSON.stringify(defaultPerms))
+        properties: liveMember.properties || cur.properties || ['HOTEL ASTHA'],
+        permissions: liveMember.permissions
+          ? JSON.parse(JSON.stringify(liveMember.permissions))
+          : JSON.parse(JSON.stringify(cur.permissions || defaultPerms))
       };
+      try {
+        localStorage.setItem('pms_current_user', JSON.stringify(this.currentUser));
+      } catch (e) {}
+      return;
     }
+
+    // Keep valid authenticated session intact (never falsely log out on refresh while cloud sync catches up)
+    if (!cur.role) {
+      this.isAuthenticated = false;
+      this.currentUser = null;
+      try {
+        localStorage.setItem('pms_is_authenticated', 'false');
+        localStorage.removeItem('pms_current_user');
+      } catch (e) {}
+    }
+  }
+
+  loginUser(userProfile) {
+    if (!userProfile || typeof userProfile !== 'object') {
+      return { success: false, error: 'Invalid staff credentials.' };
+    }
+
+    const cleanEmail = String(userProfile.email || userProfile.loginEmail || '').trim().toLowerCase();
+    const cleanStaffId = String(userProfile.staffId || '').trim().toLowerCase();
+
+    if (!cleanEmail && !cleanStaffId && !userProfile.role) {
+      return { success: false, error: 'Please sign in with a valid Staff ID or email.' };
+    }
+
+    // Match live record from teamMembers so Owner-configured permissions & status always win
+    const liveRecord = (this.teamMembers || []).find((m) => {
+      if (!m) return false;
+      if (userProfile.id && (m.id === userProfile.id || m.uid === userProfile.id)) return true;
+      if (userProfile.uid && (m.uid === userProfile.uid || m.id === userProfile.uid)) return true;
+      if (cleanStaffId && String(m.staffId || '').trim().toLowerCase() === cleanStaffId) return true;
+      if (
+        cleanEmail &&
+        (String(m.email || '').trim().toLowerCase() === cleanEmail ||
+          String(m.loginEmail || '').trim().toLowerCase() === cleanEmail)
+      ) {
+        return true;
+      }
+      return false;
+    });
+
+    const merged = liveRecord ? { ...userProfile, ...liveRecord } : userProfile;
+    const mergedStatus = String(merged.status || 'ACTIVE').toUpperCase();
+    if (mergedStatus === 'SUSPENDED' || mergedStatus === 'INACTIVE') {
+      this.isAuthenticated = false;
+      this.currentUser = null;
+      try {
+        localStorage.setItem('pms_is_authenticated', 'false');
+      } catch (e) {}
+      this.save();
+      this.notify();
+      return { success: false, error: 'Account has been suspended by the Owner.' };
+    }
+
+    const isExplicitOwner =
+      merged.role === 'Owner' ||
+      merged.id === 'usr_owner' ||
+      cleanEmail === 'owner@hotelastha.com' ||
+      cleanEmail === 'info@asthasoftindia.com';
+
+    const userRole = merged.role || (isExplicitOwner ? 'Owner' : null);
+    if (!userRole) {
+      return { success: false, error: 'Unrecognized staff account. Contact the hotel Owner.' };
+    }
+
+    const rolePresets = getRoleDefaultPermissions();
+    const defaultPerms = rolePresets[userRole] || rolePresets['Front Desk / Receptionist'];
+
+    this.currentUser = {
+      id: merged.id || `usr_${Date.now()}`,
+      uid: merged.uid || merged.id || `usr_${Date.now()}`,
+      staffId: merged.staffId || '',
+      name: merged.name || (isExplicitOwner ? 'Astha India' : cleanEmail.split('@')[0] || 'Staff'),
+      email: merged.email || merged.loginEmail || '',
+      loginEmail: merged.loginEmail || merged.email || '',
+      role: userRole,
+      initials:
+        merged.initials ||
+        (merged.name
+          ? merged.name
+              .split(/\s+/)
+              .map((p) => p[0])
+              .join('')
+              .toUpperCase()
+              .slice(0, 2)
+          : 'ST'),
+      avatar: merged.avatar || (userRole === 'Owner' ? '👑' : '👤'),
+      status: 'ACTIVE',
+      properties: merged.properties || ['HOTEL ASTHA'],
+      permissions: merged.permissions
+        ? JSON.parse(JSON.stringify(merged.permissions))
+        : JSON.parse(JSON.stringify(defaultPerms))
+    };
 
     this.isAuthenticated = true;
     try {
       localStorage.setItem('pms_is_authenticated', 'true');
+      localStorage.setItem('pms_current_user', JSON.stringify(this.currentUser));
     } catch (e) {}
     this.logAudit(
       'STAFF_LOGIN',
@@ -3649,10 +3905,13 @@ class PMSStore {
   }
 
   logoutUser() {
-    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
+    const prevUser = this.currentUser;
+    this.logAudit('STAFF_LOGOUT', 'AUTH', prevUser?.staffId || prevUser?.id || 'usr_staff', `Staff ${prevUser?.name || 'User'} signed out.`);
     this.isAuthenticated = false;
+    this.currentUser = null;
     try {
       localStorage.setItem('pms_is_authenticated', 'false');
+      localStorage.removeItem('pms_current_user');
     } catch (e) {}
     this.save();
     this.notify();
@@ -3719,44 +3978,7 @@ class PMSStore {
   }
 
 
-  loginUser(userProfile) {
-    this.isAuthenticated = true;
-    if (userProfile) {
-      const rolePresets = getRoleDefaultPermissions();
-      const userRole = userProfile.role || 'Owner';
-      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
 
-      this.currentUser = {
-        id: userProfile.id || `usr_${Date.now()}`,
-        name: userProfile.name || 'Astha India',
-        email: userProfile.email || 'owner@hotelastha.com',
-        role: userRole,
-        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
-        avatar: userProfile.avatar || '👑',
-        status: 'ACTIVE',
-        properties: userProfile.properties || ['HOTEL ASTHA'],
-        permissions: userProfile.permissions || defaultPerms
-      };
-    }
-    try {
-      localStorage.setItem('pms_is_authenticated', 'true');
-    } catch (e) {}
-    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
-    this.save();
-    this.notify();
-    return { success: true, user: this.currentUser };
-  }
-
-  logoutUser() {
-    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
-    this.isAuthenticated = false;
-    try {
-      localStorage.setItem('pms_is_authenticated', 'false');
-    } catch (e) {}
-    this.save();
-    this.notify();
-    return { success: true };
-  }
 
   addRatePlan(planData) {
     const id = planData.id || `rp_${Date.now()}`;
@@ -4013,44 +4235,7 @@ class PMSStore {
   }
 
 
-  loginUser(userProfile) {
-    this.isAuthenticated = true;
-    if (userProfile) {
-      const rolePresets = getRoleDefaultPermissions();
-      const userRole = userProfile.role || 'Owner';
-      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
 
-      this.currentUser = {
-        id: userProfile.id || `usr_${Date.now()}`,
-        name: userProfile.name || 'Astha India',
-        email: userProfile.email || 'owner@hotelastha.com',
-        role: userRole,
-        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
-        avatar: userProfile.avatar || '👑',
-        status: 'ACTIVE',
-        properties: userProfile.properties || ['HOTEL ASTHA'],
-        permissions: userProfile.permissions || defaultPerms
-      };
-    }
-    try {
-      localStorage.setItem('pms_is_authenticated', 'true');
-    } catch (e) {}
-    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
-    this.save();
-    this.notify();
-    return { success: true, user: this.currentUser };
-  }
-
-  logoutUser() {
-    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
-    this.isAuthenticated = false;
-    try {
-      localStorage.setItem('pms_is_authenticated', 'false');
-    } catch (e) {}
-    this.save();
-    this.notify();
-    return { success: true };
-  }
 
   addRoomType(roomTypeData) {
     const newRoomType = {
@@ -4175,56 +4360,44 @@ class PMSStore {
   }
 
 
-  loginUser(userProfile) {
-    this.isAuthenticated = true;
-    if (userProfile) {
-      const rolePresets = getRoleDefaultPermissions();
-      const userRole = userProfile.role || 'Owner';
-      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
 
-      this.currentUser = {
-        id: userProfile.id || `usr_${Date.now()}`,
-        name: userProfile.name || 'Astha India',
-        email: userProfile.email || 'owner@hotelastha.com',
-        role: userRole,
-        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
-        avatar: userProfile.avatar || '👑',
-        status: 'ACTIVE',
-        properties: userProfile.properties || ['HOTEL ASTHA'],
-        permissions: userProfile.permissions || defaultPerms
-      };
-    }
-    try {
-      localStorage.setItem('pms_is_authenticated', 'true');
-    } catch (e) {}
-    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
-    this.save();
-    this.notify();
-    return { success: true, user: this.currentUser };
-  }
-
-  logoutUser() {
-    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
-    this.isAuthenticated = false;
-    try {
-      localStorage.setItem('pms_is_authenticated', 'false');
-    } catch (e) {}
-    this.save();
-    this.notify();
-    return { success: true };
-  }
 
   addRooms(newRoomsList) {
-    const created = newRoomsList.map((item, idx) => ({
-      id: `rm_${Date.now()}_${idx}`,
-      roomNumber: String(item.roomNumber).trim(),
-      roomTypeId: item.roomTypeId,
-      floor: item.roomNumber ? String(item.roomNumber).trim().charAt(0) : '1',
-      status: 'clean',
-      operational: 'available',
-      notes: ''
-    }));
-    this.rooms = [...(this.rooms || []), ...created];
+    const created = [];
+    (newRoomsList || []).forEach((item) => {
+      const cleanNum = String(item.roomNumber || '').trim();
+      if (!cleanNum) return;
+      const numKey = cleanNum.toLowerCase().replace(/^rm_/, '');
+      const canonicalId = `rm_${numKey}`;
+      const existing = (this.rooms || []).find(
+        (r) =>
+          String(r.roomNumber || '').trim().toLowerCase() === numKey ||
+          String(r.id || '').trim().toLowerCase() === canonicalId
+      );
+      if (existing) {
+        existing.roomTypeId = item.roomTypeId || existing.roomTypeId;
+        existing.updatedAt = new Date().toISOString();
+        created.push(existing);
+      } else {
+        const rm = {
+          id: canonicalId,
+          roomNumber: cleanNum,
+          roomTypeId: item.roomTypeId,
+          floor: cleanNum.charAt(0) || '1',
+          status: 'clean',
+          operational: 'available',
+          notes: 'Ready for check-in',
+          updatedAt: new Date().toISOString()
+        };
+        if (this.deletedRoomIds) {
+          this.deletedRoomIds.delete(canonicalId);
+          this.deletedRoomIds.delete(cleanNum);
+          this.deletedRoomIds.delete(numKey);
+        }
+        created.push(rm);
+      }
+    });
+    this.rooms = this.dedupeRoomsByNumber([...(this.rooms || []), ...created], false);
     this.logAudit('ADD_ROOMS', 'PROPERTIES', '', `Added ${created.length} new rooms.`);
     this.save();
     created.forEach((rm) => {
@@ -4278,83 +4451,9 @@ class PMSStore {
   }
 
 
-  loginUser(userProfile) {
-    this.isAuthenticated = true;
-    if (userProfile) {
-      const rolePresets = getRoleDefaultPermissions();
-      const userRole = userProfile.role || 'Owner';
-      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
 
-      this.currentUser = {
-        id: userProfile.id || `usr_${Date.now()}`,
-        name: userProfile.name || 'Astha India',
-        email: userProfile.email || 'owner@hotelastha.com',
-        role: userRole,
-        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
-        avatar: userProfile.avatar || '👑',
-        status: 'ACTIVE',
-        properties: userProfile.properties || ['HOTEL ASTHA'],
-        permissions: userProfile.permissions || defaultPerms
-      };
-    }
-    try {
-      localStorage.setItem('pms_is_authenticated', 'true');
-    } catch (e) {}
-    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
-    this.save();
-    this.notify();
-    return { success: true, user: this.currentUser };
-  }
 
-  logoutUser() {
-    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
-    this.isAuthenticated = false;
-    try {
-      localStorage.setItem('pms_is_authenticated', 'false');
-    } catch (e) {}
-    this.save();
-    this.notify();
-    return { success: true };
-  }
 
-  loginUser(userProfile) {
-    this.isAuthenticated = true;
-    if (userProfile) {
-      const rolePresets = getRoleDefaultPermissions();
-      const userRole = userProfile.role || 'Owner';
-      const defaultPerms = rolePresets[userRole] || rolePresets['Owner'];
-
-      this.currentUser = {
-        id: userProfile.id || `usr_${Date.now()}`,
-        name: userProfile.name || 'Astha India',
-        email: userProfile.email || 'owner@hotelastha.com',
-        role: userRole,
-        initials: userProfile.initials || (userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'AI'),
-        avatar: userProfile.avatar || '👑',
-        status: 'ACTIVE',
-        properties: userProfile.properties || ['HOTEL ASTHA'],
-        permissions: userProfile.permissions || defaultPerms
-      };
-    }
-    try {
-      localStorage.setItem('pms_is_authenticated', 'true');
-    } catch (e) {}
-    this.logAudit('STAFF_LOGIN', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} (${this.currentUser?.role}) signed in successfully.`);
-    this.save();
-    this.notify();
-    return { success: true, user: this.currentUser };
-  }
-
-  logoutUser() {
-    this.logAudit('STAFF_LOGOUT', 'AUTH', this.currentUser?.id || 'usr_staff', `Staff ${this.currentUser?.name} signed out.`);
-    this.isAuthenticated = false;
-    try {
-      localStorage.setItem('pms_is_authenticated', 'false');
-    } catch (e) {}
-    this.save();
-    this.notify();
-    return { success: true };
-  }
 
   deleteReservation(resId) {
     const res = this.reservations.find(r => r.id === resId || r.bookingReference === resId);

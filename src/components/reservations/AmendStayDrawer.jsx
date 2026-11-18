@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import './amend-stay-drawer.css';
 import { Calendar, ChevronDown, X, Check } from 'lucide-react';
@@ -69,10 +69,55 @@ export default function AmendStayDrawer({
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [isRoomMenuOpen, setIsRoomMenuOpen] = useState(false);
   const [isDepartureCalOpen, setIsDepartureCalOpen] = useState(false);
+  const [departureCalPos, setDepartureCalPos] = useState({ top: 0, left: 0 });
   const [isSaving, setIsSaving] = useState(false);
 
   const departureWrapRef = useRef(null);
+  const departureCalPortalRef = useRef(null);
   const roomDropdownRef = useRef(null);
+
+  const updateDepartureCalPos = useCallback(() => {
+    if (!departureWrapRef.current) return;
+    const rect = departureWrapRef.current.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 800;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1200;
+    const popoverHeight = departureCalPortalRef.current?.offsetHeight || 348;
+    const popoverWidth = 320;
+    const margin = 12;
+
+    const spaceBelow = viewportHeight - rect.bottom - margin;
+    const spaceAbove = rect.top - margin;
+
+    let top;
+    if (spaceBelow >= popoverHeight + 8) {
+      top = rect.bottom + 8;
+    } else if (spaceAbove >= popoverHeight + 8) {
+      top = rect.top - popoverHeight - 8;
+    } else if (spaceBelow >= spaceAbove) {
+      top = Math.max(margin, viewportHeight - popoverHeight - margin);
+    } else {
+      top = Math.max(margin, Math.min(rect.top - popoverHeight - 8, viewportHeight - popoverHeight - margin));
+    }
+
+    let left = rect.left;
+    if (left + popoverWidth > viewportWidth - margin) {
+      left = Math.max(margin, rect.right - popoverWidth);
+    }
+    if (left < margin) {
+      left = margin;
+    }
+
+    setDepartureCalPos({ top, left });
+  }, []);
+
+  const toggleDepartureCal = useCallback(() => {
+    setIsDepartureCalOpen((prev) => {
+      if (!prev) {
+        updateDepartureCalPos();
+      }
+      return !prev;
+    });
+  }, [updateDepartureCalPos]);
 
   // Sync state whenever reservation changes or drawer opens
   useEffect(() => {
@@ -118,6 +163,36 @@ export default function AmendStayDrawer({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isRoomMenuOpen]);
+
+  // Keep portal-rendered departure calendar aligned and within viewport bounds
+  useEffect(() => {
+    if (!isDepartureCalOpen) return;
+    updateDepartureCalPos();
+    const rafId = requestAnimationFrame(updateDepartureCalPos);
+
+    const handleScroll = (e) => {
+      if (departureCalPortalRef.current && departureCalPortalRef.current.contains(e.target)) {
+        return;
+      }
+      updateDepartureCalPos();
+    };
+    const handleResize = () => updateDepartureCalPos();
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsDepartureCalOpen(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isDepartureCalOpen, updateDepartureCalPos]);
 
   if (!isOpen || !reservation) return null;
 
@@ -298,7 +373,7 @@ export default function AmendStayDrawer({
                 className="amend-stay-input"
                 value={departureDmy}
                 onChange={(e) => handleDepartureChange(e.target.value)}
-                onClick={() => setIsDepartureCalOpen((prev) => !prev)}
+                onClick={toggleDepartureCal}
                 placeholder="DD/MM/YYYY"
               />
               <button
@@ -306,26 +381,45 @@ export default function AmendStayDrawer({
                 className="amend-stay-cal-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsDepartureCalOpen((prev) => !prev);
+                  toggleDepartureCal();
                 }}
                 title="Choose Departure Date"
               >
                 <Calendar size={18} />
               </button>
 
-              {isDepartureCalOpen && (
-                <CustomCalendar
-                  value={departureDmy}
-                  minDate={arrivalDmy}
-                  highlightDate={reservation.checkInDate || arrivalDmy}
-                  outputFormat="dmy"
-                  onChange={(newDmy) => {
-                    handleDepartureChange(newDmy);
-                    setIsDepartureCalOpen(false);
-                  }}
-                  onClose={() => setIsDepartureCalOpen(false)}
-                />
-              )}
+              {isDepartureCalOpen &&
+                typeof document !== 'undefined' &&
+                ReactDOM.createPortal(
+                  <div
+                    ref={departureCalPortalRef}
+                    className="custom-calendar-portal-wrapper"
+                    style={{
+                      position: 'fixed',
+                      top: `${departureCalPos.top}px`,
+                      left: `${departureCalPos.left}px`,
+                      zIndex: 9999999,
+                      width: '320px'
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <CustomCalendar
+                      value={departureDmy}
+                      minDate={arrivalDmy}
+                      highlightDate={reservation.checkInDate || arrivalDmy}
+                      outputFormat="dmy"
+                      onChange={(newDmy) => {
+                        handleDepartureChange(newDmy);
+                        setIsDepartureCalOpen(false);
+                      }}
+                      onClose={() => setIsDepartureCalOpen(false)}
+                      ignoreRef={departureWrapRef}
+                      className="portal-popover"
+                      placement="portal"
+                    />
+                  </div>,
+                  document.body
+                )}
             </div>
           </div>
 

@@ -7,15 +7,18 @@ import {
   Info,
   X,
   CalendarCheck,
-  ChevronDown
+  ChevronDown,
+  User
 } from 'lucide-react';
 import BlockRoomDrawer from '../housekeeping/BlockRoomDrawer.jsx';
 import BookingDetailsDrawer from '../reservations/BookingDetailsDrawer.jsx';
 import { CustomCalendar } from '../common/CustomDatePicker';
 import ScheduleCalendarAvailabilityCell from './ScheduleCalendarAvailabilityCell';
+import CozyWideToggle from './CozyWideToggle';
+import OccupancyProgressBar from './OccupancyProgressBar';
 import { pmsStore } from '../../services/pmsStore';
 import { navigate } from '../../services/router';
-import { normalizeDateStr, isResMatchingRoom, getNextDayIsoDate } from '../../services/dateUtils';
+import { normalizeDateStr, isResMatchingRoom, getNextDayIsoDate, getTodayIsoDate } from '../../services/dateUtils';
 
 // ==========================================
 // Memoized Subcomponents for Peak Performance
@@ -42,81 +45,83 @@ const DateHeaderRow = memo(function DateHeaderRow({
           <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
             Room Info
           </span>
-          {allCategoryKeys.length > 1 && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleAllCategories();
-              }}
-              style={{
-                background: '#f1f5f9',
-                border: '1px solid #e2e8f0',
-                color: '#64748b',
-                fontSize: '0.68rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                padding: '2px 7px',
-                borderRadius: '4px',
-                transition: 'all 0.15s ease'
-              }}
-              title={allCollapsed ? 'Expand all room categories' : 'Collapse all room categories'}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = '#2563eb';
-                e.currentTarget.style.borderColor = '#93c5fd';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = '#64748b';
-                e.currentTarget.style.borderColor = '#e2e8f0';
-              }}
-            >
-              {allCollapsed ? 'Expand All' : 'Collapse All'}
-            </button>
-          )}
         </div>
       </th>
 
       {dateList.map((col) => {
-        const headerColor = col.isWeekend ? '#ea580c' : '#1e293b';
-        const subColor = col.isWeekend ? '#ea580c' : '#64748b';
+        const isToday = col.isToday;
+        const isWeekend = !isToday && col.isWeekend;
+
+        const cellBg = isToday
+          ? '#fff1f2'
+          : isWeekend
+          ? '#fff7ed'
+          : '#ffffff';
+
+        const insetBorder = isToday
+          ? 'inset 0 0 0 1px #fecdd3'
+          : isWeekend
+          ? 'inset 0 0 0 1px #fed7aa'
+          : undefined;
+
+        const topColor = isToday
+          ? '#e11d48'
+          : isWeekend
+          ? '#f97316'
+          : '#94a3b8';
+
+        const dayNumColor = isToday
+          ? '#e11d48'
+          : isWeekend
+          ? '#f97316'
+          : '#0f172a';
+
+        const monthColor = isToday
+          ? '#e11d48'
+          : isWeekend
+          ? '#f97316'
+          : '#94a3b8';
 
         return (
           <th
             key={col.isoStr}
-            className="date-col-header"
+            className={`date-col-header ${isToday ? 'is-today' : ''} ${isWeekend ? 'is-weekend' : ''}`}
             style={{
               textAlign: 'center',
-              padding: '0.55rem 0.2rem',
-              background: col.isWeekend ? '#fffdfa' : '#ffffff',
-              borderBottom: col.isToday ? '2px solid #2563eb' : undefined
+              padding: '9px 4px 8px',
+              background: cellBg,
+              boxShadow: insetBorder
             }}
           >
             <div
               style={{
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                color: subColor,
-                letterSpacing: '0.02em'
+                fontSize: '10px',
+                fontWeight: isToday ? 800 : 700,
+                color: topColor,
+                letterSpacing: '0.04em',
+                lineHeight: 1.2
               }}
             >
-              {col.dayName}
+              {isToday ? 'TODAY' : col.dayName}
             </div>
             <div
               style={{
-                fontSize: '1rem',
+                fontSize: '20px',
                 fontWeight: 800,
-                color: headerColor,
-                margin: '1px 0'
+                color: dayNumColor,
+                lineHeight: 1.18,
+                margin: '2px 0'
               }}
             >
               {col.dayNum}
             </div>
             <div
               style={{
-                fontSize: '0.66rem',
-                fontWeight: 600,
-                color: subColor,
-                letterSpacing: '0.04em'
+                fontSize: '10px',
+                fontWeight: isToday ? 700 : 600,
+                color: monthColor,
+                letterSpacing: '0.04em',
+                lineHeight: 1.2
               }}
             >
               {col.month}
@@ -197,8 +202,8 @@ const CategoryRow = memo(function CategoryRow({
               minWidth: `${cellWidth}px`,
               maxWidth: `${cellWidth}px`,
               width: `${cellWidth}px`,
-              height: '43.2px',
-              background: col.isWeekend ? '#fffdfa' : '#ffffff',
+              height: '44px',
+              background: '#ffffff',
               borderBottom: '1px solid #f1f5f9',
               verticalAlign: 'middle'
             }}
@@ -310,6 +315,19 @@ const RoomRow = memo(function RoomRow({
           selectedSlot?.room?.id === room.id &&
           selectedSlot?.col?.isoStr === col.isoStr;
 
+        const isStartOnThisCol =
+          startingRes && normalizeDateStr(startingRes.checkInDate) === col.isoStr;
+
+        const pillLeft = isStartOnThisCol ? Math.round(cellWidth * 0.5) + 3 : 3;
+        const pillWidth = startingRes
+          ? Math.max(
+              44,
+              Math.round((isStartOnThisCol ? spanNights : Math.max(0.5, spanNights - 0.5)) * cellWidth) - 6
+            )
+          : 0;
+        const showGuestLabel = pillWidth >= 82;
+        const isCheckedOut = startingRes?.status === 'checked_out';
+
         return (
           <td
             key={col.isoStr}
@@ -334,128 +352,71 @@ const RoomRow = memo(function RoomRow({
                 : `Click to book or block Room ${room.roomNumber} on ${col.isoStr}`
             }
           >
-            {/* Spanning Booking Block */}
+            {/* Spanning Booking Pill (Half-day Check-in to Half-day Check-out) */}
             {startingRes && (
-              (startingRes.status === 'in_house' || startingRes.status === 'checked_out') ? (
+              <div
+                className={`tape-booking-pill ${isCheckedOut ? 'is-checked-out' : 'is-active'}`}
+                style={{
+                  left: `${pillLeft}px`,
+                  width: `${pillWidth}px`,
+                  backgroundColor: isCheckedOut ? '#6b7280' : '#2f7cf6'
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (justDraggedRef.current) return;
+                  onBookingClick(startingRes);
+                }}
+                title={`${isCheckedOut ? 'Checked-Out' : (startingRes.status || 'Confirmed').replace('_', ' ').toUpperCase()}: ${startingRes.primaryGuest?.name || 'Guest'} • Room ${room.roomNumber}`}
+              >
                 <div
-                  className={`absolute inset-y-1 h-9 rounded-md flex items-center px-2 space-x-2 text-white shadow-sm mx-0.5 cursor-pointer hover:scale-[1.01] hover:brightness-105 transition-transform group/booking ${
-                    startingRes.status === 'checked_out' ? 'bg-[#6B7280]' : 'bg-[#3B82F6]'
-                  }`}
                   style={{
-                    left: '2px',
-                    width: `calc(${spanNights * cellWidth}px - 4px)`
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (justDraggedRef.current) return;
-                    onBookingClick(startingRes);
-                  }}
-                  title={`${startingRes.status === 'checked_out' ? 'Checked-Out' : 'In-House'}: ${startingRes.primaryGuest?.name || 'Guest'} • Room ${room.roomNumber}`}
-                >
-                  <div
-                    className="pl-1 flex items-center space-x-2 w-full"
-                    style={{ paddingLeft: '4px', display: 'flex', alignItems: 'center', width: '100%', gap: '8px' }}
-                  >
-                    <div
-                      className="flex-1 flex min-w-0 gap-2"
-                      style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px' }}
-                    >
-                      <span
-                        className="material-symbols-outlined select-none text-white shrink-0"
-                        style={{ fontSize: '18px', userSelect: 'none', color: '#ffffff', flexShrink: 0, lineHeight: 1 }}
-                      >
-                        person
-                      </span>
-                      <p
-                        className="small-title-3 font-bold truncate"
-                        style={{
-                          fontWeight: 700,
-                          margin: 0,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          color: '#ffffff',
-                          fontSize: '13px'
-                        }}
-                      >
-                        {startingRes.primaryGuest?.name || 'Guest'}
-                      </p>
-                    </div>
-                    <span
-                      className="material-symbols-outlined select-none text-white/50 shrink-0"
-                      style={{
-                        fontSize: '16px',
-                        userSelect: 'none',
-                        color: 'rgba(255, 255, 255, 0.5)',
-                        flexShrink: 0,
-                        lineHeight: 1
-                      }}
-                    >
-                      chevron_right
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  className={`booking-block status-${startingRes.status}`}
-                  style={{
-                    left: '2px',
-                    width: `calc(${spanNights * cellWidth}px - 4px)`
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (justDraggedRef.current) return;
-                    onBookingClick(startingRes);
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: showGuestLabel ? 'space-between' : 'space-between',
+                    width: '100%',
+                    minWidth: 0,
+                    gap: '6px'
                   }}
                 >
                   <div
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '0.25rem'
+                      gap: '7px',
+                      minWidth: 0,
+                      flex: 1
                     }}
                   >
-                    <span
-                      style={{
-                        fontWeight: 700,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        fontSize: '0.74rem'
-                      }}
-                    >
-                      {startingRes.primaryGuest?.name}
-                    </span>
-                    {startingRes.isVIP && (
+                    <User
+                      size={15}
+                      strokeWidth={2}
+                      color="#ffffff"
+                      style={{ flexShrink: 0 }}
+                    />
+                    {showGuestLabel && (
                       <span
                         style={{
-                          fontSize: '0.6rem',
-                          background: '#fbbf24',
-                          color: '#78350f',
-                          padding: '1px 3px',
-                          borderRadius: '2px',
-                          fontWeight: 800
+                          fontWeight: 700,
+                          fontSize: '12.5px',
+                          lineHeight: 1.2,
+                          color: '#ffffff',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
                         }}
                       >
-                        VIP
+                        {startingRes.primaryGuest?.name || 'Guest'}
                       </span>
                     )}
                   </div>
-                  <div
-                    style={{
-                      fontSize: '0.64rem',
-                      opacity: 0.9,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden'
-                    }}
-                  >
-                    {startingRes.nights}N • ₹
-                    {startingRes.totalAmount?.toLocaleString()} •{' '}
-                    {startingRes.bookingSource}
-                  </div>
+                  <ChevronRight
+                    size={14}
+                    strokeWidth={2.2}
+                    color="rgba(255, 255, 255, 0.72)"
+                    style={{ flexShrink: 0 }}
+                  />
                 </div>
-              )
+              </div>
             )}
 
             {/* Spanning Maintenance Block */}
@@ -463,8 +424,8 @@ const RoomRow = memo(function RoomRow({
               <div
                 className="booking-block status-maintenance"
                 style={{
-                  left: '2px',
-                  width: `calc(4 * ${cellWidth}px - 4px)`
+                  left: '3px',
+                  width: `calc(4 * ${cellWidth}px - 6px)`
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -527,7 +488,7 @@ const FooterRow = memo(function FooterRow({ dateList, dailyStatsMap }) {
               zIndex: 25,
               textAlign: 'center',
               padding: '0.5rem 0.2rem',
-              background: col.isWeekend ? '#fffdfa' : '#ffffff',
+              background: '#ffffff',
               borderTop: '2px solid #e2e8f0',
               borderBottom: 'none',
               boxShadow: '0 -3px 6px rgba(0, 0, 0, 0.04)'
@@ -546,6 +507,7 @@ const FooterRow = memo(function FooterRow({ dateList, dailyStatsMap }) {
             >
               {stats.occPercent}%
             </div>
+            <OccupancyProgressBar value={stats.occPercent} />
           </td>
         );
       })}
@@ -605,13 +567,39 @@ export default function TapeChartView({
   const popoverRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const roomTypeDropdownRef = useRef(null);
+  const baseDatePickerRef = useRef(null);
+
+  // Measure visible timeline width so Cozy fits 14 days and Wide fits 7 days cleanly
+  const STICKY_ROOM_COL_WIDTH = 180;
+  const [timelineViewportWidth, setTimelineViewportWidth] = useState(1008);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    const updateWidth = () => {
+      const avail = Math.max(490, el.clientWidth - STICKY_ROOM_COL_WIDTH);
+      setTimelineViewportWidth((prev) => (Math.abs(prev - avail) > 2 ? avail : prev));
+    };
+
+    updateWidth();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(updateWidth);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
 
   // High-performance continuous buffer: 35 days past + 65 days future = 100 continuous days (~3.5 months)
   const BUFFER_PAST_DAYS = 35;
   const BUFFER_FUTURE_DAYS = 65;
   const TOTAL_DAYS = BUFFER_PAST_DAYS + BUFFER_FUTURE_DAYS;
 
-  const cellWidth = density === 'cozy' ? 52 : 84;
+  const cozyCellWidth = Math.max(66, Math.floor(timelineViewportWidth / 14));
+  const wideCellWidth = Math.max(132, Math.floor(timelineViewportWidth / 7));
+  const cellWidth = density === 'cozy' ? cozyCellWidth : wideCellWidth;
 
   // Compute start date of the timeline buffer
   const bufferStartDate = useMemo(() => {
@@ -645,6 +633,7 @@ export default function TapeChartView({
   };
 
   // Fast date columns generation (lean date objects only, no nested calculations)
+  const todayIso = property?.businessDate || getTodayIsoDate();
   const dateList = useMemo(() => {
     const list = [];
     for (let i = 0; i < TOTAL_DAYS; i++) {
@@ -654,7 +643,7 @@ export default function TapeChartView({
       const m = String(d.getMonth() + 1).padStart(2, '0');
       const day = String(d.getDate()).padStart(2, '0');
       const isoStr = `${y}-${m}-${day}`;
-      const isToday = isoStr === property?.businessDate;
+      const isToday = isoStr === todayIso;
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
 
       list.push({
@@ -668,7 +657,7 @@ export default function TapeChartView({
       });
     }
     return list;
-  }, [bufferStartDate, property?.businessDate]);
+  }, [bufferStartDate, todayIso]);
 
   // Filter rooms
   const filteredRooms = useMemo(() => {
@@ -917,11 +906,21 @@ export default function TapeChartView({
     return () => document.removeEventListener('mousedown', handleDropdownOutside);
   }, [isRoomTypeDropdownOpen]);
 
-  // Initial scroll position alignment (align baseDate to the left of the visible grid)
+  // Initial scroll alignment + keep anchor date column snapped when cellWidth changes on resize/density toggle
+  const prevCellWidthRef = useRef(cellWidth);
   useEffect(() => {
-    if (scrollContainerRef.current && !isInitialScrollDone.current) {
-      scrollContainerRef.current.scrollLeft = BUFFER_PAST_DAYS * cellWidth;
+    const scrollEl = scrollContainerRef.current;
+    if (!scrollEl) return;
+    if (!isInitialScrollDone.current) {
+      scrollEl.scrollLeft = BUFFER_PAST_DAYS * cellWidth;
+      prevCellWidthRef.current = cellWidth;
       isInitialScrollDone.current = true;
+      return;
+    }
+    if (prevCellWidthRef.current !== cellWidth) {
+      const colIdx = Math.round(scrollEl.scrollLeft / prevCellWidthRef.current);
+      scrollEl.scrollLeft = colIdx * cellWidth;
+      prevCellWidthRef.current = cellWidth;
     }
   }, [cellWidth]);
 
@@ -978,7 +977,7 @@ export default function TapeChartView({
     if (e.button !== 0) return;
     if (
       e.target.closest(
-        'button, input, select, .slot-popover-close-btn, .slot-action-card, .custom-calendar-popover, .tape-chart-icon-btn, .tape-chart-category-chevron, .group\\/booking, .booking-block'
+        'button, input, select, .slot-popover-close-btn, .slot-action-card, .custom-calendar-popover, .tape-chart-icon-btn, .tape-chart-category-chevron, .group\\/booking, .booking-block, .tape-booking-pill'
       )
     ) {
       return;
@@ -1146,20 +1145,11 @@ export default function TapeChartView({
     }
   }, [cellWidth, dateList]);
 
-  // Density switcher: preserves anchor position
+  // Density switcher: anchor column is preserved cleanly by the cellWidth effect
   const handleDensityChange = useCallback((newDensity) => {
     if (newDensity === density) return;
-    const oldWidth = cellWidth;
-    const newWidth = newDensity === 'cozy' ? 52 : 84;
-    const currentScroll = scrollContainerRef.current?.scrollLeft || 0;
-    const colIndex = Math.round(currentScroll / oldWidth);
     setDensity(newDensity);
-    requestAnimationFrame(() => {
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollLeft = colIndex * newWidth;
-      }
-    });
-  }, [cellWidth, density]);
+  }, [density]);
 
   // Memoized cell click callbacks
   const handleSlotClickCell = useCallback((e, room, col) => {
@@ -1210,7 +1200,10 @@ export default function TapeChartView({
   }, [property?.businessDate]);
 
   return (
-    <div className={`tape-chart-container ${density}`}>
+    <div
+      className={`tape-chart-container ${density}`}
+      style={{ '--tape-cell-width': `${cellWidth}px` }}
+    >
       {/* 1. Tape Chart Toolbar matching live PMS screenshot */}
       <div className="tape-chart-toolbar">
         {/* Left: Info icon & Room Type selector */}
@@ -1322,100 +1315,64 @@ export default function TapeChartView({
         {/* Right: Cozy / Wide toggle and Date Navigator */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           {/* Cozy / Wide Segmented Switcher */}
-          <div
-            style={{
-              display: 'flex',
-              background: '#f1f5f9',
-              borderRadius: '24px',
-              padding: '3px',
-              border: '1px solid #e2e8f0'
-            }}
-          >
-            <button
-              onClick={() => handleDensityChange('cozy')}
-              style={{
-                border: 'none',
-                background: density === 'cozy' ? '#ffffff' : 'transparent',
-                color: density === 'cozy' ? '#0f172a' : '#64748b',
-                padding: '0.32rem 0.95rem',
-                borderRadius: '18px',
-                fontSize: '0.82rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                boxShadow: density === 'cozy' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              Cozy
-            </button>
-            <button
-              onClick={() => handleDensityChange('wide')}
-              style={{
-                border: 'none',
-                background: density === 'wide' ? '#ffffff' : 'transparent',
-                color: density === 'wide' ? '#0f172a' : '#64748b',
-                padding: '0.32rem 0.95rem',
-                borderRadius: '18px',
-                fontSize: '0.82rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                boxShadow: density === 'wide' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              Wide
-            </button>
-          </div>
+          <CozyWideToggle value={density} onChange={handleDensityChange} />
 
           {/* Date Navigator */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
               type="button"
               onClick={handlePrev}
+              className="tape-nav-circle-btn"
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '9999px',
                 border: '1px solid #e2e8f0',
                 background: '#ffffff',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#475569',
-                transition: 'background-color 0.12s ease'
+                color: '#0f172a',
+                transition: 'background-color 0.15s ease, border-color 0.15s ease'
               }}
               title="Previous Week"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={16} strokeWidth={2.2} />
             </button>
 
             {/* Date Picker Display */}
             <div
+              ref={baseDatePickerRef}
               style={{
                 position: 'relative',
                 display: 'flex',
                 alignItems: 'center',
-                padding: '0.38rem 0.85rem',
+                justifyContent: 'space-between',
+                height: '36px',
+                minWidth: '196px',
+                padding: '0 14px',
                 borderRadius: '8px',
-                border: '1px solid #e2e8f0',
-                background: '#ffffff',
-                fontSize: '0.84rem',
-                fontWeight: 600,
+                border: '1px solid #f1f5f9',
+                background: '#f8fafc',
+                fontSize: '13.5px',
+                fontWeight: 500,
                 color: '#1e293b',
-                gap: '8px',
-                cursor: 'pointer'
+                gap: '12px',
+                cursor: 'pointer',
+                boxSizing: 'border-box'
               }}
               onClick={() => setIsBaseDateCalOpen((prev) => !prev)}
             >
               <span>{formatBaseDateDisplay(visibleDate || baseDate)}</span>
-              <CalendarIcon size={15} color="#64748b" />
+              <CalendarIcon size={16} color="#64748b" />
 
               {isBaseDateCalOpen && (
                 <CustomCalendar
                   value={visibleDate || baseDate}
                   placement="bottom-right"
                   outputFormat="iso"
+                  ignoreRef={baseDatePickerRef}
                   onChange={handleDatePickerSelect}
                   onClose={() => setIsBaseDateCalOpen(false)}
                 />
@@ -1425,22 +1382,23 @@ export default function TapeChartView({
             <button
               type="button"
               onClick={handleNext}
+              className="tape-nav-circle-btn"
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '9999px',
                 border: '1px solid #e2e8f0',
                 background: '#ffffff',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#475569',
-                transition: 'background-color 0.12s ease'
+                color: '#0f172a',
+                transition: 'background-color 0.15s ease, border-color 0.15s ease'
               }}
               title="Next Week"
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={16} strokeWidth={2.2} />
             </button>
           </div>
         </div>

@@ -6,11 +6,10 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  signInAnonymously,
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { auth, db, firebaseConfig } from './firebase';
+import { db, firebaseConfig, getFirebaseAuth, isFirebaseConfigured } from './firebase';
 
 export const STAFF_AUTH_DOMAIN = 'staff.hotelastha.com';
 
@@ -207,33 +206,35 @@ export async function createStaffAccount({
 
   // Use a temporary secondary Firebase App so creating a user does NOT sign out the Owner
   let secondaryApp = null;
-  try {
-    secondaryApp = initializeApp(firebaseConfig, `staff-provisioner-${Date.now()}`);
-    const secondaryAuth = getAuth(secondaryApp);
-    const cred = await createUserWithEmailAndPassword(secondaryAuth, loginEmail, tempPassword);
-    firebaseUid = cred.user.uid;
-    firebaseAuthCreated = true;
-    await signOut(secondaryAuth);
-  } catch (err) {
-    console.warn(
-      '[StaffProvisioning] Firebase Auth secondary create notice (using local verified hash fallback):',
-      err?.code || err?.message
-    );
-    // If email already exists in Firebase Auth, surface a clean message only if user explicitly typed that email
-    if (err?.code === 'auth/email-already-in-use' && cleanContactEmail) {
-      if (secondaryApp) {
-        try { await deleteApp(secondaryApp); } catch (_) {}
+  if (isFirebaseConfigured) {
+    try {
+      secondaryApp = initializeApp(firebaseConfig, `staff-provisioner-${Date.now()}`);
+      const secondaryAuth = getAuth(secondaryApp);
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, loginEmail, tempPassword);
+      firebaseUid = cred.user.uid;
+      firebaseAuthCreated = true;
+      await signOut(secondaryAuth);
+    } catch (err) {
+      console.warn(
+        '[StaffProvisioning] Firebase Auth secondary create notice (using local verified hash fallback):',
+        err?.code || err?.message
+      );
+      // If email already exists in Firebase Auth, surface a clean message only if user explicitly typed that email
+      if (err?.code === 'auth/email-already-in-use' && cleanContactEmail) {
+        if (secondaryApp) {
+          try { await deleteApp(secondaryApp); } catch (_) {}
+        }
+        return {
+          success: false,
+          error: `An account with email "${cleanContactEmail}" already exists. Leave email blank to auto-generate a Staff ID login.`
+        };
       }
-      return {
-        success: false,
-        error: `An account with email "${cleanContactEmail}" already exists. Leave email blank to auto-generate a Staff ID login.`
-      };
-    }
-  } finally {
-    if (secondaryApp) {
-      try {
-        await deleteApp(secondaryApp);
-      } catch (_) {}
+    } finally {
+      if (secondaryApp) {
+        try {
+          await deleteApp(secondaryApp);
+        } catch (_) {}
+      }
     }
   }
 
@@ -337,22 +338,16 @@ export async function loginStaff(idOrEmail, password, teamMembers = []) {
   let firebaseLoginOk = false;
   let firebaseUser = null;
   const authEmailToTry = matchedMember?.loginEmail || mappedAuthEmail;
+  const authInst = getFirebaseAuth();
 
   try {
-    if (auth && typeof auth.signInWithEmailAndPassword === 'function') {
-      const userCredential = await signInWithEmailAndPassword(auth, authEmailToTry, cleanPass);
+    if (authInst) {
+      const userCredential = await signInWithEmailAndPassword(authInst, authEmailToTry, cleanPass);
       firebaseLoginOk = true;
       firebaseUser = userCredential.user;
     }
   } catch (error) {
     console.warn('Firebase Auth notice:', error?.code || error?.message);
-    if (
-      matchedMember &&
-      matchedMember.firebaseAuthCreated &&
-      (error?.code === 'auth/wrong-password' || error?.code === 'auth/invalid-credential')
-    ) {
-      // Fall through to hash check in case of local password sync, else reject below
-    }
   }
 
   if (firebaseLoginOk) {
@@ -368,11 +363,6 @@ export async function loginStaff(idOrEmail, password, teamMembers = []) {
   if (matchedMember && matchedMember.passwordHash && matchedMember.passwordSalt) {
     const computedHash = await hashStaffPassword(cleanPass, matchedMember.passwordSalt);
     if (computedHash === matchedMember.passwordHash) {
-      try {
-        if (auth && typeof auth.signInAnonymously === 'function') {
-          await signInAnonymously(auth);
-        }
-      } catch (_) {}
       return {
         success: true,
         staff: matchedMember,
@@ -400,11 +390,6 @@ export async function loginStaff(idOrEmail, password, teamMembers = []) {
       cleanPass === 'admin123';
 
     if (isCorrectPass) {
-      try {
-        if (auth && typeof auth.signInAnonymously === 'function') {
-          await signInAnonymously(auth);
-        }
-      } catch (_) {}
       return {
         success: true,
         staff: matchedMember ? { ...matchedDemo, ...matchedMember } : matchedDemo,
@@ -419,11 +404,6 @@ export async function loginStaff(idOrEmail, password, teamMembers = []) {
     (cleanIdentifier === 'info@asthasoftindia.com' || cleanIdentifier === 'owner@hotelastha.com') &&
     cleanPass.length >= 6
   ) {
-    try {
-      if (auth && typeof auth.signInAnonymously === 'function') {
-        await signInAnonymously(auth);
-      }
-    } catch (_) {}
     return {
       success: true,
       staff: DEMO_STAFF_ACCOUNTS[0],
@@ -449,14 +429,6 @@ export async function quickStaffLogin(roleKey = 'owner') {
         a.email.toLowerCase().includes(roleKey.toLowerCase())
     ) || DEMO_STAFF_ACCOUNTS[0];
 
-  try {
-    if (auth && typeof auth.signInAnonymously === 'function') {
-      await signInAnonymously(auth);
-    }
-  } catch (error) {
-    console.warn('Anonymous auth note:', error?.message);
-  }
-
   return {
     success: true,
     staff: account,
@@ -469,8 +441,9 @@ export async function quickStaffLogin(roleKey = 'owner') {
  */
 export async function logoutStaff() {
   try {
-    if (auth && typeof auth.signOut === 'function') {
-      await signOut(auth);
+    const authInst = getFirebaseAuth();
+    if (authInst) {
+      await signOut(authInst);
     }
     return { success: true };
   } catch (error) {
@@ -489,8 +462,9 @@ export async function sendStaffPasswordReset(email) {
   }
 
   try {
-    if (auth && typeof auth.sendPasswordResetEmail === 'function') {
-      await sendPasswordResetEmail(auth, cleanEmail);
+    const authInst = getFirebaseAuth();
+    if (authInst) {
+      await sendPasswordResetEmail(authInst, cleanEmail);
     }
     return { success: true, message: `Password reset instructions sent to ${cleanEmail}` };
   } catch (error) {
@@ -500,12 +474,14 @@ export async function sendStaffPasswordReset(email) {
 }
 
 export function subscribeToStaffAuth(callback) {
-  if (auth && typeof auth.onAuthStateChanged === 'function') {
-    return onAuthStateChanged(auth, callback);
+  const authInst = getFirebaseAuth();
+  if (authInst) {
+    return onAuthStateChanged(authInst, callback);
   }
   return () => {};
 }
 
 export function getCurrentStaff() {
-  return auth?.currentUser || null;
+  const authInst = getFirebaseAuth();
+  return authInst?.currentUser || null;
 }

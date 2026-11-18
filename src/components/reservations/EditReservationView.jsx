@@ -37,7 +37,8 @@ import {
   Loader2,
   History,
   Bed,
-  Moon
+  Moon,
+  LogOut
 } from 'lucide-react';
 import { pmsStore } from '../../services/pmsStore';
 import { uploadGuestIdDocument } from '../../services/firebaseStorage';
@@ -897,17 +898,46 @@ export default function EditReservationView({
     return roomChargesList.reduce((acc, rc) => acc + (Number(rc.netAmount) || 0), 0).toFixed(2);
   }, [roomChargesList]);
 
-  // Live Audit Trail matching PMS operations
+  const [liveAuditTrail, setLiveAuditTrail] = useState(() => pmsStore.getState().auditTrail || []);
+
+  useEffect(() => {
+    const unsub = pmsStore.subscribe((newState) => {
+      if (Array.isArray(newState?.auditTrail)) {
+        setLiveAuditTrail(newState.auditTrail);
+      }
+    });
+    return unsub;
+  }, []);
+
+  // Live Audit Trail matching PMS operations (merges Firestore auditTrail collection + reservation.auditLogs)
   const currentResRef = currentRes.bookingReference || currentRes.id || '';
   const isRes14 = String(currentResRef).includes('14') || currentRes.id === 'res_14';
 
-  const rawStoreAudits = (pmsStore.getState().auditTrail || [])
-    .filter(a =>
-      a.reservationId === currentRes.id ||
-      a.bookingReference === currentRes.bookingReference ||
-      (a.entityId && (a.entityId === currentRes.id || a.entityId === currentRes.bookingReference)) ||
-      (a.details && (a.details.includes(currentRes.id) || a.details.includes(currentRes.bookingReference || '')))
+  const rawStoreAudits = useMemo(() => {
+    const combinedMap = new Map();
+    const fromStore = (liveAuditTrail || []).filter(a =>
+      a && (
+        a.reservationId === currentRes.id ||
+        a.meta?.reservationId === currentRes.id ||
+        a.bookingReference === currentRes.bookingReference ||
+        a.meta?.bookingReference === currentRes.bookingReference ||
+        (currentFolio?.folioNumber && (a.entityId === currentFolio.folioNumber || a.meta?.folioNumber === currentFolio.folioNumber)) ||
+        (a.entityId && (a.entityId === currentRes.id || a.entityId === currentRes.bookingReference)) ||
+        (a.details && (a.details.includes(currentRes.id) || (currentRes.bookingReference && a.details.includes(currentRes.bookingReference))))
+      )
     );
+    fromStore.forEach((a) => {
+      if (a.id) combinedMap.set(a.id, a);
+    });
+    if (Array.isArray(currentRes.auditLogs)) {
+      currentRes.auditLogs.forEach((a) => {
+        if (a && a.id && !combinedMap.has(a.id)) {
+          combinedMap.set(a.id, a);
+        }
+      });
+    }
+    return Array.from(combinedMap.values());
+  }, [liveAuditTrail, currentRes.id, currentRes.bookingReference, currentRes.auditLogs, currentFolio?.folioNumber, folioVersion]);
 
   const mappedStoreAudits = useMemo(() => {
     return rawStoreAudits.map((a, idx) => {
@@ -923,7 +953,9 @@ export default function EditReservationView({
           timeStr = a.timestamp.split(' ')[1] || a.timestamp;
         }
       }
-      const dateStr = a.timestamp?.split(' ')[0] || (meta.date || getTodayIsoDate());
+      const dateStr = a.timestamp
+        ? String(a.timestamp).split(/[T ]/)[0]
+        : (meta.date || getTodayIsoDate());
       const author = a.actor || a.userName || 'Astha India';
 
       if (act === 'NIGHT_AUDIT_PROCESSED' || a.action === 'NIGHT_AUDIT_PROCESSED') {
@@ -1057,6 +1089,43 @@ export default function EditReservationView({
         };
       }
 
+      if (
+        act === 'PAYMENT_UPDATED' ||
+        act === 'CHARGE_UPDATED' ||
+        a.action === 'PAYMENT_UPDATED' ||
+        a.action === 'CHARGE_UPDATED' ||
+        a.action === 'UPDATE_TRANSACTION'
+      ) {
+        const isPayEdit =
+          act === 'PAYMENT_UPDATED' ||
+          a.action === 'PAYMENT_UPDATED' ||
+          meta.isPayment === true ||
+          String(a.details || '').toLowerCase().includes('payment');
+        return {
+          id: a.id || `tx_edit_${idx}`,
+          type: 'TRANSACTION_UPDATED',
+          nodeColor: '#2563eb',
+          icon: <Pencil size={15} color="#2563eb" />,
+          title: isPayEdit ? 'Payment Edited' : 'Charge Edited',
+          time: timeStr,
+          date: dateStr,
+          author,
+          affectsRoom: !isPayEdit,
+          isPayment: isPayEdit,
+          folioNumber: meta.folioNumber || currentFolio?.folioNumber || '',
+          method: meta.paymentMethod || '',
+          voucherNumber: meta.voucherNumber || '',
+          oldAmount: meta.oldAmount,
+          newAmount: meta.newAmount,
+          oldDate: meta.oldDate,
+          newDate: meta.newDate,
+          oldDescription: meta.oldDescription,
+          newDescription: meta.newDescription,
+          details: a.details || '',
+          affectedDates: meta.affectedDates || [meta.newDate || dateStr]
+        };
+      }
+
       if (act === 'CHARGE_ADDED' || a.action === 'ADD_CHARGE' || a.action === 'POST_PENDING_CHARGES') {
         return {
           id: a.id || `chg_${idx}`,
@@ -1093,20 +1162,23 @@ export default function EditReservationView({
         };
       }
 
-      if (act === 'CHECK_OUT') {
+      if (act === 'CHECK_OUT' || a.action === 'CHECK_OUT' || act === 'GUEST_CHECKED_OUT') {
         return {
           id: a.id || `checkout_${idx}`,
           type: 'GUEST_CHECKED_OUT',
           nodeColor: '#10b981',
-          icon: <User size={16} color="#10b981" />,
+          icon: <LogOut size={16} color="#10b981" />,
           title: 'Guest Checked Out',
           time: timeStr,
           date: dateStr,
           author,
-          affectsRoom: false,
-          oldStatus: 'CHECKED_IN',
-          newStatus: 'CHECKED_OUT',
-          affectedDates: [dateStr]
+          affectsRoom: true,
+          roomNumber: meta.roomNumber || roomNum || '',
+          guestName: meta.guestName || currentRes.primaryGuest?.name || '',
+          details: a.details || '',
+          oldStatus: meta.oldStatus || 'CHECKED_IN',
+          newStatus: meta.newStatus || 'CHECKED_OUT',
+          affectedDates: meta.affectedDates || [meta.actualCheckOutDate || dateStr]
         };
       }
 
@@ -1257,9 +1329,40 @@ export default function EditReservationView({
     const roomAssignedTimeStr = createdTimeStr;
     const roomAssignedDateStr = resDate;
 
-    const isCheckedIn = currentRes.status === 'in_house' || currentRes.status === 'checked_out';
+    const normStatus = String(currentRes.status || '').toLowerCase().replace(/[\s-]+/g, '_');
+    const isCheckedOut = normStatus === 'checked_out';
+    const isCheckedIn = normStatus === 'in_house' || normStatus === 'checked_in' || isCheckedOut;
+
+    const checkedOutTimestamp = currentRes.checkedOutAt ? new Date(currentRes.checkedOutAt) : null;
+    const checkOutDateStr =
+      currentRes.actualCheckOutDate ||
+      (checkedOutTimestamp && !isNaN(checkedOutTimestamp.getTime())
+        ? checkedOutTimestamp.toISOString().split('T')[0]
+        : currentRes.checkOutDate || resDate);
+    const checkOutTimeStr =
+      checkedOutTimestamp && !isNaN(checkedOutTimestamp.getTime())
+        ? checkedOutTimestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : (currentRes.checkOutTime
+            ? (currentRes.checkOutTime.length === 5 ? `${currentRes.checkOutTime}:00` : currentRes.checkOutTime)
+            : '11:00:00 AM');
 
     return [
+      ...(isCheckedOut ? [{
+        id: `aud_base_co_${currentRes.id}`,
+        type: 'GUEST_CHECKED_OUT',
+        nodeColor: '#10b981',
+        icon: <LogOut size={16} color="#10b981" />,
+        title: 'Guest Checked Out',
+        time: checkOutTimeStr,
+        date: checkOutDateStr,
+        author: 'Astha India',
+        affectsRoom: true,
+        roomNumber: roomNum || '',
+        guestName: guestForm.firstName ? `${guestForm.firstName} ${guestForm.lastName}` : (currentRes.primaryGuest?.name || 'Guest'),
+        oldStatus: 'CHECKED_IN',
+        newStatus: 'CHECKED_OUT',
+        affectedDates: [checkOutDateStr]
+      }] : []),
       ...(isCheckedIn ? [{
         id: `aud_base_ci_${currentRes.id}`,
         type: 'GUEST_CHECKED_IN',
@@ -1322,6 +1425,7 @@ export default function EditReservationView({
 
     // Exclude any baseline event whose type is already handled by live store audits
     const nonDuplicateBaselines = genericBaselineEvents.filter(b => {
+      if (b.type === 'GUEST_CHECKED_OUT' && storeEventTypes.has('GUEST_CHECKED_OUT')) return false;
       if (b.type === 'GUEST_CHECKED_IN' && storeEventTypes.has('GUEST_CHECKED_IN')) return false;
       if (b.type === 'ROOM_REASSIGNED' && storeEventTypes.has('ROOM_REASSIGNED')) return false;
       if (b.type === 'RESERVATION_CREATED' && storeEventTypes.has('RESERVATION_CREATED')) return false;
@@ -3551,9 +3655,16 @@ export default function EditReservationView({
                             <span style={{ color: '#16a34a', fontWeight: 'bold' }}>→</span>
                             <span className="diff-new-green">{item.newStatus || 'CHECKED_OUT'}</span>
                           </div>
+                          {item.roomNumber && (
+                            <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '0.35rem' }}>
+                              <span style={{ color: '#64748b' }}>Room Vacated:</span>{' '}
+                              <strong>Room {item.roomNumber}</strong>{' '}
+                              <span style={{ color: '#d97706', fontWeight: 600 }}>· Flagged Dirty</span>
+                            </div>
+                          )}
                           {item.affectedDates && item.affectedDates.length > 0 && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginTop: '0.35rem' }}>
-                              <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 500 }}>Affected dates:</span>
+                              <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 500 }}>Check-out date:</span>
                               {item.affectedDates.map(d => (
                                 <span key={d} className="audit-affected-tag">{d}</span>
                               ))}
@@ -3623,6 +3734,76 @@ export default function EditReservationView({
                             </div>
                           )}
                         </>
+                      )}
+
+                      {item.type === 'TRANSACTION_UPDATED' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                          {(item.folioNumber || item.method) && (
+                            <div style={{ fontSize: '0.78rem', color: '#475569' }}>
+                              {item.folioNumber && (
+                                <>
+                                  <span style={{ color: '#64748b' }}>Folio:</span>{' '}
+                                  <strong>{item.folioNumber}</strong>
+                                </>
+                              )}
+                              {item.isPayment && item.method && item.method !== '-' && (
+                                <>
+                                  {' · '}
+                                  <span style={{ color: '#64748b' }}>Method:</span>{' '}
+                                  <strong>{item.method}</strong>
+                                </>
+                              )}
+                            </div>
+                          )}
+
+                          {item.oldAmount !== undefined && item.newAmount !== undefined ? (
+                            item.oldAmount !== item.newAmount ? (
+                              <div>
+                                <div style={{ fontWeight: 600, color: '#475569', fontSize: '0.78rem', marginBottom: '0.2rem' }}>Amount:</div>
+                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                  <div className="audit-pill-red-strike">₹{Number(item.oldAmount).toFixed(2)}</div>
+                                  <span style={{ color: '#16a34a', fontWeight: 'bold' }}>→</span>
+                                  <div className="audit-pill-green">₹{Number(item.newAmount).toFixed(2)}</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="audit-pill-neutral">
+                                Amount: ₹{Number(item.newAmount).toFixed(2)}
+                              </div>
+                            )
+                          ) : (
+                            item.details && <div style={{ fontSize: '0.8rem', color: '#334155' }}>{item.details}</div>
+                          )}
+
+                          {item.oldDate && item.newDate && item.oldDate !== item.newDate && (
+                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem', fontSize: '0.78rem' }}>
+                              <span style={{ fontWeight: 600, color: '#475569' }}>Date:</span>
+                              <span className="diff-old-strike">{item.oldDate}</span>
+                              <span style={{ color: '#16a34a', fontWeight: 'bold' }}>→</span>
+                              <span className="diff-new-green">{item.newDate}</span>
+                            </div>
+                          )}
+
+                          {item.oldDescription !== undefined &&
+                            item.newDescription !== undefined &&
+                            item.oldDescription !== item.newDescription && (
+                              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem', fontSize: '0.78rem' }}>
+                                <span style={{ fontWeight: 600, color: '#475569' }}>Description:</span>
+                                <span className="diff-old-strike">{item.oldDescription || '—'}</span>
+                                <span style={{ color: '#16a34a', fontWeight: 'bold' }}>→</span>
+                                <span className="diff-new-green">{item.newDescription || '—'}</span>
+                              </div>
+                            )}
+
+                          {item.affectedDates && item.affectedDates.length > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginTop: '0.15rem' }}>
+                              <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 500 }}>Affected dates:</span>
+                              {item.affectedDates.map(d => (
+                                <span key={d} className="audit-affected-tag">{d}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
 
                       {item.type === 'CHARGE_ADDED' && (
@@ -3776,11 +3957,11 @@ export default function EditReservationView({
           folioNumber={currentFolio?.folioNumber || currentRes?.folioId || 'FOL_1'}
           outstandingBalance={Number(outstanding) || 0}
           reservationId={currentRes?.id}
-          onSettle={async (resId, mode, ref, date) => {
+          onSettle={async (resId, mode, ref, date, amount) => {
             if (onSettleFolio) {
-              await onSettleFolio(resId, mode, ref, date || getTodayIsoDate());
+              await onSettleFolio(resId, mode, ref, date || getTodayIsoDate(), amount);
             } else {
-              pmsStore.settleFolio(resId, mode, ref, date || getTodayIsoDate());
+              pmsStore.settleFolio(resId, mode, ref, date || getTodayIsoDate(), amount);
             }
             setFolioVersion((v) => v + 1);
           }}

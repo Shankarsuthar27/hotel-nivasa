@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
-import { X, CheckCircle2 } from 'lucide-react';
+import { X, CheckCircle2, ChevronDown } from 'lucide-react';
 
 /**
  * SettleFolioModal Component
- * Pixel-matched exactly to the authoritative PMS specification screenshot:
- * - Header: Rounded green check icon, "Clear / Settle Folio", "Folio FOL_..." subtitle, Close X button
- * - Body: Light card with "Outstanding Balance" and amount, explanation text
- * - Footer: "Cancel" outline button and blue "Settle Folio" button with circular checkmark icon
+ * Clean enterprise modal for settling & closing a guest folio.
  */
 export default function SettleFolioModal({
   isOpen,
@@ -29,7 +26,7 @@ export default function SettleFolioModal({
     try {
       setIsSubmitting(true);
       if (onSettle) {
-        await onSettle(reservationId, paymentMethod, 'Direct Folio Settlement');
+        await onSettle(reservationId, paymentMethod, 'Direct Folio Settlement', undefined, balanceNum);
       }
     } finally {
       setIsSubmitting(false);
@@ -48,7 +45,8 @@ export default function SettleFolioModal({
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 1150,
-        padding: '16px'
+        padding: '16px',
+        boxSizing: 'border-box'
       }}
       onClick={onClose}
       role="dialog"
@@ -60,31 +58,40 @@ export default function SettleFolioModal({
           borderRadius: '16px',
           width: '100%',
           maxWidth: '460px',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+          boxShadow: '0 20px 25px -5px rgba(15, 23, 42, 0.14), 0 8px 10px -6px rgba(15, 23, 42, 0.08)',
+          border: '1px solid #E2E8F0',
           padding: '24px',
           position: 'relative',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          boxSizing: 'border-box'
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            marginBottom: '20px'
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            {/* Green rounded icon */}
             <div
               style={{
                 width: '42px',
                 height: '42px',
                 borderRadius: '10px',
                 backgroundColor: '#ECFDF5',
+                border: '1px solid #A7F3D0',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0
               }}
             >
-              <CheckCircle2 size={24} color="#10B981" strokeWidth={2.2} />
+              <CheckCircle2 size={22} color="#10B981" strokeWidth={2.2} />
             </div>
 
             <div>
@@ -112,7 +119,6 @@ export default function SettleFolioModal({
             </div>
           </div>
 
-          {/* Close X Button */}
           <button
             type="button"
             onClick={onClose}
@@ -141,41 +147,42 @@ export default function SettleFolioModal({
           style={{
             backgroundColor: '#F8FAFC',
             borderRadius: '10px',
-            padding: '16px 18px',
+            padding: '15px 18px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             marginBottom: '12px',
-            border: '1px solid #F1F5F9'
+            border: '1px solid #E2E8F0',
+            boxSizing: 'border-box'
           }}
         >
           <span
             style={{
               fontSize: '14px',
               fontWeight: 600,
-              color: '#475569'
+              color: '#334155'
             }}
           >
             Outstanding Balance
           </span>
           <span
             style={{
-              fontSize: '16px',
+              fontSize: '16.5px',
               fontWeight: 700,
               color: isZeroBalance ? '#16A34A' : '#DC2626'
             }}
           >
-            {formattedBalance}
+            ₹{formattedBalance}
           </span>
         </div>
 
-        {/* Subtext description */}
+        {/* Description */}
         <p
           style={{
-            margin: '0 0 20px 0',
+            margin: '0 0 18px 0',
             fontSize: '13px',
             color: '#64748B',
-            lineHeight: 1.45
+            lineHeight: 1.5
           }}
         >
           {isZeroBalance
@@ -183,10 +190,11 @@ export default function SettleFolioModal({
             : `Outstanding balance of ₹${formattedBalance} will be settled and this folio will be closed.`}
         </p>
 
-        {/* Optional Payment Mode when balance > 0 */}
+        {/* Payment Method Selector */}
         {!isZeroBalance && (
-          <div style={{ marginBottom: '20px' }}>
+          <div style={{ marginBottom: '22px' }}>
             <label
+              htmlFor="settle-payment-method"
               style={{
                 display: 'block',
                 fontSize: '12.5px',
@@ -197,26 +205,47 @@ export default function SettleFolioModal({
             >
               Payment Method
             </label>
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              style={{
-                width: '100%',
-                height: '38px',
-                padding: '0 12px',
-                borderRadius: '8px',
-                border: '1px solid #CBD5E1',
-                fontSize: '13.5px',
-                color: '#0F172A',
-                backgroundColor: '#FFFFFF'
-              }}
-            >
-              <option value="UPI">UPI</option>
-              <option value="CASH">Cash</option>
-              <option value="CREDIT_CARD">Credit Card</option>
-              <option value="DEBIT_CARD">Debit Card</option>
-              <option value="NET_BANKING">Net Banking</option>
-            </select>
+            <div style={{ position: 'relative', width: '100%' }}>
+              <select
+                id="settle-payment-method"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                style={{
+                  width: '100%',
+                  height: '40px',
+                  padding: '0 36px 0 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '13.5px',
+                  fontWeight: 500,
+                  color: '#0F172A',
+                  backgroundColor: '#FFFFFF',
+                  appearance: 'none',
+                  WebkitAppearance: 'none',
+                  MozAppearance: 'none',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  boxSizing: 'border-box'
+                }}
+              >
+                <option value="UPI">UPI</option>
+                <option value="CASH">Cash</option>
+                <option value="CREDIT_CARD">Credit Card</option>
+                <option value="DEBIT_CARD">Debit Card</option>
+                <option value="NET_BANKING">Net Banking</option>
+              </select>
+              <ChevronDown
+                size={16}
+                color="#64748B"
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  pointerEvents: 'none'
+                }}
+              />
+            </div>
           </div>
         )}
 
@@ -227,10 +256,10 @@ export default function SettleFolioModal({
             alignItems: 'center',
             justifyContent: 'flex-end',
             gap: '10px',
-            marginTop: '8px'
+            paddingTop: '14px',
+            borderTop: '1px solid #F1F5F9'
           }}
         >
-          {/* Cancel Button */}
           <button
             type="button"
             onClick={onClose}
@@ -238,12 +267,12 @@ export default function SettleFolioModal({
             style={{
               padding: '9px 20px',
               backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
+              border: '1px solid #CBD5E1',
               borderRadius: '8px',
-              fontSize: '14px',
+              fontSize: '13.5px',
               fontWeight: 600,
-              color: '#0F172A',
-              cursor: 'pointer',
+              color: '#334155',
+              cursor: isSubmitting ? 'not-allowed' : 'pointer',
               transition: 'background-color 0.15s ease'
             }}
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
@@ -252,29 +281,33 @@ export default function SettleFolioModal({
             Cancel
           </button>
 
-          {/* Settle Folio Blue Button */}
           <button
             type="button"
             onClick={handleConfirm}
             disabled={isSubmitting}
             style={{
               padding: '9px 22px',
-              backgroundColor: '#86B0FA',
+              backgroundColor: isSubmitting ? '#93C5FD' : '#2563EB',
               border: 'none',
               borderRadius: '8px',
-              fontSize: '14px',
+              fontSize: '13.5px',
               fontWeight: 600,
               color: '#FFFFFF',
               cursor: isSubmitting ? 'not-allowed' : 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
               gap: '7px',
-              transition: 'filter 0.15s ease'
+              boxShadow: '0 1px 3px rgba(37, 99, 235, 0.25)',
+              transition: 'background-color 0.15s ease'
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(0.93)')}
-            onMouseLeave={(e) => (e.currentTarget.style.filter = 'none')}
+            onMouseEnter={(e) => {
+              if (!isSubmitting) e.currentTarget.style.backgroundColor = '#1D4ED8';
+            }}
+            onMouseLeave={(e) => {
+              if (!isSubmitting) e.currentTarget.style.backgroundColor = '#2563EB';
+            }}
           >
-            <CheckCircle2 size={16} color="#FFFFFF" strokeWidth={2.4} />
+            <CheckCircle2 size={16} color="#FFFFFF" strokeWidth={2.3} />
             <span>{isSubmitting ? 'Settling...' : 'Settle Folio'}</span>
           </button>
         </div>
@@ -282,4 +315,3 @@ export default function SettleFolioModal({
     </div>
   );
 }
-

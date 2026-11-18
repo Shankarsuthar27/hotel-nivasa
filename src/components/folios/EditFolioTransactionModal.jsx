@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { X, Edit3, Save } from 'lucide-react';
 import CustomDatePicker from '../common/CustomDatePicker';
 import { getTodayIsoDate, normalizeDateStr } from '../../services/dateUtils';
@@ -33,14 +34,21 @@ export default function EditFolioTransactionModal({
   folio,
   onSave
 }) {
-  // Blur background while modal is active
+  // Blur background while modal is active & close on Escape
   useEffect(() => {
     if (!isOpen) return;
     document.body.classList.add('has-res-modal-open');
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && onClose) {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.body.classList.remove('has-res-modal-open');
+      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, onClose]);
 
   const isPayment =
     transaction?.direction === 'Credit' ||
@@ -112,7 +120,7 @@ export default function EditFolioTransactionModal({
   const method = (detectedMethod || (isPayment ? 'UPI' : '-')).toUpperCase();
   const txDateFormatted = formatDisplayDate(txDate || getCleanDate(transaction));
 
-  return (
+  const modalContent = (
     <div
       className="modal-overlay"
       onClick={onClose}
@@ -120,8 +128,8 @@ export default function EditFolioTransactionModal({
         position: 'fixed',
         inset: 0,
         backgroundColor: 'rgba(15, 23, 42, 0.45)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
+        backdropFilter: 'blur(3px)',
+        WebkitBackdropFilter: 'blur(3px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -443,5 +451,9 @@ export default function EditFolioTransactionModal({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? ReactDOM.createPortal(modalContent, document.body)
+    : modalContent;
 }
 
