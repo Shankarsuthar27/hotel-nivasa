@@ -214,12 +214,11 @@ export default function LoginView({ onLoginSuccess, teamMembers = [] }) {
             onClick={(e) => e.preventDefault()}
             className="asthastay-brand-link"
           >
-            <div className="asthastay-brand-icon-box">
-              <Building2 size={21} strokeWidth={2.2} />
-            </div>
-            <span className="asthastay-brand-title">
-              ASTHASTAY
-            </span>
+            <img
+              src="/logo/Gemini_Generated_Image_bxm6yabxm6yabxm6.png"
+              alt="Asthastay"
+              className="asthastay-header-logo-img"
+            />
           </a>
         </header>
 
@@ -240,6 +239,13 @@ export default function LoginView({ onLoginSuccess, teamMembers = [] }) {
             <div className="asthastay-card">
               {/* Card Header */}
               <div className="asthastay-card-header">
+                <div className="asthastay-card-logo-wrap">
+                  <img
+                    src="/logo/Gemini_Generated_Image_bxm6yabxm6yabxm6.png"
+                    alt="Asthastay"
+                    className="asthastay-card-logo-img"
+                  />
+                </div>
                 <h1 className="asthastay-card-title font-serif-luxury">
                   Welcome Back
                 </h1>
