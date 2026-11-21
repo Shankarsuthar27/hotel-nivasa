@@ -32,7 +32,9 @@ import {
   query,
   limit,
   orderBy,
-  writeBatch
+  writeBatch,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { checkAndSeedFirestore } from './firebaseSeeder';
@@ -95,7 +97,7 @@ class PMSStore {
             this.property.businessDate = todayStr;
           }
         }
-        if (!parsed.roomTypes || parsed.roomTypes.length === 0) {
+        if (!parsed.roomTypes) {
           this.roomTypes = initialRoomTypes;
           const rtNormal = this.roomTypes.find(rt => rt.id === 'rt_standard' || rt.name === 'Normal' || rt.name === 'Standard Room');
           if (rtNormal) {
@@ -159,20 +161,26 @@ class PMSStore {
             );
           });
         }
+        const isRtDeleted = (id, code, name) => {
+          if (!this.deletedRoomTypeIds || this.deletedRoomTypeIds.size === 0) return false;
+          const kId = String(id || '').trim().toLowerCase();
+          const kCode = String(code || '').trim().toLowerCase();
+          const kName = String(name || '').trim().toLowerCase();
+          return Array.from(this.deletedRoomTypeIds).some((del) => {
+            const d = String(del || '').trim().toLowerCase();
+            return (
+              (kId && (d === kId || d === `rt_${kId}` || `rt_${d}` === kId)) ||
+              (kCode && d === kCode) ||
+              (kName && d === kName)
+            );
+          });
+        };
+
         if (this.deletedRoomTypeIds && this.deletedRoomTypeIds.size > 0) {
           this.roomTypes = (this.roomTypes || []).filter(
-            (rt) =>
-              !this.deletedRoomTypeIds.has(String(rt.id)) &&
-              !this.deletedRoomTypeIds.has(String(rt.code || '')) &&
-              !this.deletedRoomTypeIds.has(String(rt.name || '').toLowerCase())
+            (rt) => !isRtDeleted(rt.id, rt.code, rt.name)
           );
         }
-
-        const isRtDeleted = (id, code, name) =>
-          this.deletedRoomTypeIds &&
-          (this.deletedRoomTypeIds.has(id) ||
-            this.deletedRoomTypeIds.has(code) ||
-            this.deletedRoomTypeIds.has(String(name || '').toLowerCase()));
 
         const isRmDeleted = (num) => {
           if (!this.deletedRoomIds) return false;
@@ -372,21 +380,27 @@ class PMSStore {
           }
         });
 
-        // Ensure rooms 201, 202 are tied to rt_standard / Normal, rooms 101, 102 to rt_deluxe, and rooms 301, 302 to rt_premium
-        const r201 = this.rooms.find(r => r.roomNumber === '201' || r.id === 'rm_201');
-        if (r201) r201.roomTypeId = 'rt_standard';
-        const r202 = this.rooms.find(r => r.roomNumber === '202' || r.id === 'rm_202');
-        if (r202) r202.roomTypeId = 'rt_standard';
+        // Ensure default physical rooms are tied to room types ONLY if not explicitly deleted
+        if (!isRtDeleted('rt_standard', 'NRM', 'Normal')) {
+          const r201 = this.rooms.find(r => r.roomNumber === '201' || r.id === 'rm_201');
+          if (r201 && !r201.roomTypeId) r201.roomTypeId = 'rt_standard';
+          const r202 = this.rooms.find(r => r.roomNumber === '202' || r.id === 'rm_202');
+          if (r202 && !r202.roomTypeId) r202.roomTypeId = 'rt_standard';
+        }
 
-        const r101 = this.rooms.find(r => r.roomNumber === '101' || r.id === 'rm_101');
-        if (r101) r101.roomTypeId = 'rt_deluxe';
-        const r102 = this.rooms.find(r => r.roomNumber === '102' || r.id === 'rm_102');
-        if (r102) r102.roomTypeId = 'rt_deluxe';
+        if (!isRtDeleted('rt_deluxe', 'DXL', 'Delux Room')) {
+          const r101 = this.rooms.find(r => r.roomNumber === '101' || r.id === 'rm_101');
+          if (r101 && !r101.roomTypeId) r101.roomTypeId = 'rt_deluxe';
+          const r102 = this.rooms.find(r => r.roomNumber === '102' || r.id === 'rm_102');
+          if (r102 && !r102.roomTypeId) r102.roomTypeId = 'rt_deluxe';
+        }
 
-        const r301 = this.rooms.find(r => r.roomNumber === '301' || r.id === 'rm_301');
-        if (r301) r301.roomTypeId = 'rt_premium';
-        const r302 = this.rooms.find(r => r.roomNumber === '302' || r.id === 'rm_302');
-        if (r302) r302.roomTypeId = 'rt_premium';
+        if (!isRtDeleted('rt_premium', 'PRM', 'Premium')) {
+          const r301 = this.rooms.find(r => r.roomNumber === '301' || r.id === 'rm_301');
+          if (r301 && !r301.roomTypeId) r301.roomTypeId = 'rt_premium';
+          const r302 = this.rooms.find(r => r.roomNumber === '302' || r.id === 'rm_302');
+          if (r302 && !r302.roomTypeId) r302.roomTypeId = 'rt_premium';
+        }
 
         // Synchronize all reservations so that their roomTypeId & roomTypeName accurately reflect their assigned physical room
         this.reservations.forEach(r => {
@@ -875,6 +889,111 @@ class PMSStore {
       this.unsubscribers.forEach((unsub) => typeof unsub === 'function' && unsub());
       this.unsubscribers = [];
 
+      // 1. Real-time Listener: Shared Cloud Deletion Tombstones (Syncs deletions across all devices instantly)
+      const delRef = doc(db, 'properties', this.propertyId, 'metadata', 'deletions');
+      const unsubDeletions = onSnapshot(
+        delRef,
+        (snapshot) => {
+          if (!snapshot.exists()) return;
+          const data = snapshot.data() || {};
+          let stateChanged = false;
+
+          // 1. Process cloud-deleted rooms
+          if (Array.isArray(data.rooms) && data.rooms.length > 0) {
+            if (!this.deletedRoomIds) this.deletedRoomIds = new Set();
+            data.rooms.forEach((id) => {
+              const clean = String(id || '').trim().toLowerCase();
+              if (clean && !this.deletedRoomIds.has(clean)) {
+                this.deletedRoomIds.add(clean);
+                stateChanged = true;
+              }
+            });
+
+            const prevRoomCount = (this.rooms || []).length;
+            this.rooms = (this.rooms || []).filter((r) => {
+              const numKey = String(r.roomNumber || r.id || '').trim().toLowerCase().replace(/^rm_/, '');
+              const rId = String(r.id || '').trim().toLowerCase();
+              const rNum = String(r.roomNumber || '').trim().toLowerCase();
+              return (
+                !this.deletedRoomIds.has(rId) &&
+                !this.deletedRoomIds.has(rNum) &&
+                !this.deletedRoomIds.has(numKey) &&
+                !this.deletedRoomIds.has(`rm_${numKey}`)
+              );
+            });
+            if (this.rooms.length !== prevRoomCount) {
+              stateChanged = true;
+            }
+          }
+
+          // 2. Process cloud-deleted room types
+          if (Array.isArray(data.roomTypes) && data.roomTypes.length > 0) {
+            if (!this.deletedRoomTypeIds) this.deletedRoomTypeIds = new Set();
+            data.roomTypes.forEach((id) => {
+              const clean = String(id || '').trim().toLowerCase();
+              if (clean && !this.deletedRoomTypeIds.has(clean)) {
+                this.deletedRoomTypeIds.add(clean);
+                stateChanged = true;
+              }
+            });
+
+            const prevRtCount = (this.roomTypes || []).length;
+            const remainingRt = (this.roomTypes || []).filter((rt) => {
+              const rtId = String(rt.id || '').trim().toLowerCase();
+              const rtCode = String(rt.code || '').trim().toLowerCase();
+              const rtName = String(rt.name || '').trim().toLowerCase();
+              return (
+                !this.deletedRoomTypeIds.has(rtId) &&
+                !this.deletedRoomTypeIds.has(rtCode) &&
+                !this.deletedRoomTypeIds.has(rtName)
+              );
+            });
+
+            if (remainingRt.length !== prevRtCount) {
+              this.roomTypes = remainingRt;
+              const fallbackRt = remainingRt.length > 0 ? remainingRt[0] : null;
+
+              this.rooms = (this.rooms || []).map((r) => {
+                const rTypeId = String(r.roomTypeId || '').trim().toLowerCase();
+                const rTypeName = String(r.roomTypeName || r.roomType || '').trim().toLowerCase();
+                if (this.deletedRoomTypeIds.has(rTypeId) || this.deletedRoomTypeIds.has(rTypeName)) {
+                  return {
+                    ...r,
+                    roomTypeId: fallbackRt ? fallbackRt.id : '',
+                    roomTypeName: fallbackRt ? fallbackRt.name : 'Unassigned',
+                    roomType: fallbackRt ? fallbackRt.name : 'Unassigned'
+                  };
+                }
+                return r;
+              });
+
+              this.reservations = (this.reservations || []).map((res) => {
+                const resTypeId = String(res.roomTypeId || '').trim().toLowerCase();
+                const resTypeName = String(res.roomTypeName || res.roomType || '').trim().toLowerCase();
+                if (this.deletedRoomTypeIds.has(resTypeId) || this.deletedRoomTypeIds.has(resTypeName)) {
+                  return {
+                    ...res,
+                    roomTypeId: fallbackRt ? fallbackRt.id : (res.roomTypeId || ''),
+                    roomTypeName: fallbackRt ? fallbackRt.name : (res.roomTypeName || 'Unassigned'),
+                    roomType: fallbackRt ? fallbackRt.name : (res.roomType || 'Unassigned')
+                  };
+                }
+                return res;
+              });
+
+              stateChanged = true;
+            }
+          }
+
+          if (stateChanged) {
+            this.save();
+            this.notify();
+          }
+        },
+        () => {}
+      );
+      this.unsubscribers.push(unsubDeletions);
+
       // 2. Real-time Listener: Reservations (bounded to active/recent 150 records)
       const resCol = collection(db, 'properties', this.propertyId, 'reservations');
       const resQuery = query(resCol, limit(150));
@@ -979,7 +1098,7 @@ class PMSStore {
       );
       this.unsubscribers.push(unsubRes);
 
-      // 3. Real-time Listener: Rooms
+      // 3. Real-time Listener: Rooms (Instantly syncs additions, edits, and deletions across all devices)
       const roomsCol = collection(db, 'properties', this.propertyId, 'rooms');
       const unsubRooms = onSnapshot(
         roomsCol,
@@ -1001,11 +1120,32 @@ class PMSStore {
             );
           };
 
-          // Filter out any cloud room docs that were explicitly deleted locally (never issue delete writes inside onSnapshot!)
+          // Filter out any cloud room docs that were explicitly deleted
           const survivingCloudRooms = cloudRooms.filter((cr) => !isRoomDeleted(cr));
 
-          const combined = [...(this.rooms || []), ...survivingCloudRooms];
-          const deduped = this.dedupeRoomsByNumber(combined, false);
+          // When Cloud Firestore returns rooms, it is the authoritative source across all devices.
+          // Any room previously in local state that is missing from Firestore was deleted on another device.
+          // Only preserve local rooms that were newly created in this session with _pendingSync: true.
+          let finalRooms = survivingCloudRooms;
+          if (cloudRooms.length > 0) {
+            const cloudKeys = new Set(
+              survivingCloudRooms.map((cr) =>
+                String(cr.roomNumber || cr.id || '').trim().toLowerCase().replace(/^rm_/, '')
+              )
+            );
+            const pendingLocalRooms = (this.rooms || []).filter(
+              (r) =>
+                r &&
+                r._pendingSync &&
+                !isRoomDeleted(r) &&
+                !cloudKeys.has(String(r.roomNumber || '').trim().toLowerCase().replace(/^rm_/, ''))
+            );
+            finalRooms = [...survivingCloudRooms, ...pendingLocalRooms];
+          } else {
+            finalRooms = (this.rooms || []).filter((r) => !isRoomDeleted(r));
+          }
+
+          const deduped = this.dedupeRoomsByNumber(finalRooms, false);
           this.rooms = this.sanitizeStaleOccupiedRooms(deduped, this.reservations);
           this.cloudStatus = 'LIVE';
           this.save();
@@ -1016,6 +1156,56 @@ class PMSStore {
         }
       );
       this.unsubscribers.push(unsubRooms);
+
+      // Real-time Listener: Room Types (Instantly syncs additions, edits, and deletions across all devices)
+      const rtCol = collection(db, 'properties', this.propertyId, 'roomTypes');
+      const unsubRt = onSnapshot(
+        rtCol,
+        (snapshot) => {
+          const cloudRt = snapshot.docs.map((d) => {
+            const data = d.data() || {};
+            return { ...data, id: data.id || d.id, _docId: d.id };
+          });
+          const deletedRt = this.deletedRoomTypeIds || new Set();
+          const isDeleted = (rt) => {
+            if (!rt || !deletedRt || deletedRt.size === 0) return false;
+            const kId = String(rt.id || '').trim().toLowerCase();
+            const kDocId = String(rt._docId || '').trim().toLowerCase();
+            const kCode = String(rt.code || '').trim().toLowerCase();
+            const kName = String(rt.name || '').trim().toLowerCase();
+            return Array.from(deletedRt).some((del) => {
+              const d = String(del || '').trim().toLowerCase();
+              return (
+                (kId && (d === kId || d === `rt_${kId}` || `rt_${d}` === kId)) ||
+                (kDocId && (d === kDocId || d === `rt_${kDocId}` || `rt_${d}` === kDocId)) ||
+                (kCode && d === kCode) ||
+                (kName && d === kName)
+              );
+            });
+          };
+
+          const surviving = cloudRt.filter((rt) => !isDeleted(rt));
+          if (cloudRt.length > 0) {
+            const map = new Map();
+            surviving.forEach((rt) => {
+              const key = rt.id || rt.code || rt.name;
+              if (key) map.set(key, rt);
+            });
+            // Keep pending room types created in this tab
+            (this.roomTypes || []).forEach((rt) => {
+              if (rt && rt._pendingSync && !isDeleted(rt)) {
+                const key = rt.id || rt.code || rt.name;
+                if (key && !map.has(key)) map.set(key, rt);
+              }
+            });
+            this.roomTypes = Array.from(map.values()).filter((rt) => !isDeleted(rt));
+            this.save();
+            this.notify();
+          }
+        },
+        () => {}
+      );
+      this.unsubscribers.push(unsubRt);
 
       // 4. Real-time Listener: Folios (bounded to active/recent 100 folios)
       const foliosCol = collection(db, 'properties', this.propertyId, 'folios');
@@ -1116,6 +1306,9 @@ class PMSStore {
       );
       this.unsubscribers.push(unsubAudit);
 
+      // Keep main database (both subcollection and root mirror) 100% updated with exact room types, room numbers, and summaries
+      this.syncAllRoomsAndTypesToCloud();
+
       this.cloudStatus = 'LIVE';
       this.notify();
     } catch (e) {
@@ -1140,33 +1333,50 @@ class PMSStore {
 
       // 1. Room Types
       if (rtSnap && !rtSnap.empty) {
-        const cloudRt = rtSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const cloudRt = rtSnap.docs.map((d) => {
+          const data = d.data() || {};
+          return { ...data, id: data.id || d.id, _docId: d.id };
+        });
         const deletedRt = this.deletedRoomTypeIds || new Set();
-        const map = new Map();
-        const isDeleted = (rt) =>
-          deletedRt.has(String(rt.id)) ||
-          (rt.code && deletedRt.has(String(rt.code))) ||
-          (rt.name && deletedRt.has(String(rt.name).toLowerCase()));
+        const isDeleted = (rt) => {
+          if (!rt || !deletedRt || deletedRt.size === 0) return false;
+          const kId = String(rt.id || '').trim().toLowerCase();
+          const kDocId = String(rt._docId || '').trim().toLowerCase();
+          const kCode = String(rt.code || '').trim().toLowerCase();
+          const kName = String(rt.name || '').trim().toLowerCase();
+          return Array.from(deletedRt).some((del) => {
+            const d = String(del || '').trim().toLowerCase();
+            return (
+              (kId && (d === kId || d === `rt_${kId}` || `rt_${d}` === kId)) ||
+              (kDocId && (d === kDocId || d === `rt_${kDocId}` || `rt_${d}` === kDocId)) ||
+              (kCode && d === kCode) ||
+              (kName && d === kName)
+            );
+          });
+        };
 
         cloudRt.forEach((rt) => {
           if (isDeleted(rt)) {
             this.deleteDocFromFirestore('roomTypes', rt.id);
+            if (rt._docId && rt._docId !== rt.id) {
+              this.deleteDocFromFirestore('roomTypes', rt._docId);
+            }
           }
         });
-        (this.roomTypes || []).forEach((rt) => {
-          if (!rt || isDeleted(rt)) return;
-          const key = rt.id || rt.code;
-          if (key) map.set(key, rt);
-        });
+
+        const map = new Map();
         cloudRt.forEach((rt) => {
           if (!rt || isDeleted(rt)) return;
-          const key = rt.id || rt.code;
-          if (key) {
-            const existing = map.get(key);
-            map.set(key, existing ? { ...existing, ...rt } : rt);
+          const key = rt.id || rt.code || rt.name;
+          if (key) map.set(key, rt);
+        });
+        (this.roomTypes || []).forEach((rt) => {
+          if (rt && rt._pendingSync && !isDeleted(rt)) {
+            const key = rt.id || rt.code || rt.name;
+            if (key && !map.has(key)) map.set(key, rt);
           }
         });
-        this.roomTypes = Array.from(map.values());
+        this.roomTypes = Array.from(map.values()).filter((rt) => !isDeleted(rt));
         hasChanges = true;
       }
 
@@ -1278,15 +1488,171 @@ class PMSStore {
         return;
       }
 
+      // Exact data enrichment for rooms, roomTypes, and reservations
+      if (collectionName === 'rooms') {
+        const cleanRoomNum = String(data.roomNumber || data.id || docId || '').trim().replace(/^rm_/, '');
+        const matchedRt = (this.roomTypes || []).find((rt) =>
+          rt.id === data.roomTypeId ||
+          rt.code === data.roomTypeId ||
+          rt.name?.toLowerCase() === String(data.roomTypeId || '').toLowerCase() ||
+          (data.roomTypeName && rt.name?.toLowerCase() === String(data.roomTypeName).toLowerCase())
+        );
+        payload.roomNumber = cleanRoomNum;
+        payload.roomTypeId = matchedRt ? matchedRt.id : (data.roomTypeId || '');
+        payload.roomTypeCode = matchedRt ? (matchedRt.code || '') : '';
+        payload.roomTypeName = matchedRt ? matchedRt.name : (data.roomTypeName || data.roomType || 'Standard');
+        payload.roomType = payload.roomTypeName;
+      }
+
+      if (collectionName === 'roomTypes') {
+        const cleanId = String(data.id || docId || '').trim();
+        const cleanName = String(data.name || '').trim();
+        const cleanCode = String(data.code || '').trim().toUpperCase();
+        const assigned = (this.rooms || []).filter((r) =>
+          r.roomTypeId === cleanId ||
+          r.roomTypeId === cleanCode ||
+          String(r.roomTypeName || r.roomType || '').toLowerCase() === cleanName.toLowerCase()
+        );
+        payload.id = cleanId;
+        payload.name = cleanName;
+        payload.code = cleanCode;
+        payload.assignedRoomsCount = assigned.length;
+        payload.assignedRoomNumbers = assigned.map((r) => String(r.roomNumber || '').replace(/^rm_/, '')).filter(Boolean);
+      }
+
+      if (collectionName === 'reservations') {
+        let matchedRoom = null;
+        if (data.roomId || data.roomNumber) {
+          matchedRoom = (this.rooms || []).find((rm) =>
+            rm.id === data.roomId ||
+            String(rm.roomNumber) === String(data.roomNumber) ||
+            rm.id === data.roomNumber
+          );
+        }
+        const effectiveRoomTypeId = matchedRoom ? matchedRoom.roomTypeId : data.roomTypeId;
+        const matchedRt = (this.roomTypes || []).find((rt) =>
+          rt.id === effectiveRoomTypeId ||
+          rt.code === effectiveRoomTypeId ||
+          rt.name?.toLowerCase() === String(effectiveRoomTypeId || '').toLowerCase() ||
+          (data.roomTypeName && rt.name?.toLowerCase() === String(data.roomTypeName).toLowerCase())
+        );
+
+        if (matchedRoom) {
+          payload.roomId = matchedRoom.id;
+          payload.roomNumber = String(matchedRoom.roomNumber).replace(/^rm_/, '');
+        }
+        if (matchedRt) {
+          payload.roomTypeId = matchedRt.id;
+          payload.roomTypeCode = matchedRt.code || '';
+          payload.roomTypeName = matchedRt.name;
+          payload.roomType = matchedRt.name;
+        }
+      }
+
       // 1. Nested under property subcollection (Primary PMS Cloud Store)
       const nestedRef = doc(db, 'properties', this.propertyId, collectionName, String(docId));
       await setDoc(nestedRef, payload, { merge: true });
 
-      console.info(`🔥 [Firebase Cloud] Successfully stored ${collectionName}/${docId} in Cloud Firestore.`);
+      // 2. Also keep root collection mirror updated with exact info for rooms, roomTypes, and reservations
+      if (['rooms', 'roomTypes', 'reservations'].includes(collectionName)) {
+        try {
+          const rootRef = doc(db, collectionName, String(docId));
+          await setDoc(rootRef, payload, { merge: true });
+        } catch (_) {}
+      }
+
+      console.info(`🔥 [Firebase Cloud] Successfully stored ${collectionName}/${docId} with exact info in Cloud Firestore.`);
       return true;
     } catch (err) {
       console.warn(`[Firebase Sync Note] Could not write to ${collectionName}/${docId}:`, err.message);
       return false;
+    }
+  }
+
+  async syncAllRoomsAndTypesToCloud() {
+    if (!db) return;
+    try {
+      console.info('🔥 [Firebase Cloud] Syncing all room types and rooms with exact info to main database...');
+      const batch = writeBatch(db);
+
+      // 1. Sync every room type with exact name, code, assigned rooms count and room numbers
+      (this.roomTypes || []).forEach((rt) => {
+        if (!rt || !rt.id) return;
+        const assigned = (this.rooms || []).filter(
+          (r) =>
+            r.roomTypeId === rt.id ||
+            r.roomTypeId === rt.code ||
+            String(r.roomTypeName || r.roomType || '').toLowerCase() === String(rt.name || '').toLowerCase()
+        );
+        const payload = this.cleanDataForFirestore({
+          ...rt,
+          id: rt.id,
+          name: rt.name,
+          code: rt.code || '',
+          assignedRoomsCount: assigned.length,
+          assignedRoomNumbers: assigned.map((r) => String(r.roomNumber || '').replace(/^rm_/, '')).filter(Boolean),
+          propertyId: this.propertyId,
+          lastSyncedAt: new Date().toISOString()
+        });
+
+        const nestedRef = doc(db, 'properties', this.propertyId, 'roomTypes', String(rt.id));
+        batch.set(nestedRef, payload, { merge: true });
+
+        const rootRef = doc(db, 'roomTypes', String(rt.id));
+        batch.set(rootRef, payload, { merge: true });
+      });
+
+      // 2. Sync every physical room with exact room number, roomTypeId, roomTypeName, and status
+      (this.rooms || []).forEach((rm) => {
+        if (!rm || (!rm.id && !rm.roomNumber)) return;
+        const cleanNum = String(rm.roomNumber || rm.id).trim().replace(/^rm_/, '');
+        const docId = rm.id || `rm_${cleanNum}`;
+        const matchedRt = (this.roomTypes || []).find(
+          (rt) =>
+            rt.id === rm.roomTypeId ||
+            rt.code === rm.roomTypeId ||
+            rt.name?.toLowerCase() === String(rm.roomTypeId || '').toLowerCase() ||
+            (rm.roomTypeName && rt.name?.toLowerCase() === String(rm.roomTypeName).toLowerCase())
+        );
+
+        const payload = this.cleanDataForFirestore({
+          ...rm,
+          id: docId,
+          roomNumber: cleanNum,
+          roomTypeId: matchedRt ? matchedRt.id : (rm.roomTypeId || ''),
+          roomTypeCode: matchedRt ? (matchedRt.code || '') : '',
+          roomTypeName: matchedRt ? matchedRt.name : (rm.roomTypeName || rm.roomType || 'Standard'),
+          roomType: matchedRt ? matchedRt.name : (rm.roomTypeName || rm.roomType || 'Standard'),
+          propertyId: this.propertyId,
+          lastSyncedAt: new Date().toISOString()
+        });
+
+        const nestedRef = doc(db, 'properties', this.propertyId, 'rooms', String(docId));
+        batch.set(nestedRef, payload, { merge: true });
+
+        const rootRef = doc(db, 'rooms', String(docId));
+        batch.set(rootRef, payload, { merge: true });
+      });
+
+      // 3. Update master property document with full room & roomType summary
+      const propRef = doc(db, 'properties', this.propertyId);
+      const summaryPayload = this.cleanDataForFirestore({
+        totalRooms: (this.rooms || []).length,
+        roomNumbers: (this.rooms || []).map((r) => String(r.roomNumber || '').replace(/^rm_/, '')).filter(Boolean),
+        roomTypesSummary: (this.roomTypes || []).map((rt) => ({
+          id: rt.id,
+          name: rt.name,
+          code: rt.code || '',
+          count: (this.rooms || []).filter((r) => r.roomTypeId === rt.id || r.roomTypeId === rt.code).length
+        })),
+        lastSyncedAt: new Date().toISOString()
+      });
+      batch.set(propRef, summaryPayload, { merge: true });
+
+      await batch.commit();
+      console.info('🔥 [Firebase Cloud] Successfully synchronized all room types and rooms to main database with exact info.');
+    } catch (err) {
+      console.warn('[Firebase Sync Note] Could not batch sync rooms and types:', err?.message);
     }
   }
 
@@ -1305,6 +1671,10 @@ class PMSStore {
     try {
       const nestedRef = doc(db, 'properties', this.propertyId, collectionName, cleanDocId);
       await deleteDoc(nestedRef);
+      try {
+        const rootRef = doc(db, collectionName, cleanDocId);
+        await deleteDoc(rootRef);
+      } catch (_) {}
       console.info(`🔥 [Firebase Cloud] Deleted ${collectionName}/${cleanDocId}`);
     } catch (err) {
       console.warn(`[Firebase Sync Note] Could not delete nested ${collectionName}/${cleanDocId}:`, err.message);
@@ -1312,6 +1682,46 @@ class PMSStore {
       setTimeout(() => {
         this.inFlightDeletes?.delete(deleteKey);
       }, 3000);
+    }
+  }
+
+  async recordCloudDeletion(type, ids) {
+    if (!db || !ids || !ids.length) return;
+    try {
+      const delRef = doc(db, 'properties', this.propertyId, 'metadata', 'deletions');
+      const cleanIds = ids.map((id) => String(id || '').trim().toLowerCase()).filter(Boolean);
+      if (cleanIds.length === 0) return;
+      await setDoc(
+        delRef,
+        {
+          [type]: arrayUnion(...cleanIds),
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+      console.info(`🔥 [Firebase Cloud] Recorded ${type} deletion tombstone for [${cleanIds.join(', ')}]`);
+    } catch (e) {
+      console.warn('[Firebase Cloud] Note recording deletion tombstone:', e?.message);
+    }
+  }
+
+  async recordCloudRestoration(type, ids) {
+    if (!db || !ids || !ids.length) return;
+    try {
+      const delRef = doc(db, 'properties', this.propertyId, 'metadata', 'deletions');
+      const cleanIds = ids.map((id) => String(id || '').trim().toLowerCase()).filter(Boolean);
+      if (cleanIds.length === 0) return;
+      await setDoc(
+        delRef,
+        {
+          [type]: arrayRemove(...cleanIds),
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+      console.info(`🔥 [Firebase Cloud] Removed ${type} deletion tombstone for [${cleanIds.join(', ')}]`);
+    } catch (e) {
+      console.warn('[Firebase Cloud] Note removing deletion tombstone:', e?.message);
     }
   }
 
@@ -1348,11 +1758,16 @@ class PMSStore {
     }
   }
 
-  async purgeMatchingCloudRoomTypes(roomTypeId, rtCode, rtName) {
+  async purgeMatchingCloudRoomTypes(roomTypeId, rtCode, rtName, aliasSet = null) {
     if (!db) return;
-    const idLower = String(roomTypeId || '').trim().toLowerCase();
-    const codeLower = String(rtCode || '').trim().toLowerCase();
-    const nameLower = String(rtName || '').trim().toLowerCase();
+    const aliases = new Set();
+    if (aliasSet) {
+      Array.from(aliasSet).forEach((a) => a && aliases.add(String(a).trim().toLowerCase()));
+    }
+    if (roomTypeId) aliases.add(String(roomTypeId).trim().toLowerCase());
+    if (rtCode) aliases.add(String(rtCode).trim().toLowerCase());
+    if (rtName) aliases.add(String(rtName).trim().toLowerCase());
+
     try {
       const snap = await getDocs(collection(db, 'properties', this.propertyId, 'roomTypes'));
       const batch = writeBatch(db);
@@ -1364,14 +1779,37 @@ class PMSStore {
         const dataCodeLower = String(data.code || '').trim().toLowerCase();
         const dataNameLower = String(data.name || '').trim().toLowerCase();
         if (
-          (idLower && (dIdLower === idLower || dataIdLower === idLower)) ||
-          (codeLower && (dIdLower === codeLower || dataCodeLower === codeLower)) ||
-          (nameLower && dataNameLower === nameLower)
+          aliases.has(dIdLower) ||
+          aliases.has(dataIdLower) ||
+          aliases.has(dataCodeLower) ||
+          aliases.has(dataNameLower)
         ) {
           batch.delete(d.ref);
           count++;
         }
       });
+
+      // Also clean root roomTypes collection if present
+      try {
+        const rootSnap = await getDocs(collection(db, 'roomTypes'));
+        rootSnap.forEach((d) => {
+          const data = d.data() || {};
+          const dIdLower = String(d.id || '').trim().toLowerCase();
+          const dataIdLower = String(data.id || '').trim().toLowerCase();
+          const dataCodeLower = String(data.code || '').trim().toLowerCase();
+          const dataNameLower = String(data.name || '').trim().toLowerCase();
+          if (
+            aliases.has(dIdLower) ||
+            aliases.has(dataIdLower) ||
+            aliases.has(dataCodeLower) ||
+            aliases.has(dataNameLower)
+          ) {
+            batch.delete(d.ref);
+            count++;
+          }
+        });
+      } catch (_) {}
+
       if (count > 0) {
         await batch.commit();
         console.info(`🔥 [Firebase Cloud] Batch purged ${count} roomType doc(s)`);
@@ -2235,6 +2673,7 @@ class PMSStore {
     if (updatedRes) {
       this.syncDocToFirestore('reservations', targetId, updatedRes);
     }
+    this.syncAllRoomsAndTypesToCloud();
     this.notify();
     return true;
   }
@@ -4392,6 +4831,8 @@ class PMSStore {
       this.deletedRoomTypeIds.delete(cleanName.toLowerCase());
       this.deletedRoomTypeIds.delete(newRoomType.id);
     }
+    this.recordCloudRestoration('roomTypes', [newRoomType.id, cleanCode, cleanName.toLowerCase()]);
+    newRoomType._pendingSync = true;
 
     this.roomTypes = [...(this.roomTypes || []), newRoomType];
 
@@ -4417,6 +4858,7 @@ class PMSStore {
     this.logAudit('ADD_ROOM_TYPE', 'PROPERTIES', newRoomType.id, `Created room type ${newRoomType.name}`);
     this.save();
     this.syncDocToFirestore('roomTypes', newRoomType.id, newRoomType);
+    this.syncAllRoomsAndTypesToCloud();
     this.notify();
     return newRoomType;
   }
@@ -4465,21 +4907,64 @@ class PMSStore {
   }
 
   deleteRoomType(roomTypeId) {
-    const rt = this.roomTypes?.find(r => r.id === roomTypeId || r.code === roomTypeId);
-    const remainingRoomTypes = (this.roomTypes || []).filter(r => r.id !== roomTypeId && r.code !== roomTypeId);
+    if (!roomTypeId) return { success: false, message: 'Invalid room type ID' };
+
+    const targetKey = String(roomTypeId).trim().toLowerCase();
+    const rt = (this.roomTypes || []).find((r) => {
+      const rId = String(r.id || '').trim().toLowerCase();
+      const rCode = String(r.code || '').trim().toLowerCase();
+      const rName = String(r.name || '').trim().toLowerCase();
+      return rId === targetKey || rCode === targetKey || rName === targetKey || (targetKey && (rId === `rt_${targetKey}` || `rt_${rId}` === targetKey));
+    });
+
+    const toDeleteAliases = new Set();
+    toDeleteAliases.add(targetKey);
+    toDeleteAliases.add(String(roomTypeId));
+    if (rt) {
+      if (rt.id) {
+        toDeleteAliases.add(String(rt.id));
+        toDeleteAliases.add(String(rt.id).toLowerCase());
+      }
+      if (rt.code) {
+        toDeleteAliases.add(String(rt.code));
+        toDeleteAliases.add(String(rt.code).toLowerCase());
+      }
+      if (rt.name) {
+        toDeleteAliases.add(String(rt.name));
+        toDeleteAliases.add(String(rt.name).toLowerCase());
+      }
+    }
+
+    // Include common system synonyms if matching canonical types
+    if (targetKey.includes('delux') || (rt && rt.name?.toLowerCase().includes('delux'))) {
+      ['rt_deluxe', 'dxl', 'delux room', 'deluxe room', 'deluxe'].forEach((a) => toDeleteAliases.add(a));
+    }
+    if (targetKey.includes('normal') || targetKey.includes('standard') || (rt && (rt.name?.toLowerCase().includes('normal') || rt.name?.toLowerCase().includes('standard')))) {
+      ['rt_standard', 'rt_normal', 'nrm', 'std', 'normal', 'standard', 'standard room'].forEach((a) => toDeleteAliases.add(a));
+    }
+    if (targetKey.includes('premium') && !targetKey.includes('ultra') && (rt && rt.name?.toLowerCase() === 'premium')) {
+      ['rt_premium', 'prm', 'premium'].forEach((a) => toDeleteAliases.add(a));
+    }
+    if (targetKey.includes('ultra') || (rt && rt.name?.toLowerCase().includes('ultra'))) {
+      ['rt_ultra_premium', 'ulp', 'ultra premium'].forEach((a) => toDeleteAliases.add(a));
+    }
+
+    const isMatch = (r) => {
+      if (!r) return false;
+      const rId = String(r.id || '').trim().toLowerCase();
+      const rCode = String(r.code || '').trim().toLowerCase();
+      const rName = String(r.name || '').trim().toLowerCase();
+      return toDeleteAliases.has(rId) || toDeleteAliases.has(rCode) || toDeleteAliases.has(rName);
+    };
+
+    const remainingRoomTypes = (this.roomTypes || []).filter((r) => !isMatch(r));
     const fallbackRt = remainingRoomTypes.length > 0 ? remainingRoomTypes[0] : null;
 
     // Safely reassign any rooms assigned to this room type (even if occupied)
-    this.rooms = (this.rooms || []).map(r => {
-      const isAssigned =
-        r.roomTypeId === roomTypeId ||
-        String(r.roomTypeId).toLowerCase() === String(roomTypeId).toLowerCase() ||
-        (rt && (
-          r.roomTypeId === rt.id ||
-          r.roomTypeId === rt.code ||
-          r.roomType === rt.name ||
-          r.roomTypeName === rt.name
-        ));
+    this.rooms = (this.rooms || []).map((r) => {
+      const rTypeId = String(r.roomTypeId || '').trim().toLowerCase();
+      const rTypeName = String(r.roomTypeName || r.roomType || '').trim().toLowerCase();
+      const isAssigned = toDeleteAliases.has(rTypeId) || toDeleteAliases.has(rTypeName);
       if (isAssigned) {
         const updatedRoom = {
           ...r,
@@ -4494,16 +4979,10 @@ class PMSStore {
     });
 
     // Also safely update any reservations linked to this room type
-    this.reservations = (this.reservations || []).map(res => {
-      const isLinked =
-        res.roomTypeId === roomTypeId ||
-        String(res.roomTypeId).toLowerCase() === String(roomTypeId).toLowerCase() ||
-        (rt && (
-          res.roomTypeId === rt.id ||
-          res.roomTypeId === rt.code ||
-          res.roomTypeName === rt.name ||
-          res.roomType === rt.name
-        ));
+    this.reservations = (this.reservations || []).map((res) => {
+      const resTypeId = String(res.roomTypeId || '').trim().toLowerCase();
+      const resTypeName = String(res.roomTypeName || res.roomType || '').trim().toLowerCase();
+      const isLinked = toDeleteAliases.has(resTypeId) || toDeleteAliases.has(resTypeName);
       if (isLinked) {
         const updatedRes = {
           ...res,
@@ -4519,32 +4998,38 @@ class PMSStore {
 
     this.roomTypes = remainingRoomTypes;
     if (!this.deletedRoomTypeIds) this.deletedRoomTypeIds = new Set();
-    this.deletedRoomTypeIds.add(String(roomTypeId));
-    if (rt) {
-      this.deletedRoomTypeIds.add(String(rt.id));
-      if (rt.code) this.deletedRoomTypeIds.add(String(rt.code));
-      if (rt.name) this.deletedRoomTypeIds.add(String(rt.name).toLowerCase());
-      this.logAudit('DELETE_ROOM_TYPE', 'PROPERTIES', rt.id, `Deleted room type ${rt.name}`);
-      this.deleteDocFromFirestore('roomTypes', rt.id);
-      if (rt.code && rt.code !== rt.id) {
-        this.deleteDocFromFirestore('roomTypes', rt.code);
-      }
-      this.purgeMatchingCloudRoomTypes(rt.id, rt.code, rt.name);
-      // Also clean up rates in rate plans
-      this.ratePlans = (this.ratePlans || []).map(rp => {
-        if (rp.roomTypeRates && rp.roomTypeRates[rt.id]) {
-          const newRates = { ...rp.roomTypeRates };
-          delete newRates[rt.id];
-          const updatedPlan = { ...rp, roomTypeRates: newRates };
-          this.syncDocToFirestore('ratePlans', updatedPlan.id, updatedPlan);
-          return updatedPlan;
+    toDeleteAliases.forEach((alias) => this.deletedRoomTypeIds.add(alias));
+
+    this.logAudit('DELETE_ROOM_TYPE', 'PROPERTIES', rt?.id || roomTypeId, `Deleted room type ${rt?.name || roomTypeId}`);
+
+    toDeleteAliases.forEach((did) => {
+      this.deleteDocFromFirestore('roomTypes', did);
+    });
+
+    this.purgeMatchingCloudRoomTypes(rt?.id || roomTypeId, rt?.code, rt?.name, toDeleteAliases);
+    this.recordCloudDeletion('roomTypes', Array.from(toDeleteAliases));
+
+    // Clean up rates in rate plans
+    this.ratePlans = (this.ratePlans || []).map((rp) => {
+      if (!rp.roomTypeRates) return rp;
+      let changed = false;
+      const newRates = { ...rp.roomTypeRates };
+      Array.from(toDeleteAliases).forEach((key) => {
+        if (newRates[key]) {
+          delete newRates[key];
+          changed = true;
         }
-        return rp;
       });
-    } else {
-      this.deleteDocFromFirestore('roomTypes', roomTypeId);
-    }
+      if (changed) {
+        const updatedPlan = { ...rp, roomTypeRates: newRates };
+        this.syncDocToFirestore('ratePlans', updatedPlan.id, updatedPlan);
+        return updatedPlan;
+      }
+      return rp;
+    });
+
     this.save();
+    this.syncAllRoomsAndTypesToCloud();
     this.notify();
     return { success: true };
   }
@@ -4567,6 +5052,7 @@ class PMSStore {
       if (existing) {
         existing.roomTypeId = item.roomTypeId || existing.roomTypeId;
         existing.updatedAt = new Date().toISOString();
+        existing._pendingSync = true;
         created.push(existing);
       } else {
         const rm = {
@@ -4577,7 +5063,8 @@ class PMSStore {
           status: 'clean',
           operational: 'available',
           notes: 'Ready for check-in',
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          _pendingSync: true
         };
         if (this.deletedRoomIds) {
           this.deletedRoomIds.delete(canonicalId);
@@ -4586,6 +5073,7 @@ class PMSStore {
         }
         created.push(rm);
       }
+      this.recordCloudRestoration('rooms', [canonicalId, cleanNum, numKey]);
     });
     this.rooms = this.dedupeRoomsByNumber([...(this.rooms || []), ...created], false);
     this.logAudit('ADD_ROOMS', 'PROPERTIES', '', `Added ${created.length} new rooms.`);
@@ -4593,6 +5081,7 @@ class PMSStore {
     created.forEach((rm) => {
       this.syncDocToFirestore('rooms', rm.id, rm);
     });
+    this.syncAllRoomsAndTypesToCloud();
     this.notify();
     return created;
   }
@@ -4616,6 +5105,7 @@ class PMSStore {
         this.deleteDocFromFirestore('rooms', oldRoomNumber);
       }
     }
+    this.syncAllRoomsAndTypesToCloud();
     this.notify();
   }
 
@@ -4652,6 +5142,7 @@ class PMSStore {
         this.deleteDocFromFirestore('rooms', did);
       });
       this.purgeMatchingCloudRooms(rm.id, rmNumKey);
+      this.recordCloudDeletion('rooms', Array.from(toDelete));
     } else {
       const canonicalId = targetNumKey ? `rm_${targetNumKey}` : roomId;
       this.deleteDocFromFirestore('rooms', canonicalId);
@@ -4659,8 +5150,10 @@ class PMSStore {
         this.deleteDocFromFirestore('rooms', roomId);
       }
       this.purgeMatchingCloudRooms(roomId, targetNumKey);
+      this.recordCloudDeletion('rooms', [roomId, canonicalId, targetNumKey].filter(Boolean));
     }
     this.save();
+    this.syncAllRoomsAndTypesToCloud();
     this.notify();
     return { success: true };
   }

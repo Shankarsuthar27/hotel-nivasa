@@ -52,9 +52,24 @@ export async function checkAndSeedFirestore(propertyId = 'prop_astha_01', force 
       updatedAt: new Date().toISOString()
     });
 
-    // 2. Batch write Room Types
+    // 2. Batch write Room Types (excluding any deleted room types)
+    let deletedRoomTypeIds = new Set();
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('pms_deleted_entities') : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        (parsed.roomTypes || []).forEach(id => deletedRoomTypeIds.add(String(id).toLowerCase()));
+      }
+    } catch (_) {}
+
     const batch1 = writeBatch(db);
     initialRoomTypes.forEach((rt) => {
+      const idLower = String(rt.id).toLowerCase();
+      const codeLower = String(rt.code || '').toLowerCase();
+      const nameLower = String(rt.name || '').toLowerCase();
+      if (deletedRoomTypeIds.has(idLower) || deletedRoomTypeIds.has(codeLower) || deletedRoomTypeIds.has(nameLower)) {
+        return;
+      }
       const rtRef = doc(db, 'properties', propertyId, 'roomTypes', rt.id);
       batch1.set(rtRef, rt);
     });
