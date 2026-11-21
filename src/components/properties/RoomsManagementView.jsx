@@ -63,21 +63,13 @@ export default function RoomsManagementView({
   const handleConfirmDelete = () => {
     if (!deleteModalState) return;
     if (deleteModalState.type === 'roomType') {
-      const targetRt = roomTypes.find((r) => r.id === deleteModalState.id);
-      if (targetRt && isRoomTypeAssigned(targetRt)) {
-        setDeleteModalState(null);
-        if (showToast) {
-          showToast('This room type is assigned to one or more rooms and cannot be deleted.', 'error');
-        }
-        return;
-      }
       if (onDeleteRoomType) {
         const res = onDeleteRoomType(deleteModalState.id);
         if (res && res.success === false) {
           setDeleteModalState(null);
           if (showToast) {
             showToast(
-              res.message || 'This room type is assigned to one or more rooms and cannot be deleted.',
+              res.message || 'Failed to delete room type.',
               'error'
             );
           }
@@ -438,21 +430,15 @@ export default function RoomsManagementView({
                             className="properties-action-item delete"
                             onClick={() => {
                               setActiveMenuId(null);
-                              if (isRoomTypeAssigned(rt)) {
-                                if (showToast) {
-                                  showToast(
-                                    'This room type is assigned to one or more rooms and cannot be deleted.',
-                                    'error'
-                                  );
-                                }
-                                return;
-                              }
+                              const assigned = isRoomTypeAssigned(rt);
                               setDeleteModalState({
                                 type: 'roomType',
                                 id: rt.id,
                                 name: rt.name,
                                 title: 'Confirm Deletion',
-                                message: 'Are you sure you want to delete this room type? This action cannot be undone.'
+                                message: assigned
+                                  ? `This room type "${rt.name}" is assigned to one or more rooms. Deleting it will reassign or unlink those rooms. Are you sure you want to proceed?`
+                                  : `Are you sure you want to delete this room type "${rt.name}"? This action cannot be undone.`
                               });
                             }}
                           >

@@ -24,11 +24,19 @@ import {
 } from "../data/initialPmsData";
 
 export async function checkAndSeedFirestore(propertyId = 'prop_astha_01', force = false) {
+  const cacheKey = `seeded_${propertyId}`;
+  if (!force && typeof window !== 'undefined' && localStorage.getItem(cacheKey) === 'true') {
+    return { alreadySeeded: true, cached: true };
+  }
+
   try {
     const propRef = doc(db, 'properties', propertyId);
     const propSnap = await getDoc(propRef);
 
     if (propSnap.exists() && !force) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(cacheKey, 'true');
+      }
       return {
         alreadySeeded: true,
         message: `Property ${propertyId} already exists in Firestore.`
@@ -124,6 +132,9 @@ export async function checkAndSeedFirestore(propertyId = 'prop_astha_01', force 
     });
     await batch7.commit();
 
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(cacheKey, 'true');
+    }
     console.info(`[FirebaseSeeder] Cloud Firestore seeding complete for ${propertyId}`);
     return {
       alreadySeeded: false,

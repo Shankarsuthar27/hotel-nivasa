@@ -28,7 +28,11 @@ import {
   deleteDoc,
   collection,
   getDocs,
-  onSnapshot
+  onSnapshot,
+  query,
+  limit,
+  orderBy,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { checkAndSeedFirestore } from './firebaseSeeder';
@@ -871,10 +875,11 @@ class PMSStore {
       this.unsubscribers.forEach((unsub) => typeof unsub === 'function' && unsub());
       this.unsubscribers = [];
 
-      // 2. Real-time Listener: Reservations
+      // 2. Real-time Listener: Reservations (bounded to active/recent 150 records)
       const resCol = collection(db, 'properties', this.propertyId, 'reservations');
+      const resQuery = query(resCol, limit(150));
       const unsubRes = onSnapshot(
-        resCol,
+        resQuery,
         (snapshot) => {
           const cloudRes = snapshot.docs.map((d) => d.data());
           const validCloudRes = cloudRes.filter((r) => {
@@ -965,17 +970,6 @@ class PMSStore {
           this.cloudStatus = 'LIVE';
           this.save();
           this.notify();
-
-          // Background sync any local reservations to Firestore that are missing in the cloud snapshot
-          const cloudIds = new Set(validCloudRes.map(r => r.id));
-          merged.forEach((r) => {
-            if (!cloudIds.has(r.id)) {
-              this.syncDocToFirestore('reservations', r.id, r);
-              if (r.folioId && this.folios && this.folios[r.folioId]) {
-                this.syncDocToFirestore('folios', r.folioId, this.folios[r.folioId]);
-              }
-            }
-          });
         },
         (err) => {
           console.warn('[Firebase Firestore] Reservations listener note:', err.message);
@@ -1007,36 +1001,15 @@ class PMSStore {
             );
           };
 
-          // Prune any cloud room docs that were explicitly deleted locally (using actual Firestore doc id!)
-          const survivingCloudRooms = [];
-          cloudRooms.forEach((cr) => {
-            if (isRoomDeleted(cr)) {
-              this.deleteDocFromFirestore('rooms', cr._firestoreDocId);
-              if (cr.id && cr.id !== cr._firestoreDocId) {
-                this.deleteDocFromFirestore('rooms', cr.id);
-              }
-            } else {
-              survivingCloudRooms.push(cr);
-            }
-          });
+          // Filter out any cloud room docs that were explicitly deleted locally (never issue delete writes inside onSnapshot!)
+          const survivingCloudRooms = cloudRooms.filter((cr) => !isRoomDeleted(cr));
 
           const combined = [...(this.rooms || []), ...survivingCloudRooms];
-          const deduped = this.dedupeRoomsByNumber(combined, true);
+          const deduped = this.dedupeRoomsByNumber(combined, false);
           this.rooms = this.sanitizeStaleOccupiedRooms(deduped, this.reservations);
           this.cloudStatus = 'LIVE';
           this.save();
           this.notify();
-
-          // Backfill any newly added local rooms not yet present in Cloud Firestore
-          const cloudRoomNums = new Set(
-            survivingCloudRooms.map((cr) => String(cr.roomNumber || cr.id || '').trim().toLowerCase().replace(/^rm_/, ''))
-          );
-          this.rooms.forEach((rm) => {
-            const numKey = String(rm.roomNumber || rm.id || '').trim().toLowerCase().replace(/^rm_/, '');
-            if (numKey && !cloudRoomNums.has(numKey) && !isRoomDeleted(rm)) {
-              this.syncDocToFirestore('rooms', rm.id, rm);
-            }
-          });
         },
         (err) => {
           console.warn('[Firebase Firestore] Rooms listener note:', err.message);
@@ -1044,10 +1017,11 @@ class PMSStore {
       );
       this.unsubscribers.push(unsubRooms);
 
-      // 4. Real-time Listener: Folios
+      // 4. Real-time Listener: Folios (bounded to active/recent 100 folios)
       const foliosCol = collection(db, 'properties', this.propertyId, 'folios');
+      const foliosQuery = query(foliosCol, limit(100));
       const unsubFolios = onSnapshot(
-        foliosCol,
+        foliosQuery,
         (snapshot) => {
           const newFolios = {};
           snapshot.docs.forEach((d) => {
@@ -1095,169 +1069,14 @@ class PMSStore {
       );
       this.unsubscribers.push(unsubProp);
 
-      // 7. Real-time Listener: Meal Plans
-      const mpCol = collection(db, 'properties', this.propertyId, 'mealPlans');
-      const unsubMp = onSnapshot(
-        mpCol,
-        (snapshot) => {
-          const cloudMp = snapshot.docs.map((d) => d.data());
-          const map = new Map();
-          cloudMp.forEach((mp) => {
-            const key = mp.id || mp.code;
-            if (key && !map.has(key)) map.set(key, mp);
-          });
-          this.mealPlans = Array.from(map.values());
-          this.save();
-          this.notify();
-        },
-        () => {}
-      );
-      this.unsubscribers.push(unsubMp);
+      // 7. Load Static Configuration Collections via one-shot cached read (no permanent listener overhead)
+      await this.fetchStaticConfigs();
 
-      // 8. Real-time Listener: Rate Plans
-      const rpCol = collection(db, 'properties', this.propertyId, 'ratePlans');
-      const unsubRp = onSnapshot(
-        rpCol,
-        (snapshot) => {
-          const cloudRp = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-          const map = new Map();
-          cloudRp.forEach((rp) => {
-            const codeKey = (rp.code || '').trim().toUpperCase();
-            const idKey = (rp.id || '').trim();
-            const dedupeKey = codeKey || idKey;
-            if (dedupeKey) {
-              if (!map.has(dedupeKey)) {
-                map.set(dedupeKey, { ...rp, id: rp.id || dedupeKey });
-              } else {
-                const prev = map.get(dedupeKey);
-                // Preserve active roomTypeRates and valid prices during merge
-                const prevHasRates = prev.roomTypeRates && Object.values(prev.roomTypeRates).some(r => r && (r.active || r.basePrice > 0));
-                const curHasRates = rp.roomTypeRates && Object.values(rp.roomTypeRates).some(r => r && (r.active || r.basePrice > 0));
-                if (curHasRates && !prevHasRates) {
-                  map.set(dedupeKey, { ...prev, ...rp, id: prev.id || rp.id || dedupeKey });
-                } else {
-                  map.set(dedupeKey, { ...rp, ...prev, id: prev.id || rp.id || dedupeKey });
-                }
-              }
-            }
-          });
-          if (map.size > 0) {
-            this.ratePlans = Array.from(map.values());
-            this.save();
-            this.notify();
-          }
-        },
-        () => {}
-      );
-      this.unsubscribers.push(unsubRp);
-
-      // 9. Real-time Listener: Room Types (merge local + cloud and respect deletions)
-      const rtCol = collection(db, 'properties', this.propertyId, 'roomTypes');
-      const unsubRt = onSnapshot(
-        rtCol,
-        (snapshot) => {
-          const cloudRt = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-          const deletedRt = this.deletedRoomTypeIds || new Set();
-          const map = new Map();
-
-          const isDeleted = (rt) =>
-            deletedRt.has(String(rt.id)) ||
-            (rt.code && deletedRt.has(String(rt.code))) ||
-            (rt.name && deletedRt.has(String(rt.name).toLowerCase()));
-
-          // Prune any cloud room type docs that were explicitly deleted
-          cloudRt.forEach((rt) => {
-            if (isDeleted(rt)) {
-              this.deleteDocFromFirestore('roomTypes', rt.id);
-            }
-          });
-
-          (this.roomTypes || []).forEach((rt) => {
-            if (!rt || isDeleted(rt)) return;
-            const key = rt.id || rt.code;
-            if (key) map.set(key, rt);
-          });
-
-          cloudRt.forEach((rt) => {
-            if (!rt || isDeleted(rt)) return;
-            const key = rt.id || rt.code;
-            if (key) {
-              const existing = map.get(key);
-              map.set(key, existing ? { ...existing, ...rt } : rt);
-            }
-          });
-
-          this.roomTypes = Array.from(map.values());
-          this.save();
-          this.notify();
-
-          // Backfill any newly added local room types missing from Firestore
-          const cloudRtIds = new Set(cloudRt.map((rt) => rt.id));
-          this.roomTypes.forEach((rt) => {
-            if (rt.id && !cloudRtIds.has(rt.id)) {
-              this.syncDocToFirestore('roomTypes', rt.id, rt);
-            }
-          });
-        },
-        () => {}
-      );
-      this.unsubscribers.push(unsubRt);
-
-      // 10. Real-time Listener: Team Members (merge local + cloud so newly provisioned staff are never wiped)
-      const tmCol = collection(db, 'properties', this.propertyId, 'teamMembers');
-      const unsubTm = onSnapshot(
-        tmCol,
-        (snapshot) => {
-          const cloudTm = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-          const deletedTm = this.deletedTeamMemberIds || new Set();
-          const map = new Map();
-
-          (this.teamMembers || []).forEach((tm) => {
-            if (!tm) return;
-            const key = tm.id || tm.staffId || tm.email;
-            if (key && !deletedTm.has(String(tm.id))) {
-              map.set(key, tm);
-            }
-          });
-
-          cloudTm.forEach((tm) => {
-            if (!tm) return;
-            const key = tm.id || tm.staffId || tm.email;
-            if (key && !deletedTm.has(String(tm.id))) {
-              const existing = map.get(key);
-              map.set(key, existing ? { ...existing, ...tm } : tm);
-            }
-          });
-
-          this.teamMembers = Array.from(map.values());
-          this.syncCurrentUserWithTeamMembers();
-          this.save();
-          this.notify();
-        },
-        () => {}
-      );
-      this.unsubscribers.push(unsubTm);
-
-      // 11. Real-time Listener: Announcements / Staff Notes
-      const annCol = collection(db, 'properties', this.propertyId, 'announcements');
-      const unsubAnn = onSnapshot(
-        annCol,
-        (snapshot) => {
-          const cloudAnn = snapshot.docs.map((d) => d.data());
-          if (cloudAnn.length > 0) {
-            this.announcements = cloudAnn;
-            this.save();
-            this.notify();
-          }
-        },
-        () => {}
-      );
-      this.unsubscribers.push(unsubAnn);
-
-      // 12. Real-time Listener: Audit Trail (persisted in Cloud Firestore across refreshes & devices)
+      // 8. Real-time Listener: Audit Trail (bounded to latest 30 entries)
       const auditCol = collection(db, 'properties', this.propertyId, 'auditTrail');
+      const auditQuery = query(auditCol, orderBy('timestamp', 'desc'), limit(30));
       const unsubAudit = onSnapshot(
-        auditCol,
+        auditQuery,
         (snapshot) => {
           const cloudAudits = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
           const mergedMap = new Map();
@@ -1285,19 +1104,11 @@ class PMSStore {
 
           const mergedList = Array.from(mergedMap.values())
             .sort((a, b) => parseAuditTime(b) - parseAuditTime(a))
-            .slice(0, 300);
+            .slice(0, 50);
 
           this.auditTrail = mergedList;
           this.save();
           this.notify();
-
-          // Backfill any local-only audit entries (e.g., created while offline) up to Cloud Firestore
-          const cloudIds = new Set(cloudAudits.map((c) => c.id));
-          mergedList.forEach((entry) => {
-            if (entry?.id && String(entry.id).startsWith('at_') && !cloudIds.has(entry.id)) {
-              this.syncDocToFirestore('auditTrail', entry.id, entry);
-            }
-          });
         },
         (err) => {
           console.warn('[Firebase Firestore] Audit Trail listener note:', err?.message);
@@ -1311,6 +1122,135 @@ class PMSStore {
       console.warn('[Firebase Firestore] Sync initialization fallback to local storage:', e.message);
       this.cloudStatus = 'OFFLINE_CACHE';
       this.notify();
+    }
+  }
+
+  async fetchStaticConfigs() {
+    if (!db) return;
+    try {
+      const [rtSnap, rpSnap, mpSnap, tmSnap, annSnap] = await Promise.all([
+        getDocs(collection(db, 'properties', this.propertyId, 'roomTypes')).catch(() => null),
+        getDocs(collection(db, 'properties', this.propertyId, 'ratePlans')).catch(() => null),
+        getDocs(collection(db, 'properties', this.propertyId, 'mealPlans')).catch(() => null),
+        getDocs(collection(db, 'properties', this.propertyId, 'teamMembers')).catch(() => null),
+        getDocs(collection(db, 'properties', this.propertyId, 'announcements')).catch(() => null)
+      ]);
+
+      let hasChanges = false;
+
+      // 1. Room Types
+      if (rtSnap && !rtSnap.empty) {
+        const cloudRt = rtSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const deletedRt = this.deletedRoomTypeIds || new Set();
+        const map = new Map();
+        const isDeleted = (rt) =>
+          deletedRt.has(String(rt.id)) ||
+          (rt.code && deletedRt.has(String(rt.code))) ||
+          (rt.name && deletedRt.has(String(rt.name).toLowerCase()));
+
+        cloudRt.forEach((rt) => {
+          if (isDeleted(rt)) {
+            this.deleteDocFromFirestore('roomTypes', rt.id);
+          }
+        });
+        (this.roomTypes || []).forEach((rt) => {
+          if (!rt || isDeleted(rt)) return;
+          const key = rt.id || rt.code;
+          if (key) map.set(key, rt);
+        });
+        cloudRt.forEach((rt) => {
+          if (!rt || isDeleted(rt)) return;
+          const key = rt.id || rt.code;
+          if (key) {
+            const existing = map.get(key);
+            map.set(key, existing ? { ...existing, ...rt } : rt);
+          }
+        });
+        this.roomTypes = Array.from(map.values());
+        hasChanges = true;
+      }
+
+      // 2. Rate Plans
+      if (rpSnap && !rpSnap.empty) {
+        const cloudRp = rpSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const map = new Map();
+        cloudRp.forEach((rp) => {
+          const codeKey = (rp.code || '').trim().toUpperCase();
+          const idKey = (rp.id || '').trim();
+          const dedupeKey = codeKey || idKey;
+          if (dedupeKey) {
+            if (!map.has(dedupeKey)) {
+              map.set(dedupeKey, { ...rp, id: rp.id || dedupeKey });
+            } else {
+              const prev = map.get(dedupeKey);
+              const prevHasRates = prev.roomTypeRates && Object.values(prev.roomTypeRates).some(r => r && (r.active || r.basePrice > 0));
+              const curHasRates = rp.roomTypeRates && Object.values(rp.roomTypeRates).some(r => r && (r.active || r.basePrice > 0));
+              if (curHasRates && !prevHasRates) {
+                map.set(dedupeKey, { ...prev, ...rp, id: prev.id || rp.id || dedupeKey });
+              } else {
+                map.set(dedupeKey, { ...rp, ...prev, id: prev.id || rp.id || dedupeKey });
+              }
+            }
+          }
+        });
+        if (map.size > 0) {
+          this.ratePlans = Array.from(map.values());
+          hasChanges = true;
+        }
+      }
+
+      // 3. Meal Plans
+      if (mpSnap && !mpSnap.empty) {
+        const cloudMp = mpSnap.docs.map((d) => d.data());
+        const map = new Map();
+        cloudMp.forEach((mp) => {
+          const key = mp.id || mp.code;
+          if (key && !map.has(key)) map.set(key, mp);
+        });
+        this.mealPlans = Array.from(map.values());
+        hasChanges = true;
+      }
+
+      // 4. Team Members
+      if (tmSnap && !tmSnap.empty) {
+        const cloudTm = tmSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const deletedTm = this.deletedTeamMemberIds || new Set();
+        const map = new Map();
+        (this.teamMembers || []).forEach((tm) => {
+          if (!tm) return;
+          const key = tm.id || tm.staffId || tm.email;
+          if (key && !deletedTm.has(String(tm.id))) {
+            map.set(key, tm);
+          }
+        });
+        cloudTm.forEach((tm) => {
+          if (!tm) return;
+          const key = tm.id || tm.staffId || tm.email;
+          if (key && !deletedTm.has(String(tm.id))) {
+            const existing = map.get(key);
+            map.set(key, existing ? { ...existing, ...tm } : tm);
+          }
+        });
+        this.teamMembers = Array.from(map.values());
+        this.syncCurrentUserWithTeamMembers();
+        hasChanges = true;
+      }
+
+      // 5. Announcements
+      if (annSnap && !annSnap.empty) {
+        const cloudAnn = annSnap.docs.map((d) => d.data());
+        if (cloudAnn.length > 0) {
+          this.announcements = cloudAnn;
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges) {
+        this.save();
+        this.notify();
+      }
+    } catch (err) {
+      console.warn('[Firebase] Static config fetch note:', err?.message);
     }
   }
 
@@ -1342,14 +1282,6 @@ class PMSStore {
       const nestedRef = doc(db, 'properties', this.propertyId, collectionName, String(docId));
       await setDoc(nestedRef, payload, { merge: true });
 
-      // 2. Root collection for universal querying & direct console visibility (Optional mirror)
-      try {
-        const rootRef = doc(db, collectionName, String(docId));
-        await setDoc(rootRef, payload, { merge: true });
-      } catch (rootErr) {
-        console.warn(`[Firebase Sync Note] Root mirror write note for ${collectionName}/${docId}:`, rootErr.message);
-      }
-
       console.info(`🔥 [Firebase Cloud] Successfully stored ${collectionName}/${docId} in Cloud Firestore.`);
       return true;
     } catch (err) {
@@ -1360,17 +1292,27 @@ class PMSStore {
 
   async deleteDocFromFirestore(collectionName, docId) {
     if (!docId || !collectionName || !db) return;
-    try {
-      const nestedRef = doc(db, 'properties', this.propertyId, collectionName, String(docId));
-      await deleteDoc(nestedRef);
-      console.info(`🔥 [Firebase Cloud] Deleted ${collectionName}/${docId}`);
-    } catch (err) {
-      console.warn(`[Firebase Sync Note] Could not delete nested ${collectionName}/${docId}:`, err.message);
+    const cleanDocId = String(docId).trim();
+    if (!cleanDocId) return;
+
+    if (!this.inFlightDeletes) this.inFlightDeletes = new Set();
+    const deleteKey = `${collectionName}/${cleanDocId}`;
+    if (this.inFlightDeletes.has(deleteKey)) {
+      return;
     }
+    this.inFlightDeletes.add(deleteKey);
+
     try {
-      const rootRef = doc(db, collectionName, String(docId));
-      await deleteDoc(rootRef);
-    } catch (_) {}
+      const nestedRef = doc(db, 'properties', this.propertyId, collectionName, cleanDocId);
+      await deleteDoc(nestedRef);
+      console.info(`🔥 [Firebase Cloud] Deleted ${collectionName}/${cleanDocId}`);
+    } catch (err) {
+      console.warn(`[Firebase Sync Note] Could not delete nested ${collectionName}/${cleanDocId}:`, err.message);
+    } finally {
+      setTimeout(() => {
+        this.inFlightDeletes?.delete(deleteKey);
+      }, 3000);
+    }
   }
 
   async purgeMatchingCloudRooms(roomId, roomNumKey) {
@@ -1379,7 +1321,8 @@ class PMSStore {
     const cleanId = String(roomId || '').trim().toLowerCase();
     try {
       const snap = await getDocs(collection(db, 'properties', this.propertyId, 'rooms'));
-      const tasks = [];
+      const batch = writeBatch(db);
+      let count = 0;
       snap.forEach((d) => {
         const data = d.data() || {};
         const dIdLower = String(d.id || '').trim().toLowerCase();
@@ -1392,12 +1335,13 @@ class PMSStore {
           (cleanId && (dIdLower === cleanId || dataIdLower === cleanId)) ||
           (cleanNum && (dataNumKey === cleanNum || dIdLower === `rm_${cleanNum}` || dIdLower === cleanNum))
         ) {
-          tasks.push(deleteDoc(d.ref).catch(() => {}));
-          tasks.push(deleteDoc(doc(db, 'rooms', d.id)).catch(() => {}));
+          batch.delete(d.ref);
+          count++;
         }
       });
-      if (tasks.length > 0) {
-        await Promise.all(tasks);
+      if (count > 0) {
+        await batch.commit();
+        console.info(`🔥 [Firebase Cloud] Batch purged ${count} room doc(s)`);
       }
     } catch (err) {
       console.warn('[Firebase Sync Note] Room cloud sweep note:', err?.message);
@@ -1411,7 +1355,8 @@ class PMSStore {
     const nameLower = String(rtName || '').trim().toLowerCase();
     try {
       const snap = await getDocs(collection(db, 'properties', this.propertyId, 'roomTypes'));
-      const tasks = [];
+      const batch = writeBatch(db);
+      let count = 0;
       snap.forEach((d) => {
         const data = d.data() || {};
         const dIdLower = String(d.id || '').trim().toLowerCase();
@@ -1423,12 +1368,13 @@ class PMSStore {
           (codeLower && (dIdLower === codeLower || dataCodeLower === codeLower)) ||
           (nameLower && dataNameLower === nameLower)
         ) {
-          tasks.push(deleteDoc(d.ref).catch(() => {}));
-          tasks.push(deleteDoc(doc(db, 'roomTypes', d.id)).catch(() => {}));
+          batch.delete(d.ref);
+          count++;
         }
       });
-      if (tasks.length > 0) {
-        await Promise.all(tasks);
+      if (count > 0) {
+        await batch.commit();
+        console.info(`🔥 [Firebase Cloud] Batch purged ${count} roomType doc(s)`);
       }
     } catch (err) {
       console.warn('[Firebase Sync Note] RoomType cloud sweep note:', err?.message);
@@ -4520,15 +4466,58 @@ class PMSStore {
 
   deleteRoomType(roomTypeId) {
     const rt = this.roomTypes?.find(r => r.id === roomTypeId || r.code === roomTypeId);
-    const assignedRooms = (this.rooms || []).filter(
-      r => r.roomTypeId === roomTypeId ||
-           String(r.roomTypeId).toLowerCase() === String(roomTypeId).toLowerCase() ||
-           (rt && (r.roomTypeId === rt.id || r.roomTypeId === rt.code || r.roomType === rt.name || r.roomTypeName === rt.name))
-    );
-    if (assignedRooms.length > 0) {
-      return { success: false, message: 'This room type is assigned to one or more rooms and cannot be deleted.' };
-    }
-    this.roomTypes = (this.roomTypes || []).filter(r => r.id !== roomTypeId && r.code !== roomTypeId);
+    const remainingRoomTypes = (this.roomTypes || []).filter(r => r.id !== roomTypeId && r.code !== roomTypeId);
+    const fallbackRt = remainingRoomTypes.length > 0 ? remainingRoomTypes[0] : null;
+
+    // Safely reassign any rooms assigned to this room type (even if occupied)
+    this.rooms = (this.rooms || []).map(r => {
+      const isAssigned =
+        r.roomTypeId === roomTypeId ||
+        String(r.roomTypeId).toLowerCase() === String(roomTypeId).toLowerCase() ||
+        (rt && (
+          r.roomTypeId === rt.id ||
+          r.roomTypeId === rt.code ||
+          r.roomType === rt.name ||
+          r.roomTypeName === rt.name
+        ));
+      if (isAssigned) {
+        const updatedRoom = {
+          ...r,
+          roomTypeId: fallbackRt ? fallbackRt.id : '',
+          roomTypeName: fallbackRt ? fallbackRt.name : 'Unassigned',
+          roomType: fallbackRt ? fallbackRt.name : 'Unassigned'
+        };
+        this.syncDocToFirestore('rooms', updatedRoom.id, updatedRoom);
+        return updatedRoom;
+      }
+      return r;
+    });
+
+    // Also safely update any reservations linked to this room type
+    this.reservations = (this.reservations || []).map(res => {
+      const isLinked =
+        res.roomTypeId === roomTypeId ||
+        String(res.roomTypeId).toLowerCase() === String(roomTypeId).toLowerCase() ||
+        (rt && (
+          res.roomTypeId === rt.id ||
+          res.roomTypeId === rt.code ||
+          res.roomTypeName === rt.name ||
+          res.roomType === rt.name
+        ));
+      if (isLinked) {
+        const updatedRes = {
+          ...res,
+          roomTypeId: fallbackRt ? fallbackRt.id : (res.roomTypeId || ''),
+          roomTypeName: fallbackRt ? fallbackRt.name : (res.roomTypeName || 'Unassigned'),
+          roomType: fallbackRt ? fallbackRt.name : (res.roomType || 'Unassigned')
+        };
+        this.syncDocToFirestore('reservations', updatedRes.id, updatedRes);
+        return updatedRes;
+      }
+      return res;
+    });
+
+    this.roomTypes = remainingRoomTypes;
     if (!this.deletedRoomTypeIds) this.deletedRoomTypeIds = new Set();
     this.deletedRoomTypeIds.add(String(roomTypeId));
     if (rt) {
@@ -4656,20 +4645,20 @@ class PMSStore {
       if (rm._firestoreDocId) this.deletedRoomIds.add(String(rm._firestoreDocId));
       if (rm.roomNumber) this.deletedRoomIds.add(String(rm.roomNumber));
       this.logAudit('DELETE_ROOM', 'PROPERTIES', rm.roomNumber, `Deleted room ${rm.roomNumber}`);
-      this.deleteDocFromFirestore('rooms', rm.id);
-      if (rm._firestoreDocId && rm._firestoreDocId !== rm.id) {
-        this.deleteDocFromFirestore('rooms', rm._firestoreDocId);
-      }
-      if (rmNumKey && `rm_${rmNumKey}` !== rm.id) {
-        this.deleteDocFromFirestore('rooms', `rm_${rmNumKey}`);
-      }
-      if (rm.roomNumber && rm.roomNumber !== rm.id) {
-        this.deleteDocFromFirestore('rooms', rm.roomNumber);
-      }
+
+      const canonicalId = `rm_${rmNumKey}`;
+      const toDelete = new Set([rm.id, rm._firestoreDocId, canonicalId, String(rm.roomNumber || '')].filter(Boolean));
+      toDelete.forEach((did) => {
+        this.deleteDocFromFirestore('rooms', did);
+      });
       this.purgeMatchingCloudRooms(rm.id, rmNumKey);
     } else {
-      this.deleteDocFromFirestore('rooms', roomId);
-      this.purgeMatchingCloudRooms(roomId, rmNumKey);
+      const canonicalId = targetNumKey ? `rm_${targetNumKey}` : roomId;
+      this.deleteDocFromFirestore('rooms', canonicalId);
+      if (roomId && roomId !== canonicalId) {
+        this.deleteDocFromFirestore('rooms', roomId);
+      }
+      this.purgeMatchingCloudRooms(roomId, targetNumKey);
     }
     this.save();
     this.notify();

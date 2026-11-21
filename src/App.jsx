@@ -532,7 +532,8 @@ export default function App() {
                   setSlotPrefillData(null);
                   navigate('/reservations/create');
                 }}
-                onRefresh={() => {
+                onRefresh={async () => {
+                  await pmsStore.fetchStaticConfigs();
                   showToast('🔄 Synchronized state with PMS Cloud & Storage');
                 }}
               />
