@@ -80,6 +80,8 @@ export async function checkAndSeedFirestore(propertyId = 'prop_astha_01', force 
     initialRooms.forEach((r) => {
       const rRef = doc(db, 'properties', propertyId, 'rooms', r.id);
       batch2.set(rRef, r);
+      const rootRRef = doc(db, 'rooms', r.id);
+      batch2.set(rootRRef, r);
     });
     await batch2.commit();
 

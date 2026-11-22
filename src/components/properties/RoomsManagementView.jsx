@@ -171,9 +171,17 @@ export default function RoomsManagementView({
     setActiveMenuId(id);
   };
 
-  const getRoomTypeName = (roomTypeId) => {
-    const rt = roomTypes.find((t) => t.id === roomTypeId);
-    return rt ? rt.name : 'Standard';
+  const getRoomTypeName = (roomTypeId, rm = null) => {
+    if (rm?.roomTypeName) return rm.roomTypeName;
+    if (rm?.roomType) return rm.roomType;
+    if (!roomTypeId) return 'Normal';
+    const rt = (roomTypes || []).find(
+      (t) =>
+        t.id === roomTypeId ||
+        t.code === roomTypeId ||
+        t.name?.toLowerCase() === String(roomTypeId).toLowerCase()
+    );
+    return rt ? rt.name : (roomTypeId || 'Normal');
   };
 
   const getRoomStatusPill = (status) => {
@@ -554,7 +562,7 @@ export default function RoomsManagementView({
                     {/* Room Type */}
                     <td style={{ padding: '16px 16px' }}>
                       <span style={{ color: '#1E293B', fontSize: '13.5px', fontWeight: 500 }}>
-                        {getRoomTypeName(rm.roomTypeId)}
+                        {getRoomTypeName(rm.roomTypeId, rm)}
                       </span>
                     </td>
 

@@ -1098,14 +1098,45 @@ class PMSStore {
       );
       this.unsubscribers.push(unsubRes);
 
-      // 3. Real-time Listener: Rooms (Instantly syncs additions, edits, and deletions across all devices)
-      const roomsCol = collection(db, 'properties', this.propertyId, 'rooms');
+      // 3. Real-time Listener: Rooms from Cloud Firestore collection 'rooms'
+      const roomsCol = collection(db, 'rooms');
       const unsubRooms = onSnapshot(
         roomsCol,
-        (snapshot) => {
-          const cloudRooms = snapshot.docs.map((d) => {
+        async (snapshot) => {
+          let docs = snapshot.docs;
+          // Fallback to property subcollection if root rooms collection is empty
+          if (snapshot.empty) {
+            try {
+              const subSnap = await getDocs(collection(db, 'properties', this.propertyId, 'rooms'));
+              if (!subSnap.empty) {
+                docs = subSnap.docs;
+              }
+            } catch (_) {}
+          }
+
+          const cloudRooms = docs.map((d) => {
             const data = d.data() || {};
-            return { ...data, id: data.id || d.id, _firestoreDocId: d.id };
+            const cleanNum = String(data.roomNumber || data.id || d.id || '')
+              .trim()
+              .replace(/^rm_/, '');
+            const matchedRt = (this.roomTypes || []).find(
+              (rt) =>
+                rt.id === data.roomTypeId ||
+                rt.code === data.roomTypeId ||
+                rt.name?.toLowerCase() === String(data.roomType || data.roomTypeName || '').toLowerCase() ||
+                (data.roomTypeCode && rt.code?.toLowerCase() === String(data.roomTypeCode).toLowerCase())
+            );
+            return {
+              ...data,
+              id: data.id || d.id,
+              _firestoreDocId: d.id,
+              roomNumber: cleanNum,
+              roomTypeId: data.roomTypeId || (matchedRt ? matchedRt.id : (this.roomTypes?.[0]?.id || 'rt_deluxe')),
+              roomTypeName: data.roomTypeName || data.roomType || (matchedRt ? matchedRt.name : 'Delux Room'),
+              roomType: data.roomType || data.roomTypeName || (matchedRt ? matchedRt.name : 'Delux Room'),
+              status: data.status || 'clean',
+              operational: data.operational || 'available'
+            };
           });
           const deletedSet = this.deletedRoomIds || new Set();
 
@@ -1730,28 +1761,54 @@ class PMSStore {
     const cleanNum = String(roomNumKey || '').trim().toLowerCase();
     const cleanId = String(roomId || '').trim().toLowerCase();
     try {
-      const snap = await getDocs(collection(db, 'properties', this.propertyId, 'rooms'));
       const batch = writeBatch(db);
       let count = 0;
-      snap.forEach((d) => {
-        const data = d.data() || {};
-        const dIdLower = String(d.id || '').trim().toLowerCase();
-        const dataIdLower = String(data.id || '').trim().toLowerCase();
-        const dataNumKey = String(data.roomNumber || data.id || d.id || '')
-          .trim()
-          .toLowerCase()
-          .replace(/^rm_/, '');
-        if (
-          (cleanId && (dIdLower === cleanId || dataIdLower === cleanId)) ||
-          (cleanNum && (dataNumKey === cleanNum || dIdLower === `rm_${cleanNum}` || dIdLower === cleanNum))
-        ) {
-          batch.delete(d.ref);
-          count++;
-        }
-      });
+
+      // 1. Sweep properties/{propertyId}/rooms subcollection
+      try {
+        const snap = await getDocs(collection(db, 'properties', this.propertyId, 'rooms'));
+        snap.forEach((d) => {
+          const data = d.data() || {};
+          const dIdLower = String(d.id || '').trim().toLowerCase();
+          const dataIdLower = String(data.id || '').trim().toLowerCase();
+          const dataNumKey = String(data.roomNumber || data.id || d.id || '')
+            .trim()
+            .toLowerCase()
+            .replace(/^rm_/, '');
+          if (
+            (cleanId && (dIdLower === cleanId || dataIdLower === cleanId)) ||
+            (cleanNum && (dataNumKey === cleanNum || dIdLower === `rm_${cleanNum}` || dIdLower === cleanNum))
+          ) {
+            batch.delete(d.ref);
+            count++;
+          }
+        });
+      } catch (_) {}
+
+      // 2. Sweep root collection 'rooms'
+      try {
+        const rootSnap = await getDocs(collection(db, 'rooms'));
+        rootSnap.forEach((d) => {
+          const data = d.data() || {};
+          const dIdLower = String(d.id || '').trim().toLowerCase();
+          const dataIdLower = String(data.id || '').trim().toLowerCase();
+          const dataNumKey = String(data.roomNumber || data.id || d.id || '')
+            .trim()
+            .toLowerCase()
+            .replace(/^rm_/, '');
+          if (
+            (cleanId && (dIdLower === cleanId || dataIdLower === cleanId)) ||
+            (cleanNum && (dataNumKey === cleanNum || dIdLower === `rm_${cleanNum}` || dIdLower === cleanNum))
+          ) {
+            batch.delete(d.ref);
+            count++;
+          }
+        });
+      } catch (_) {}
+
       if (count > 0) {
         await batch.commit();
-        console.info(`🔥 [Firebase Cloud] Batch purged ${count} room doc(s)`);
+        console.info(`🔥 [Firebase Cloud] Batch purged ${count} room doc(s) across cloud collections.`);
       }
     } catch (err) {
       console.warn('[Firebase Sync Note] Room cloud sweep note:', err?.message);
