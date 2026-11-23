@@ -373,31 +373,39 @@ class PMSStore {
       'ultra premium', 'premium', 'normal', 'standard', 'standard room',
       'nrm', 'ulp', 'prm'
     ]);
+    const deletedRtSet = this.deletedRoomTypeIds || new Set();
+
+    // If roomTypes is empty and no deletions have occurred, initialize from defaults
+    if ((!this.roomTypes || this.roomTypes.length === 0) && deletedRtSet.size === 0) {
+      this.roomTypes = initialRoomTypes.map((rt) => ({ ...rt }));
+    }
+
+    // Filter surviving room types: exclude obsolete types and explicitly deleted types
     const survivingTypes = (this.roomTypes || []).filter((rt) => {
       if (!rt) return false;
       const id = String(rt.id || '').trim().toLowerCase();
       const name = String(rt.name || '').trim().toLowerCase();
       const code = String(rt.code || '').trim().toLowerCase();
-      return !obsoleteRtKeys.has(id) && !obsoleteRtKeys.has(name) && !obsoleteRtKeys.has(code);
+      if (obsoleteRtKeys.has(id) || obsoleteRtKeys.has(name) || obsoleteRtKeys.has(code)) {
+        return false;
+      }
+      if (
+        deletedRtSet.has(id) ||
+        deletedRtSet.has(name) ||
+        deletedRtSet.has(code) ||
+        deletedRtSet.has(String(rt.id))
+      ) {
+        return false;
+      }
+      return true;
     });
 
-    // Ensure our 3 base canonical room types exist
+    // Deduplicate by ID / code while strictly preserving all user-edited fields (name, code, adults, rates)
     const mapRt = new Map();
-    initialRoomTypes.forEach((rt) => mapRt.set(rt.id, { ...rt }));
     survivingTypes.forEach((rt) => {
-      const matchedCanonical = initialRoomTypes.find(
-        (c) => c.id === rt.id || c.name.toLowerCase() === (rt.name || '').toLowerCase()
-      );
-      if (matchedCanonical) {
-        mapRt.set(matchedCanonical.id, {
-          ...matchedCanonical,
-          ...rt,
-          id: matchedCanonical.id,
-          name: matchedCanonical.name,
-          code: matchedCanonical.code
-        });
-      } else if (rt.id) {
-        mapRt.set(rt.id, rt);
+      const key = rt.id || rt.code;
+      if (key && !mapRt.has(key)) {
+        mapRt.set(key, { ...rt });
       }
     });
     this.roomTypes = Array.from(mapRt.values());
@@ -867,16 +875,31 @@ class PMSStore {
             }
           }
 
-          // 2. Process cloud-deleted room types (excluding our canonical 3 types)
+          // 2. Process cloud-deleted room types
           if (Array.isArray(data.roomTypes) && data.roomTypes.length > 0) {
             if (!this.deletedRoomTypeIds) this.deletedRoomTypeIds = new Set();
             data.roomTypes.forEach((id) => {
               const clean = String(id || '').trim().toLowerCase();
-              if (clean && !CANONICAL_RT_KEYS.includes(clean) && !this.deletedRoomTypeIds.has(clean)) {
+              if (clean && !this.deletedRoomTypeIds.has(clean)) {
                 this.deletedRoomTypeIds.add(clean);
                 stateChanged = true;
               }
             });
+            // Also immediately filter out deleted room types from local this.roomTypes
+            const prevRtCount = (this.roomTypes || []).length;
+            this.roomTypes = (this.roomTypes || []).filter((rt) => {
+              const id = String(rt.id || '').trim().toLowerCase();
+              const name = String(rt.name || '').trim().toLowerCase();
+              const code = String(rt.code || '').trim().toLowerCase();
+              return (
+                !this.deletedRoomTypeIds.has(id) &&
+                !this.deletedRoomTypeIds.has(name) &&
+                !this.deletedRoomTypeIds.has(code)
+              );
+            });
+            if (this.roomTypes.length !== prevRtCount) {
+              stateChanged = true;
+            }
           }
 
           this.canonicalizeRoomsAndRoomTypes();
@@ -1101,12 +1124,15 @@ class PMSStore {
             'ultra premium', 'premium', 'normal', 'standard', 'standard room',
             'nrm', 'ulp', 'prm'
           ]);
+          const deletedRtSet = this.deletedRoomTypeIds || new Set();
           const surviving = cloudRt.filter((rt) => {
             if (!rt) return false;
             const id = String(rt.id || '').trim().toLowerCase();
             const name = String(rt.name || '').trim().toLowerCase();
             const code = String(rt.code || '').trim().toLowerCase();
-            return !obsoleteRtKeys.has(id) && !obsoleteRtKeys.has(name) && !obsoleteRtKeys.has(code);
+            if (obsoleteRtKeys.has(id) || obsoleteRtKeys.has(name) || obsoleteRtKeys.has(code)) return false;
+            if (deletedRtSet.has(id) || deletedRtSet.has(name) || deletedRtSet.has(code) || deletedRtSet.has(String(rt.id))) return false;
+            return true;
           });
           if (cloudRt.length > 0) {
             const map = new Map();
@@ -4918,45 +4944,73 @@ class PMSStore {
 
   updateRoomType(roomTypeId, patch) {
     let updated = null;
-    this.roomTypes = (this.roomTypes || []).map(rt => {
-      if (rt.id === roomTypeId) {
-        updated = { ...rt, ...patch };
+    let oldRt = null;
+    this.roomTypes = (this.roomTypes || []).map((rt) => {
+      if (rt.id === roomTypeId || rt.code === roomTypeId) {
+        oldRt = { ...rt };
+        updated = { ...rt, ...patch, id: rt.id, updatedAt: new Date().toISOString() };
         return updated;
       }
       return rt;
     });
 
-    // If rate info changed, update in rate plans as well
-    if (patch.basePrice || patch.extraAdultPrice || patch.extraChildPrice) {
-      this.ratePlans = (this.ratePlans || []).map(rp => {
-        if (rp.roomTypeRates && rp.roomTypeRates[roomTypeId]) {
-          const prev = rp.roomTypeRates[roomTypeId];
-          const updatedRates = {
-            ...rp.roomTypeRates,
-            [roomTypeId]: {
-              ...prev,
-              basePrice: patch.basePrice !== undefined ? Number(patch.basePrice) : prev.basePrice,
-              extraAdult: patch.extraAdultPrice !== undefined ? Number(patch.extraAdultPrice) : prev.extraAdult,
-              extraChild: patch.extraChildPrice !== undefined ? Number(patch.extraChildPrice) : prev.extraChild
-            }
-          };
-          const updatedPlan = { ...rp, roomTypeRates: updatedRates };
-          this.syncDocToFirestore('ratePlans', updatedPlan.id, updatedPlan);
-          if (updatedPlan.code && updatedPlan.code !== updatedPlan.id) {
-            this.syncDocToFirestore('ratePlans', updatedPlan.code, updatedPlan);
-          }
-          return updatedPlan;
-        }
-        return rp;
-      });
-    }
-
-    this.logAudit('UPDATE_ROOM_TYPE', 'PROPERTIES', roomTypeId, `Updated room type.`);
-    this.save();
     if (updated) {
-      this.syncDocToFirestore('roomTypes', roomTypeId, updated);
+      // 1. If room type name or code changed, cascade update to rooms
+      if (patch.name && oldRt?.name !== patch.name) {
+        this.rooms = (this.rooms || []).map((rm) => {
+          if (rm.roomTypeId === updated.id || rm.roomTypeName === oldRt?.name || rm.roomType === oldRt?.name) {
+            return {
+              ...rm,
+              roomTypeId: updated.id,
+              roomTypeName: updated.name,
+              roomType: updated.name,
+              roomTypeCode: updated.code || rm.roomTypeCode
+            };
+          }
+          return rm;
+        });
+
+        // Also cascade to reservations
+        (this.reservations || []).forEach((res) => {
+          if (res.roomTypeId === updated.id || res.roomTypeName === oldRt?.name) {
+            res.roomTypeName = updated.name;
+            res.roomType = updated.name;
+          }
+        });
+      }
+
+      // 2. If rate info changed, update in rate plans
+      if (patch.basePrice || patch.extraAdultPrice || patch.extraChildPrice) {
+        this.ratePlans = (this.ratePlans || []).map((rp) => {
+          if (rp.roomTypeRates && rp.roomTypeRates[roomTypeId]) {
+            const prev = rp.roomTypeRates[roomTypeId];
+            const updatedRates = {
+              ...rp.roomTypeRates,
+              [roomTypeId]: {
+                ...prev,
+                basePrice: patch.basePrice !== undefined ? Number(patch.basePrice) : prev.basePrice,
+                extraAdult: patch.extraAdultPrice !== undefined ? Number(patch.extraAdultPrice) : prev.extraAdult,
+                extraChild: patch.extraChildPrice !== undefined ? Number(patch.extraChildPrice) : prev.extraChild
+              }
+            };
+            const updatedPlan = { ...rp, roomTypeRates: updatedRates };
+            this.syncDocToFirestore('ratePlans', updatedPlan.id, updatedPlan);
+            if (updatedPlan.code && updatedPlan.code !== updatedPlan.id) {
+              this.syncDocToFirestore('ratePlans', updatedPlan.code, updatedPlan);
+            }
+            return updatedPlan;
+          }
+          return rp;
+        });
+      }
+
+      this.logAudit('UPDATE_ROOM_TYPE', 'PROPERTIES', roomTypeId, `Updated room type ${updated.name}.`);
+      this.save();
+      this.syncDocToFirestore('roomTypes', updated.id, updated);
+      this.syncAllRoomsAndTypesToCloud();
+      this.notify();
     }
-    this.notify();
+    return { success: !!updated, roomType: updated };
   }
 
   deleteRoomType(roomTypeId) {
@@ -4991,6 +5045,12 @@ class PMSStore {
     // Include common system synonyms if matching canonical types
     if (targetKey.includes('delux') || (rt && rt.name?.toLowerCase().includes('delux'))) {
       ['rt_deluxe', 'dxl', 'delux room', 'deluxe room', 'deluxe'].forEach((a) => toDeleteAliases.add(a));
+    }
+    if (targetKey.includes('supirior') || (rt && rt.name?.toLowerCase().includes('supirior'))) {
+      ['rt_supirior', 'sup', 'supirior', 'superior'].forEach((a) => toDeleteAliases.add(a));
+    }
+    if (targetKey.includes('double') || targetKey.includes('signle') || (rt && rt.name?.toLowerCase().includes('double'))) {
+      ['rt_double_single', 'ds', 'double signle', 'double single'].forEach((a) => toDeleteAliases.add(a));
     }
     if (targetKey.includes('normal') || targetKey.includes('standard') || (rt && (rt.name?.toLowerCase().includes('normal') || rt.name?.toLowerCase().includes('standard')))) {
       ['rt_standard', 'rt_normal', 'nrm', 'std', 'normal', 'standard', 'standard room'].forEach((a) => toDeleteAliases.add(a));

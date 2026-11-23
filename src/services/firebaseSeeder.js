@@ -63,15 +63,12 @@ export async function checkAndSeedFirestore(propertyId = 'prop_astha_01', force 
     } catch (_) {}
 
     const batch1 = writeBatch(db);
-    const CANONICAL_RT_IDS = new Set(['rt_supirior', 'rt_double_single', 'rt_deluxe', 'supirior', 'double signle', 'delux room', 'sup', 'ds', 'dxl']);
     initialRoomTypes.forEach((rt) => {
       const idLower = String(rt.id).toLowerCase();
       const codeLower = String(rt.code || '').toLowerCase();
       const nameLower = String(rt.name || '').toLowerCase();
-      if (!CANONICAL_RT_IDS.has(idLower) && !CANONICAL_RT_IDS.has(codeLower) && !CANONICAL_RT_IDS.has(nameLower)) {
-        if (deletedRoomTypeIds.has(idLower) || deletedRoomTypeIds.has(codeLower) || deletedRoomTypeIds.has(nameLower)) {
-          return;
-        }
+      if (deletedRoomTypeIds.has(idLower) || deletedRoomTypeIds.has(codeLower) || deletedRoomTypeIds.has(nameLower)) {
+        return;
       }
       const rtRef = doc(db, 'properties', propertyId, 'roomTypes', rt.id);
       batch1.set(rtRef, rt);
