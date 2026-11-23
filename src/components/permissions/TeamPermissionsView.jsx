@@ -110,8 +110,12 @@ export default function TeamPermissionsView({
   const isReadOnly = activeSubtab === 'my_permissions';
 
   // Selected Team Member for 'manage_team' tab
-  const nonOwnerMembers = teamMembers.filter((m) => m.role !== 'Owner');
-  const [selectedMemberId, setSelectedMemberId] = useState(initialMemberId || '');
+  const nonOwnerMembers = teamMembers.filter(
+    (m) => m && m.role !== 'Owner' && m.id !== 'usr_02' && m.name !== 'Shankar L'
+  );
+  const [selectedMemberId, setSelectedMemberId] = useState(
+    initialMemberId && initialMemberId !== 'usr_02' ? initialMemberId : ''
+  );
 
   // Dropdown states for Manage Team selector card
   const [isMemberDropdownOpen, setIsMemberDropdownOpen] = useState(false);
@@ -143,13 +147,19 @@ export default function TeamPermissionsView({
   }, []);
 
   useEffect(() => {
-    if (initialMemberId) {
+    if (initialMemberId && initialMemberId !== 'usr_02') {
       setSelectedMemberId(initialMemberId);
     }
     if (initialSubtab) {
       setActiveSubtab(initialSubtab);
     }
   }, [initialMemberId, initialSubtab]);
+
+  useEffect(() => {
+    if (selectedMemberId === 'usr_02') {
+      setSelectedMemberId('');
+    }
+  }, [selectedMemberId]);
 
   // Selected Target Property
   const [targetProperty, setTargetProperty] = useState(currentProperty);
@@ -192,6 +202,7 @@ export default function TeamPermissionsView({
   };
 
   const filteredSearchMembers = nonOwnerMembers.filter((m) => {
+    if (!m || m.id === 'usr_02' || m.name === 'Shankar L') return false;
     const q = memberSearchQuery.toLowerCase().trim();
     if (!q) return true;
     return (

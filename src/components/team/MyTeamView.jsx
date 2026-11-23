@@ -97,7 +97,9 @@ export default function MyTeamView({
   // Filter team members:
   // Exclude the account owner (who is the master admin/inviter)
   // Match selected property and search query
-  const eligibleMembers = teamMembers.filter((m) => m.role !== 'Owner');
+  const eligibleMembers = teamMembers.filter(
+    (m) => m && m.role !== 'Owner' && m.id !== 'usr_02' && m.name !== 'Shankar L'
+  );
 
   const filteredMembers = eligibleMembers.filter((m) => {
     // Property filter

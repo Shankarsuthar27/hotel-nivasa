@@ -710,17 +710,6 @@ export const initialTeamMembers = [
       piiAccess: true,
       ledger: { view: true, settle: true, override: true }
     }
-  },
-  {
-    id: 'usr_02',
-    name: 'Shankar L',
-    initials: 'S',
-    email: 'ss2137789@gmail.com',
-    role: 'Hotel Manager / GM',
-    status: 'ACTIVE',
-    properties: ['HOTEL ASTHA'],
-    invitedAt: '3 Nov 2026',
-    hasAccount: true
   }
 ];
 

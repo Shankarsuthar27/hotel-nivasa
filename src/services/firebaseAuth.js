@@ -30,12 +30,12 @@ export const DEMO_STAFF_ACCOUNTS = [
   {
     id: 'usr_gm',
     staffId: 'MGR-0002',
-    name: 'Shankar L',
+    name: 'General Manager',
     email: 'manager@hotelastha.com',
     role: 'Hotel Manager / GM',
     avatar: '💼',
     password: 'Password@123',
-    initials: 'SL',
+    initials: 'GM',
     status: 'ACTIVE',
     description: 'Operational manager with complete access to rates, rooms, and reports.'
   },

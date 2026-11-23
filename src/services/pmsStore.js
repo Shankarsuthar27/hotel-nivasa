@@ -72,9 +72,22 @@ class PMSStore {
         const savedRaw = localStorage.getItem(STORAGE_KEY);
         if (savedRaw) {
           const parsedCheck = JSON.parse(savedRaw);
+          let changed = false;
           if (parsedCheck.deletedRoomIds || parsedCheck.deletedRoomTypeIds) {
             delete parsedCheck.deletedRoomIds;
             delete parsedCheck.deletedRoomTypeIds;
+            changed = true;
+          }
+          if (Array.isArray(parsedCheck.teamMembers)) {
+            const prevLen = parsedCheck.teamMembers.length;
+            parsedCheck.teamMembers = parsedCheck.teamMembers.filter(
+              (m) => m && m.id !== 'usr_02' && m.name !== 'Shankar L'
+            );
+            if (parsedCheck.teamMembers.length !== prevLen) {
+              changed = true;
+            }
+          }
+          if (changed) {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(parsedCheck));
           }
         }
@@ -265,20 +278,9 @@ class PMSStore {
         });
         this.announcements = parsed.announcements || initialStaffNotes || [];
         this.otaChannels = parsed.otaChannels || initialOtaChannels;
-        this.teamMembers = parsed.teamMembers || initialTeamMembers;
-        if (!this.teamMembers.some(m => m.email === 'ss2137789@gmail.com')) {
-          this.teamMembers.push({
-            id: 'usr_02',
-            name: 'Shankar L',
-            initials: 'S',
-            email: 'ss2137789@gmail.com',
-            role: 'Hotel Manager / GM',
-            status: 'ACTIVE',
-            properties: ['HOTEL ASTHA'],
-            invitedAt: '3 Nov 2026',
-            hasAccount: true
-          });
-        }
+        this.teamMembers = (parsed.teamMembers || initialTeamMembers).filter(
+          (m) => m && m.id !== 'usr_02' && m.name !== 'Shankar L'
+        );
         this.nightAudits = (parsed.nightAudits && parsed.nightAudits.length >= 5) ? parsed.nightAudits : initialNightAudits;
         this.auditTrail = parsed.auditTrail || initialAuditTrail;
         if (this.auditTrail && Array.isArray(this.auditTrail)) {
@@ -1208,7 +1210,41 @@ class PMSStore {
       );
       this.unsubscribers.push(unsubProp);
 
-      // 7. Load Static Configuration Collections via one-shot cached read (no permanent listener overhead)
+      // 7. Real-time Listener: Team Members
+      const tmCol = collection(db, 'properties', this.propertyId, 'teamMembers');
+      const unsubTm = onSnapshot(
+        tmCol,
+        (snapshot) => {
+          if (snapshot.empty) return;
+          const cloudTm = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const deletedTm = this.deletedTeamMemberIds || new Set();
+          const map = new Map();
+          cloudTm.forEach((tm) => {
+            if (!tm || tm.id === 'usr_02' || tm.name === 'Shankar L') return;
+            const key = tm.id || tm.staffId || tm.email;
+            if (key && !deletedTm.has(String(tm.id))) {
+              map.set(key, tm);
+            }
+          });
+          (this.teamMembers || initialTeamMembers).forEach((tm) => {
+            if (!tm || tm.id === 'usr_02' || tm.name === 'Shankar L') return;
+            const key = tm.id || tm.staffId || tm.email;
+            if (key && !deletedTm.has(String(tm.id))) {
+              if (tm.role === 'Owner' || tm._pendingSync) {
+                if (!map.has(key)) map.set(key, tm);
+              }
+            }
+          });
+          this.teamMembers = Array.from(map.values());
+          this.syncCurrentUserWithTeamMembers();
+          this.save();
+          this.notify();
+        },
+        () => {}
+      );
+      this.unsubscribers.push(unsubTm);
+
+      // 8. Load Static Configuration Collections via one-shot cached read (no permanent listener overhead)
       await this.fetchStaticConfigs();
 
       // 8. Real-time Listener: Audit Trail (bounded to latest 30 entries)
@@ -1475,24 +1511,31 @@ class PMSStore {
         const cloudTm = tmSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
         const deletedTm = this.deletedTeamMemberIds || new Set();
         const map = new Map();
-        (this.teamMembers || []).forEach((tm) => {
-          if (!tm) return;
+        cloudTm.forEach((tm) => {
+          if (!tm || tm.id === 'usr_02' || tm.name === 'Shankar L') return;
           const key = tm.id || tm.staffId || tm.email;
           if (key && !deletedTm.has(String(tm.id))) {
             map.set(key, tm);
           }
         });
-        cloudTm.forEach((tm) => {
-          if (!tm) return;
+        (this.teamMembers || []).forEach((tm) => {
+          if (!tm || tm.id === 'usr_02' || tm.name === 'Shankar L') return;
           const key = tm.id || tm.staffId || tm.email;
           if (key && !deletedTm.has(String(tm.id))) {
-            const existing = map.get(key);
-            map.set(key, existing ? { ...existing, ...tm } : tm);
+            if (tm.role === 'Owner' || tm._pendingSync) {
+              if (!map.has(key)) map.set(key, tm);
+            }
           }
         });
-        this.teamMembers = Array.from(map.values());
+        this.teamMembers = Array.from(map.values()).filter(
+          (m) => m && m.id !== 'usr_02' && m.name !== 'Shankar L'
+        );
         this.syncCurrentUserWithTeamMembers();
         hasChanges = true;
+      } else {
+        this.teamMembers = (this.teamMembers || []).filter(
+          (m) => m && m.id !== 'usr_02' && m.name !== 'Shankar L'
+        );
       }
 
       // 5. Announcements
@@ -4172,13 +4215,22 @@ class PMSStore {
 
 
   removeTeamMember(memberId) {
-    const member = this.teamMembers.find(m => m.id === memberId);
+    const member = this.teamMembers.find(
+      (m) => m.id === memberId || m.staffId === memberId || m.email === memberId
+    );
     if (!this.deletedTeamMemberIds) this.deletedTeamMemberIds = new Set();
     this.deletedTeamMemberIds.add(String(memberId));
-    this.teamMembers = this.teamMembers.filter(m => m.id !== memberId);
+    if (member?.id) this.deletedTeamMemberIds.add(String(member.id));
+    if (member?.staffId) this.deletedTeamMemberIds.add(String(member.staffId));
+    this.teamMembers = this.teamMembers.filter(
+      (m) => m.id !== memberId && m.staffId !== memberId && (!member?.email || m.email !== member.email)
+    );
     if (member) {
       this.logAudit('REMOVE_MEMBER', 'TEAM', member.email, `Member removed from organization.`);
       this.deleteDocFromFirestore('teamMembers', memberId);
+      if (member.id && member.id !== memberId) {
+        this.deleteDocFromFirestore('teamMembers', member.id);
+      }
       if (member.uid && member.uid !== memberId) {
         this.deleteDocFromFirestore('staff', member.uid);
       } else {
