@@ -62,15 +62,17 @@ export async function checkAndSeedFirestore(propertyId = 'prop_astha_01', force 
     });
     await batch1.commit();
 
-    // 3. Batch write Rooms
-    const batch2 = writeBatch(db);
-    initialRooms.forEach((r) => {
-      const rRef = doc(db, 'properties', propertyId, 'rooms', r.id);
-      batch2.set(rRef, r);
-      const rootRRef = doc(db, 'rooms', r.id);
-      batch2.set(rootRRef, r);
-    });
-    await batch2.commit();
+    // 3. Batch write Rooms (only if initialRooms are explicitly configured)
+    if (Array.isArray(initialRooms) && initialRooms.length > 0) {
+      const batch2 = writeBatch(db);
+      initialRooms.forEach((r) => {
+        const rRef = doc(db, 'properties', propertyId, 'rooms', r.id);
+        batch2.set(rRef, r);
+        const rootRRef = doc(db, 'rooms', r.id);
+        batch2.set(rootRRef, r);
+      });
+      await batch2.commit();
+    }
 
     // 4. Batch write Meal Plans & Rate Plans
     const batch3 = writeBatch(db);

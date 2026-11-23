@@ -95,6 +95,10 @@ class PMSStore {
         }
         (parsed.deletedReservationIds || []).forEach((id) => this.deletedReservationIds.add(String(id)));
         (parsed.deletedTeamMemberIds || []).forEach((id) => this.deletedTeamMemberIds.add(String(id)));
+        if (!this.deletedRoomIds) this.deletedRoomIds = new Set();
+        (parsed.deletedRoomIds || []).forEach((id) => this.deletedRoomIds.add(String(id)));
+        if (!this.deletedRoomTypeIds) this.deletedRoomTypeIds = new Set();
+        (parsed.deletedRoomTypeIds || []).forEach((id) => this.deletedRoomTypeIds.add(String(id)));
         this.property = parsed.property || initialProperty;
         if (this.property) {
           const todayStr = getTodayIsoDate();
@@ -734,8 +738,9 @@ class PMSStore {
       isAuthenticated: this.isAuthenticated === true && !!this.currentUser,
       invitationTokens: this.invitationTokens || [],
       deletedReservationIds: Array.from(this.deletedReservationIds || []),
-      deletedTeamMemberIds: Array.from(this.deletedTeamMemberIds || [])
-      // NOTE: roomTypes, rooms, deletedRoomIds and deletedRoomTypeIds are strictly managed in Firebase Database!
+      deletedTeamMemberIds: Array.from(this.deletedTeamMemberIds || []),
+      deletedRoomIds: Array.from(this.deletedRoomIds || []),
+      deletedRoomTypeIds: Array.from(this.deletedRoomTypeIds || [])
     };
     try {
       if (this.isAuthenticated && this.currentUser) {
@@ -1079,10 +1084,15 @@ class PMSStore {
                 .replace(/^rm_/, '');
               if (!cleanNum || forbiddenRoomNumbers.has(cleanNum)) return null;
 
-              // If a room actually exists in Cloud Firestore, ensure it is unblocked
-              if (deletedSet.has(d.id)) deletedSet.delete(d.id);
-              if (deletedSet.has(cleanNum)) deletedSet.delete(cleanNum);
-              if (deletedSet.has(`rm_${cleanNum}`)) deletedSet.delete(`rm_${cleanNum}`);
+              // Strictly skip any rooms that were deleted by the user
+              if (
+                deletedSet.has(d.id) ||
+                deletedSet.has(cleanNum) ||
+                deletedSet.has(`rm_${cleanNum}`) ||
+                (data.id && deletedSet.has(String(data.id)))
+              ) {
+                return null;
+              }
 
               let rTypeId = data.roomTypeId;
               let rTypeName = data.roomTypeName || data.roomType;
@@ -1311,7 +1321,6 @@ class PMSStore {
 
       // Keep main database (both subcollection and root mirror) 100% updated with exact room types, room numbers, and summaries
       await this.purgeObsoleteRoomsAndTypesFromCloud();
-      await this.syncAllRoomsAndTypesToCloud();
 
       this.cloudStatus = 'LIVE';
       this.notify();
@@ -1382,10 +1391,15 @@ class PMSStore {
             const cleanNum = String(data.roomNumber || data.id || d.id || '').trim().replace(/^rm_/, '');
             if (!cleanNum || forbiddenRoomNumbers.has(cleanNum)) return null;
 
-            // If a room exists in Cloud Firestore, ensure it is unblocked
-            if (deletedSet.has(d.id)) deletedSet.delete(d.id);
-            if (deletedSet.has(cleanNum)) deletedSet.delete(cleanNum);
-            if (deletedSet.has(`rm_${cleanNum}`)) deletedSet.delete(`rm_${cleanNum}`);
+            // Strictly skip any rooms that were deleted by the user
+            if (
+              deletedSet.has(d.id) ||
+              deletedSet.has(cleanNum) ||
+              deletedSet.has(`rm_${cleanNum}`) ||
+              (data.id && deletedSet.has(String(data.id)))
+            ) {
+              return null;
+            }
 
             let rTypeId = data.roomTypeId;
             let rTypeName = data.roomTypeName || data.roomType;
@@ -1730,76 +1744,8 @@ class PMSStore {
     if (!db) return;
     try {
       this.canonicalizeRoomsAndRoomTypes();
-      console.info('🔥 [Firebase Cloud] Syncing all room types and rooms with exact info to primary property collection...');
-      const primaryBatch = writeBatch(db);
-
-      // 1. Sync every room type with exact name, code, assigned rooms count and room numbers
-      (this.roomTypes || []).forEach((rt) => {
-        if (!rt || !rt.id) return;
-        const assigned = (this.rooms || []).filter(
-          (r) =>
-            r.roomTypeId === rt.id ||
-            r.roomTypeId === rt.code ||
-            String(r.roomTypeName || r.roomType || '').toLowerCase() === String(rt.name || '').toLowerCase()
-        );
-        const payload = this.cleanDataForFirestore({
-          ...rt,
-          id: rt.id,
-          name: rt.name,
-          code: rt.code || '',
-          assignedRoomsCount: assigned.length,
-          assignedRoomNumbers: assigned.map((r) => String(r.roomNumber || '').replace(/^rm_/, '')).filter(Boolean),
-          propertyId: this.propertyId,
-          lastSyncedAt: new Date().toISOString()
-        });
-
-        const nestedRef = doc(db, 'properties', this.propertyId, 'roomTypes', String(rt.id));
-        primaryBatch.set(nestedRef, payload, { merge: true });
-      });
-
-      // 2. Sync every physical room with exact room number, roomTypeId, roomTypeName, and status
-      (this.rooms || []).forEach((rm) => {
-        if (!rm || (!rm.id && !rm.roomNumber)) return;
-        const cleanNum = String(rm.roomNumber || rm.id).trim().replace(/^rm_/, '');
-        const docId = rm.id || `rm_${cleanNum}`;
-        const matchedRt = (this.roomTypes || []).find(
-          (rt) =>
-            rt.id === rm.roomTypeId ||
-            rt.code === rm.roomTypeId ||
-            rt.name?.toLowerCase() === String(rm.roomTypeId || '').toLowerCase() ||
-            (rm.roomTypeName && rt.name?.toLowerCase() === String(rm.roomTypeName).toLowerCase())
-        );
-
-        let fallbackName = 'Delux Room';
-        let fallbackId = 'rt_deluxe';
-        let fallbackCode = 'DXL';
-        if (cleanNum.startsWith('2')) {
-          fallbackName = 'SUPIRIOR';
-          fallbackId = 'rt_supirior';
-          fallbackCode = 'SUP';
-        } else if (cleanNum.startsWith('3')) {
-          fallbackName = 'DOUBLE SIGNLE';
-          fallbackId = 'rt_double_single';
-          fallbackCode = 'DS';
-        }
-
-        const payload = this.cleanDataForFirestore({
-          ...rm,
-          id: docId,
-          roomNumber: cleanNum,
-          roomTypeId: matchedRt ? matchedRt.id : fallbackId,
-          roomTypeCode: matchedRt ? (matchedRt.code || fallbackCode) : fallbackCode,
-          roomTypeName: matchedRt ? matchedRt.name : fallbackName,
-          roomType: matchedRt ? matchedRt.name : fallbackName,
-          propertyId: this.propertyId,
-          lastSyncedAt: new Date().toISOString()
-        });
-
-        const nestedRef = doc(db, 'properties', this.propertyId, 'rooms', String(docId));
-        primaryBatch.set(nestedRef, payload, { merge: true });
-      });
-
-      // 3. Update master property document with full room & roomType summary
+      // Only update master property document with full room & roomType summary
+      // Never overwrite physical room documents in batch to strictly prevent resurrecting deleted rooms!
       const propRef = doc(db, 'properties', this.propertyId);
       const summaryPayload = this.cleanDataForFirestore({
         totalRooms: (this.rooms || []).length,
@@ -1812,30 +1758,10 @@ class PMSStore {
         })),
         lastSyncedAt: new Date().toISOString()
       });
-      primaryBatch.set(propRef, summaryPayload, { merge: true });
-
-      await primaryBatch.commit();
-      console.info('🔥 [Firebase Cloud] Successfully synchronized all room types and rooms to primary property collection.');
-
-      // 4. Update root mirror collections in a separate non-blocking batch
-      try {
-        const mirrorBatch = writeBatch(db);
-        (this.roomTypes || []).forEach((rt) => {
-          if (!rt || !rt.id) return;
-          const rootRef = doc(db, 'roomTypes', String(rt.id));
-          mirrorBatch.set(rootRef, { ...rt, propertyId: this.propertyId, lastSyncedAt: new Date().toISOString() }, { merge: true });
-        });
-        (this.rooms || []).forEach((rm) => {
-          if (!rm) return;
-          const cleanNum = String(rm.roomNumber || rm.id).trim().replace(/^rm_/, '');
-          const docId = rm.id || `rm_${cleanNum}`;
-          const rootRef = doc(db, 'rooms', String(docId));
-          mirrorBatch.set(rootRef, { ...rm, propertyId: this.propertyId, lastSyncedAt: new Date().toISOString() }, { merge: true });
-        });
-        await mirrorBatch.commit();
-      } catch (_) {}
+      await setDoc(propRef, summaryPayload, { merge: true });
+      console.info('🔥 [Firebase Cloud] Synchronized property room count and room types summary.');
     } catch (err) {
-      console.warn('[Firebase Sync Note] Could not batch sync rooms and types:', err?.message);
+      console.warn('[Firebase Sync Note] Could not update room summary:', err?.message);
     }
   }
 
@@ -1853,14 +1779,14 @@ class PMSStore {
 
     try {
       const nestedRef = doc(db, 'properties', this.propertyId, collectionName, cleanDocId);
-      await deleteDoc(nestedRef);
-      try {
-        const rootRef = doc(db, collectionName, cleanDocId);
-        await deleteDoc(rootRef);
-      } catch (_) {}
+      const rootRef = doc(db, collectionName, cleanDocId);
+      await Promise.allSettled([
+        deleteDoc(nestedRef).catch((e) => console.warn(`[Firebase] Could not delete nested ${collectionName}/${cleanDocId}:`, e.message)),
+        deleteDoc(rootRef).catch((e) => console.warn(`[Firebase] Could not delete root ${collectionName}/${cleanDocId}:`, e.message))
+      ]);
       console.info(`🔥 [Firebase Cloud] Deleted ${collectionName}/${cleanDocId}`);
     } catch (err) {
-      console.warn(`[Firebase Sync Note] Could not delete nested ${collectionName}/${cleanDocId}:`, err.message);
+      console.warn(`[Firebase Sync Note] Could not delete ${collectionName}/${cleanDocId}:`, err.message);
     } finally {
       setTimeout(() => {
         this.inFlightDeletes?.delete(deleteKey);

@@ -87,18 +87,7 @@ export const initialRoomTypes = [
   }
 ];
 
-export const initialRooms = [
-  { id: 'rm_1000', roomNumber: '1000', roomTypeId: 'rt_1795416894010', roomTypeName: 'SUPIRIOR', roomType: 'SUPIRIOR', floor: '1', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_500', roomNumber: '500', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '5', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_1794810935899_0', roomNumber: '502', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '5', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_1794810935899_1', roomNumber: '503', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '5', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_1794810935899_2', roomNumber: '504', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '5', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_1794810935899_3', roomNumber: '505', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '5', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_1794905339438_0', roomNumber: '601', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '6', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_1794905339438_1', roomNumber: '602', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '6', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_702', roomNumber: '702', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '7', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_801', roomNumber: '801', roomTypeId: 'rt_1795416894010', roomTypeName: 'SUPIRIOR', roomType: 'SUPIRIOR', floor: '8', status: 'clean', operational: 'available', notes: 'Ready for check-in' }
-];
+export const initialRooms = [];
 
 export const initialMealPlans = [
   {
