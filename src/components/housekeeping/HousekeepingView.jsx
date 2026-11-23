@@ -179,13 +179,23 @@ export default function HousekeepingView({
     filteredRooms.forEach((r) => {
       let targetId = r.roomTypeId;
       if (!map[targetId]) {
-        const cleanNum = String(r.roomNumber || '').replace(/\D/g, '');
-        if (cleanNum.startsWith('2')) {
-          targetId = roomTypes.find(rt => rt.id === 'rt_supirior' || rt.name?.toLowerCase().includes('supirior'))?.id || 'rt_supirior';
-        } else if (cleanNum.startsWith('3')) {
-          targetId = roomTypes.find(rt => rt.id === 'rt_double_single' || rt.name?.toLowerCase().includes('double'))?.id || 'rt_double_single';
+        // Try matching by name or code
+        const matched = roomTypes.find(
+          rt => rt.id === targetId ||
+                rt.code === targetId ||
+                rt.name?.toLowerCase() === String(r.roomTypeName || r.roomType || targetId || '').toLowerCase()
+        );
+        if (matched) {
+          targetId = matched.id;
         } else {
-          targetId = roomTypes.find(rt => rt.id === 'rt_deluxe' || rt.name?.toLowerCase().includes('delux'))?.id || 'rt_deluxe';
+          const cleanNum = String(r.roomNumber || '').replace(/\D/g, '');
+          if (cleanNum.startsWith('2')) {
+            targetId = roomTypes.find(rt => rt.id === 'rt_supirior' || rt.name?.toLowerCase().includes('supirior'))?.id || roomTypes[0]?.id;
+          } else if (cleanNum.startsWith('3')) {
+            targetId = roomTypes.find(rt => rt.id === 'rt_double_single' || rt.name?.toLowerCase().includes('double'))?.id || roomTypes[0]?.id;
+          } else {
+            targetId = roomTypes.find(rt => rt.id === 'rt_semi_deluxe' || rt.name?.toLowerCase().includes('semi') || rt.name?.toLowerCase().includes('delux'))?.id || roomTypes[0]?.id;
+          }
         }
       }
       if (map[targetId]) {
@@ -198,14 +208,15 @@ export default function HousekeepingView({
         (a.roomNumber || '').localeCompare(b.roomNumber || '', undefined, { numeric: true })
       );
     });
-    // Keep consistent order: 1. SUPIRIOR, 2. DOUBLE SIGNLE, 3. Delux Room
-    const orderMap = { 'SUPIRIOR': 1, 'DOUBLE SIGNLE': 2, 'Delux Room': 3 };
+    // Order: 1. SEMI DELUXE, 2. SUPIRIOR, 3. DELUXE, 4. DOUBLE SINGLE
+    const orderMap = { 'SEMI DELUXE': 1, 'SUPIRIOR': 2, 'DELUXE': 3, 'DOUBLE SINGLE': 4 };
     return Object.values(map)
       .filter((g) => g.rooms.length > 0)
       .sort((a, b) => {
         const orderA = orderMap[a.type?.name] || 99;
         const orderB = orderMap[b.type?.name] || 99;
-        return orderA - orderB;
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.type?.name || '').localeCompare(String(b.type?.name || ''));
       });
   }, [roomTypes, filteredRooms]);
 

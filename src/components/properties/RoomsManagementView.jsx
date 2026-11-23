@@ -188,8 +188,8 @@ export default function RoomsManagementView({
     }
     const cleanNum = String(rm?.roomNumber || '').trim();
     if (cleanNum.startsWith('2')) return 'SUPIRIOR';
-    if (cleanNum.startsWith('3')) return 'DOUBLE SIGNLE';
-    return 'Delux Room';
+    if (cleanNum.startsWith('3')) return 'DOUBLE SINGLE';
+    return 'DELUXE';
   };
 
   const getRoomStatusPill = (status) => {
@@ -236,12 +236,13 @@ export default function RoomsManagementView({
     );
   };
 
-  // Sort room types (matching Housekeeping Room View: SUPIRIOR, DOUBLE SIGNLE, Delux Room)
+  // Sort room types (matching Housekeeping Room View: SEMI DELUXE, SUPIRIOR, DELUXE, DOUBLE SINGLE)
   const sortedRoomTypes = [...roomTypes].sort((a, b) => {
-    const orderMap = { 'SUPIRIOR': 1, 'DOUBLE SIGNLE': 2, 'Delux Room': 3 };
+    const orderMap = { 'SEMI DELUXE': 1, 'SUPIRIOR': 2, 'DELUXE': 3, 'DOUBLE SINGLE': 4 };
     const orderA = orderMap[a.name] || 99;
     const orderB = orderMap[b.name] || 99;
-    return orderA - orderB;
+    if (orderA !== orderB) return orderA - orderB;
+    return String(a.name || '').localeCompare(String(b.name || ''));
   });
 
   // Sort physical rooms numerically (101, 102, 201, 202, 301...)
