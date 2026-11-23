@@ -475,10 +475,12 @@ export default function GuestCheckInModal({
                   {displayRooms.map((rm) => {
                     const occ = getRoomOccupancy(rm);
                     const typeName = roomTypes.find(rt => rt.id === rm.roomTypeId)?.name ||
-                      (rm.roomTypeId === 'rt_deluxe' ? 'Delux Room' :
-                       rm.roomTypeId === 'rt_standard' ? 'Standard Room' :
-                       rm.roomTypeId === 'rt_premium' ? 'Premium Room' :
-                       rm.roomTypeId === 'rt_ultra_premium' ? 'Ultra Premium' : 'Room');
+                      (rm.roomTypeId === 'rt_supirior' ? 'SUPIRIOR' :
+                       rm.roomTypeId === 'rt_double_single' ? 'DOUBLE SIGNLE' :
+                       rm.roomTypeId === 'rt_deluxe' ? 'Delux Room' :
+                       String(rm.roomNumber).startsWith('2') ? 'SUPIRIOR' :
+                       String(rm.roomNumber).startsWith('3') ? 'DOUBLE SIGNLE' :
+                       'Delux Room');
                     const isCurrentAssigned = (rm.id === reservation.roomId || rm.roomNumber === reservation.roomNumber);
                     return (
                       <option

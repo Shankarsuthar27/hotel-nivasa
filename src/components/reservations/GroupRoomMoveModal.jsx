@@ -16,8 +16,9 @@ export default function GroupRoomMoveModal({
   const effectiveRoomTypes = (roomTypes && roomTypes.length > 0)
     ? roomTypes
     : [
-        { id: 'rt_deluxe', name: 'Delux Room' },
-        { id: 'rt_standard', name: 'Standard Room' }
+        { id: 'rt_supirior', name: 'SUPIRIOR' },
+        { id: 'rt_double_single', name: 'DOUBLE SIGNLE' },
+        { id: 'rt_deluxe', name: 'Delux Room' }
       ];
 
   const [isSelected, setIsSelected] = useState(true);

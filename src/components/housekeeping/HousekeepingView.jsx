@@ -177,8 +177,19 @@ export default function HousekeepingView({
       map[rt.id] = { type: rt, rooms: [] };
     });
     filteredRooms.forEach((r) => {
-      if (map[r.roomTypeId]) {
-        map[r.roomTypeId].rooms.push(r);
+      let targetId = r.roomTypeId;
+      if (!map[targetId]) {
+        const cleanNum = String(r.roomNumber || '').replace(/\D/g, '');
+        if (cleanNum.startsWith('2')) {
+          targetId = roomTypes.find(rt => rt.id === 'rt_supirior' || rt.name?.toLowerCase().includes('supirior'))?.id || 'rt_supirior';
+        } else if (cleanNum.startsWith('3')) {
+          targetId = roomTypes.find(rt => rt.id === 'rt_double_single' || rt.name?.toLowerCase().includes('double'))?.id || 'rt_double_single';
+        } else {
+          targetId = roomTypes.find(rt => rt.id === 'rt_deluxe' || rt.name?.toLowerCase().includes('delux'))?.id || 'rt_deluxe';
+        }
+      }
+      if (map[targetId]) {
+        map[targetId].rooms.push(r);
       }
     });
     // Ensure room numbers are sorted numerically (101, 102, 201, 202)
@@ -187,7 +198,15 @@ export default function HousekeepingView({
         (a.roomNumber || '').localeCompare(b.roomNumber || '', undefined, { numeric: true })
       );
     });
-    return Object.values(map).filter((g) => g.rooms.length > 0);
+    // Keep consistent order: 1. SUPIRIOR, 2. DOUBLE SIGNLE, 3. Delux Room
+    const orderMap = { 'SUPIRIOR': 1, 'DOUBLE SIGNLE': 2, 'Delux Room': 3 };
+    return Object.values(map)
+      .filter((g) => g.rooms.length > 0)
+      .sort((a, b) => {
+        const orderA = orderMap[a.type?.name] || 99;
+        const orderB = orderMap[b.type?.name] || 99;
+        return orderA - orderB;
+      });
   }, [roomTypes, filteredRooms]);
 
   // Selected room type label for button

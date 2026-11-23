@@ -172,16 +172,22 @@ export default function RoomsManagementView({
   };
 
   const getRoomTypeName = (roomTypeId, rm = null) => {
-    if (rm?.roomTypeName) return rm.roomTypeName;
-    if (rm?.roomType) return rm.roomType;
-    if (!roomTypeId) return 'Normal';
+    const targetId = roomTypeId || rm?.roomTypeId;
     const rt = (roomTypes || []).find(
       (t) =>
-        t.id === roomTypeId ||
-        t.code === roomTypeId ||
-        t.name?.toLowerCase() === String(roomTypeId).toLowerCase()
+        t.id === targetId ||
+        t.code === targetId ||
+        t.name?.toLowerCase() === String(targetId || '').toLowerCase() ||
+        (rm?.roomTypeName && t.name?.toLowerCase() === String(rm.roomTypeName).toLowerCase())
     );
-    return rt ? rt.name : (roomTypeId || 'Normal');
+    if (rt) return rt.name;
+    if (rm?.roomTypeName && String(rm.roomTypeName).trim() !== '') {
+      return rm.roomTypeName;
+    }
+    const cleanNum = String(rm?.roomNumber || '').trim();
+    if (cleanNum.startsWith('2')) return 'SUPIRIOR';
+    if (cleanNum.startsWith('3')) return 'DOUBLE SIGNLE';
+    return 'Delux Room';
   };
 
   const getRoomStatusPill = (status) => {
@@ -228,9 +234,9 @@ export default function RoomsManagementView({
     );
   };
 
-  // Sort room types (matching Image 1: Delux Room, Normal, etc.)
+  // Sort room types (matching Housekeeping Room View: SUPIRIOR, DOUBLE SIGNLE, Delux Room)
   const sortedRoomTypes = [...roomTypes].sort((a, b) => {
-    const orderMap = { 'Delux Room': 1, Normal: 2, Premium: 3 };
+    const orderMap = { 'SUPIRIOR': 1, 'DOUBLE SIGNLE': 2, 'Delux Room': 3 };
     const orderA = orderMap[a.name] || 99;
     const orderB = orderMap[b.name] || 99;
     return orderA - orderB;

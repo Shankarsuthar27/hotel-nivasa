@@ -97,170 +97,9 @@ class PMSStore {
             this.property.businessDate = todayStr;
           }
         }
-        if (!parsed.roomTypes) {
-          this.roomTypes = initialRoomTypes;
-          const rtNormal = this.roomTypes.find(rt => rt.id === 'rt_standard' || rt.name === 'Normal' || rt.name === 'Standard Room');
-          if (rtNormal) {
-            rtNormal.name = 'Normal';
-            rtNormal.baseAdults = 2;
-            rtNormal.maxAdults = 4;
-            rtNormal.baseChildren = 1;
-            rtNormal.maxChildren = 1;
-            rtNormal.status = 'ACTIVE';
-          }
-          const rtDeluxe = this.roomTypes.find(rt => rt.id === 'rt_deluxe' || rt.name === 'Delux Room');
-          if (rtDeluxe) {
-            rtDeluxe.name = 'Delux Room';
-            rtDeluxe.baseAdults = 1;
-            rtDeluxe.maxAdults = 2;
-            rtDeluxe.baseChildren = 2;
-            rtDeluxe.maxChildren = 2;
-            rtDeluxe.status = 'ACTIVE';
-          }
-        } else {
-          this.roomTypes = parsed.roomTypes;
-        }
-
-        if (!parsed.rooms || parsed.rooms.length === 0) {
-          this.rooms = initialRooms;
-          const r101 = this.rooms.find(r => r.id === 'rm_101');
-          if (r101) {
-            r101.roomTypeId = 'rt_deluxe';
-            r101.roomNumber = '101';
-            r101.status = 'clean';
-          }
-          const r102 = this.rooms.find(r => r.id === 'rm_102');
-          if (r102) {
-            r102.roomTypeId = 'rt_deluxe';
-            r102.roomNumber = '102';
-            r102.status = 'dirty';
-          }
-          const r201 = this.rooms.find(r => r.id === 'rm_201');
-          if (r201) {
-            r201.roomTypeId = 'rt_standard';
-            r201.roomNumber = '201';
-            r201.status = 'clean';
-          }
-          const r202 = this.rooms.find(r => r.id === 'rm_202');
-          if (r202) {
-            r202.roomTypeId = 'rt_standard';
-            r202.roomNumber = '202';
-            r202.status = 'clean';
-          }
-        } else {
-          this.rooms = parsed.rooms;
-        }
-        if (this.deletedRoomIds && this.deletedRoomIds.size > 0) {
-          this.rooms = (this.rooms || []).filter((r) => {
-            const numKey = String(r.roomNumber || r.id || '').trim().toLowerCase().replace(/^rm_/, '');
-            return (
-              !this.deletedRoomIds.has(String(r.id)) &&
-              !this.deletedRoomIds.has(String(r.roomNumber || '')) &&
-              !this.deletedRoomIds.has(numKey) &&
-              !this.deletedRoomIds.has(`rm_${numKey}`)
-            );
-          });
-        }
-        const isRtDeleted = (id, code, name) => {
-          if (!this.deletedRoomTypeIds || this.deletedRoomTypeIds.size === 0) return false;
-          const kId = String(id || '').trim().toLowerCase();
-          const kCode = String(code || '').trim().toLowerCase();
-          const kName = String(name || '').trim().toLowerCase();
-          return Array.from(this.deletedRoomTypeIds).some((del) => {
-            const d = String(del || '').trim().toLowerCase();
-            return (
-              (kId && (d === kId || d === `rt_${kId}` || `rt_${d}` === kId)) ||
-              (kCode && d === kCode) ||
-              (kName && d === kName)
-            );
-          });
-        };
-
-        if (this.deletedRoomTypeIds && this.deletedRoomTypeIds.size > 0) {
-          this.roomTypes = (this.roomTypes || []).filter(
-            (rt) => !isRtDeleted(rt.id, rt.code, rt.name)
-          );
-        }
-
-        const isRmDeleted = (num) => {
-          if (!this.deletedRoomIds) return false;
-          const k = String(num).trim().toLowerCase();
-          return this.deletedRoomIds.has(`rm_${k}`) || this.deletedRoomIds.has(k) || this.deletedRoomIds.has(String(num));
-        };
-
-        let rtUltra = this.roomTypes.find(rt => rt.id === 'rt_ultra_premium' || rt.name === 'Ultra Premium');
-        if (!rtUltra && !isRtDeleted('rt_ultra_premium', 'ULP', 'Ultra Premium')) {
-          rtUltra = {
-            id: 'rt_ultra_premium',
-            name: 'Ultra Premium',
-            code: 'ULP',
-            description: 'Ultra luxurious presidential suite with panoramic views and dedicated butler.',
-            baseAdults: 2,
-            maxAdults: 4,
-            baseChildren: 1,
-            maxChildren: 2,
-            basePrice: 6500,
-            status: 'ACTIVE',
-            color: '#10b981'
-          };
-          this.roomTypes.push(rtUltra);
-        }
-
-        let rtPremium = this.roomTypes.find(rt => rt.id === 'rt_premium' || rt.name === 'Premium');
-        if (!rtPremium && !isRtDeleted('rt_premium', 'PRM', 'Premium')) {
-          rtPremium = {
-            id: 'rt_premium',
-            name: 'Premium',
-            code: 'PRM',
-            description: 'Luxury premium suite with jacuzzi and executive lounge access.',
-            baseAdults: 4,
-            maxAdults: 6,
-            baseChildren: 2,
-            maxChildren: 4,
-            basePrice: 4500,
-            status: 'ACTIVE',
-            color: '#8b5cf6'
-          };
-          this.roomTypes.push(rtPremium);
-        }
-
-        // Seed rooms 501, 301, 302 only if neither the room nor its room type was deleted by the user
-        if (rtUltra && !isRmDeleted('501') && !this.rooms.some(r => String(r.roomNumber) === '501')) {
-          this.rooms.push({
-            id: 'rm_501',
-            roomNumber: '501',
-            roomTypeId: rtUltra.id,
-            floor: '5',
-            status: 'clean',
-            operational: 'available',
-            notes: 'Ready for check-in'
-          });
-        }
-        if (rtPremium && !isRmDeleted('301') && !this.rooms.some(r => String(r.roomNumber) === '301')) {
-          this.rooms.push({
-            id: 'rm_301',
-            roomNumber: '301',
-            roomTypeId: rtPremium.id,
-            floor: '3',
-            status: 'clean',
-            operational: 'available',
-            notes: 'Ready for check-in'
-          });
-        }
-        if (rtPremium && !isRmDeleted('302') && !this.rooms.some(r => String(r.roomNumber) === '302')) {
-          this.rooms.push({
-            id: 'rm_302',
-            roomNumber: '302',
-            roomTypeId: rtPremium.id,
-            floor: '3',
-            status: 'dirty',
-            operational: 'available',
-            notes: 'Ready for check-in'
-          });
-        }
-
-        const roomTypeOrder = { 'Ultra Premium': 1, 'Delux Room': 2, 'Premium': 3, 'Normal': 4 };
-        this.roomTypes.sort((a, b) => (roomTypeOrder[a.name] || 99) - (roomTypeOrder[b.name] || 99));
+        this.roomTypes = parsed.roomTypes || initialRoomTypes;
+        this.rooms = parsed.rooms && parsed.rooms.length > 0 ? parsed.rooms : initialRooms;
+        this.canonicalizeRoomsAndRoomTypes();
         let loadedPlans = (parsed.mealPlans || initialMealPlans).filter(
           mp => mp.id !== 'mp_ep' && mp.code !== 'EP'
         );
@@ -380,44 +219,8 @@ class PMSStore {
           }
         });
 
-        // Ensure default physical rooms are tied to room types ONLY if not explicitly deleted
-        if (!isRtDeleted('rt_standard', 'NRM', 'Normal')) {
-          const r201 = this.rooms.find(r => r.roomNumber === '201' || r.id === 'rm_201');
-          if (r201 && !r201.roomTypeId) r201.roomTypeId = 'rt_standard';
-          const r202 = this.rooms.find(r => r.roomNumber === '202' || r.id === 'rm_202');
-          if (r202 && !r202.roomTypeId) r202.roomTypeId = 'rt_standard';
-        }
-
-        if (!isRtDeleted('rt_deluxe', 'DXL', 'Delux Room')) {
-          const r101 = this.rooms.find(r => r.roomNumber === '101' || r.id === 'rm_101');
-          if (r101 && !r101.roomTypeId) r101.roomTypeId = 'rt_deluxe';
-          const r102 = this.rooms.find(r => r.roomNumber === '102' || r.id === 'rm_102');
-          if (r102 && !r102.roomTypeId) r102.roomTypeId = 'rt_deluxe';
-        }
-
-        if (!isRtDeleted('rt_premium', 'PRM', 'Premium')) {
-          const r301 = this.rooms.find(r => r.roomNumber === '301' || r.id === 'rm_301');
-          if (r301 && !r301.roomTypeId) r301.roomTypeId = 'rt_premium';
-          const r302 = this.rooms.find(r => r.roomNumber === '302' || r.id === 'rm_302');
-          if (r302 && !r302.roomTypeId) r302.roomTypeId = 'rt_premium';
-        }
-
-        // Synchronize all reservations so that their roomTypeId & roomTypeName accurately reflect their assigned physical room
-        this.reservations.forEach(r => {
-          if (r.roomId || r.roomNumber) {
-            const matchedRoom = this.rooms.find(rm =>
-              (r.roomId && (rm.id === r.roomId || rm.roomNumber === r.roomId)) ||
-              (r.roomNumber && (String(rm.roomNumber) === String(r.roomNumber) || rm.id === r.roomNumber))
-            );
-            if (matchedRoom) {
-              const rt = this.roomTypes.find(t => t.id === matchedRoom.roomTypeId || t.name?.toLowerCase() === String(matchedRoom.roomTypeId).toLowerCase());
-              if (rt) {
-                r.roomTypeId = rt.id;
-                r.roomTypeName = rt.name;
-              }
-            }
-          }
-        });
+        // Ensure canonical room mapping and synchronization
+        this.canonicalizeRoomsAndRoomTypes();
 
         this.folios = parsed.folios || initialFolios;
         ['fol_3', 'fol_4', 'fol_5'].forEach(fId => {
@@ -563,6 +366,147 @@ class PMSStore {
     this.resetToDefaults();
   }
 
+  canonicalizeRoomsAndRoomTypes() {
+    // 1. Filter out obsolete room types (Ultra Premium, Premium, Standard, Normal)
+    const obsoleteRtKeys = new Set([
+      'rt_standard', 'rt_normal', 'rt_ultra_premium', 'rt_premium',
+      'ultra premium', 'premium', 'normal', 'standard', 'standard room',
+      'nrm', 'ulp', 'prm'
+    ]);
+    const survivingTypes = (this.roomTypes || []).filter((rt) => {
+      if (!rt) return false;
+      const id = String(rt.id || '').trim().toLowerCase();
+      const name = String(rt.name || '').trim().toLowerCase();
+      const code = String(rt.code || '').trim().toLowerCase();
+      return !obsoleteRtKeys.has(id) && !obsoleteRtKeys.has(name) && !obsoleteRtKeys.has(code);
+    });
+
+    // Ensure our 3 base canonical room types exist
+    const mapRt = new Map();
+    initialRoomTypes.forEach((rt) => mapRt.set(rt.id, { ...rt }));
+    survivingTypes.forEach((rt) => {
+      const matchedCanonical = initialRoomTypes.find(
+        (c) => c.id === rt.id || c.name.toLowerCase() === (rt.name || '').toLowerCase()
+      );
+      if (matchedCanonical) {
+        mapRt.set(matchedCanonical.id, {
+          ...matchedCanonical,
+          ...rt,
+          id: matchedCanonical.id,
+          name: matchedCanonical.name,
+          code: matchedCanonical.code
+        });
+      } else if (rt.id) {
+        mapRt.set(rt.id, rt);
+      }
+    });
+    this.roomTypes = Array.from(mapRt.values());
+
+    // 2. Process physical rooms
+    const deletedSet = this.deletedRoomIds || new Set();
+
+    // If this.rooms is completely empty and no rooms were ever deleted, initialize with initialRooms
+    if ((!this.rooms || this.rooms.length === 0) && deletedSet.size === 0) {
+      this.rooms = initialRooms.map((r) => ({ ...r }));
+    }
+
+    // Filter out deleted rooms and obsolete room 501
+    this.rooms = (this.rooms || []).filter((rm) => {
+      if (!rm) return false;
+      const cleanNum = String(rm.roomNumber || rm.id || '').trim().replace(/^rm_/, '');
+      if (!cleanNum || cleanNum === '501') return false;
+      if (
+        deletedSet.has(String(rm.id)) ||
+        deletedSet.has(cleanNum) ||
+        deletedSet.has(`rm_${cleanNum}`)
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    // Sanitize rooms while strictly respecting user edits (roomNumber, roomTypeId, roomTypeName, status)
+    this.rooms = this.rooms.map((rm) => {
+      const cleanNum = String(rm.roomNumber || rm.id || '').trim().replace(/^rm_/, '');
+      const docId = rm.id || `rm_${cleanNum}`;
+
+      // Check if current roomTypeId is obsolete or missing
+      const isObsoleteType =
+        !rm.roomTypeId || obsoleteRtKeys.has(String(rm.roomTypeId).trim().toLowerCase());
+
+      let finalTypeId = rm.roomTypeId;
+      let finalTypeName = rm.roomTypeName || rm.roomType;
+
+      if (isObsoleteType) {
+        // Fall back based on floor
+        if (cleanNum.startsWith('2')) {
+          finalTypeId = 'rt_supirior';
+          finalTypeName = 'SUPIRIOR';
+        } else if (cleanNum.startsWith('3')) {
+          finalTypeId = 'rt_double_single';
+          finalTypeName = 'DOUBLE SIGNLE';
+        } else {
+          finalTypeId = 'rt_deluxe';
+          finalTypeName = 'Delux Room';
+        }
+      } else {
+        // Active room type: look up exact name from this.roomTypes
+        const matchedRt = this.roomTypes.find(
+          (rt) => rt.id === finalTypeId || rt.code === finalTypeId
+        );
+        if (matchedRt) {
+          finalTypeName = matchedRt.name;
+        }
+      }
+
+      return {
+        ...rm,
+        id: docId,
+        roomNumber: cleanNum,
+        roomTypeId: finalTypeId,
+        roomTypeName: finalTypeName || 'Room',
+        roomType: finalTypeName || 'Room',
+        floor: rm.floor || cleanNum.charAt(0) || '1',
+        status: rm.status || 'clean',
+        operational: rm.operational || 'available',
+        notes: rm.notes || 'Ready for check-in'
+      };
+    });
+
+    // Deduplicate any accidental duplicate room numbers, keeping the freshest
+    this.rooms = this.dedupeRoomsByNumber(this.rooms, false);
+
+    // Sort rooms numerically: 101, 102, 103, 201...
+    this.rooms.sort((a, b) =>
+      String(a.roomNumber || '').localeCompare(String(b.roomNumber || ''), undefined, { numeric: true })
+    );
+
+    // 3. Update reservations referencing obsolete roomTypeId to the canonical types
+    (this.reservations || []).forEach((r) => {
+      if (r.roomId || r.roomNumber) {
+        const cleanNum = String(r.roomNumber || r.roomId || '').replace(/^rm_/, '');
+        const matchedRoom = this.rooms.find((rm) => rm.roomNumber === cleanNum || rm.id === r.roomId);
+        if (matchedRoom) {
+          r.roomId = matchedRoom.id;
+          r.roomNumber = matchedRoom.roomNumber;
+          r.roomTypeId = matchedRoom.roomTypeId;
+          r.roomTypeName = matchedRoom.roomTypeName;
+        }
+      } else if (r.roomTypeId) {
+        const rtId = String(r.roomTypeId).toLowerCase();
+        if (rtId === 'rt_standard' || rtId === 'rt_normal' || rtId === 'nrm') {
+          r.roomTypeId = 'rt_deluxe';
+          r.roomTypeName = 'Delux Room';
+        } else if (rtId === 'rt_premium' || rtId === 'rt_ultra_premium') {
+          r.roomTypeId = 'rt_supirior';
+          r.roomTypeName = 'SUPIRIOR';
+        }
+      }
+    });
+
+    return this.rooms;
+  }
+
   dedupeRoomsByNumber(roomsList, pruneCloudDuplicates = false) {
     const byNum = new Map();
     const duplicateDocIdsToPrune = [];
@@ -578,7 +522,7 @@ class PMSStore {
       if (!rm) return;
       const rawNum = String(rm.roomNumber || rm.id || '').trim();
       const numKey = rawNum.toLowerCase().replace(/^rm_/, '');
-      if (!numKey) return;
+      if (!numKey || numKey === '501') return;
 
       if (
         deletedSet.has(String(rm.id)) ||
@@ -908,82 +852,34 @@ class PMSStore {
                 stateChanged = true;
               }
             });
-
-            const prevRoomCount = (this.rooms || []).length;
+            // Also immediately filter out deleted rooms from local this.rooms
+            const prevCount = (this.rooms || []).length;
             this.rooms = (this.rooms || []).filter((r) => {
               const numKey = String(r.roomNumber || r.id || '').trim().toLowerCase().replace(/^rm_/, '');
-              const rId = String(r.id || '').trim().toLowerCase();
-              const rNum = String(r.roomNumber || '').trim().toLowerCase();
               return (
-                !this.deletedRoomIds.has(rId) &&
-                !this.deletedRoomIds.has(rNum) &&
+                !this.deletedRoomIds.has(String(r.id)) &&
                 !this.deletedRoomIds.has(numKey) &&
                 !this.deletedRoomIds.has(`rm_${numKey}`)
               );
             });
-            if (this.rooms.length !== prevRoomCount) {
+            if (this.rooms.length !== prevCount) {
               stateChanged = true;
             }
           }
 
-          // 2. Process cloud-deleted room types
+          // 2. Process cloud-deleted room types (excluding our canonical 3 types)
           if (Array.isArray(data.roomTypes) && data.roomTypes.length > 0) {
             if (!this.deletedRoomTypeIds) this.deletedRoomTypeIds = new Set();
             data.roomTypes.forEach((id) => {
               const clean = String(id || '').trim().toLowerCase();
-              if (clean && !this.deletedRoomTypeIds.has(clean)) {
+              if (clean && !CANONICAL_RT_KEYS.includes(clean) && !this.deletedRoomTypeIds.has(clean)) {
                 this.deletedRoomTypeIds.add(clean);
                 stateChanged = true;
               }
             });
-
-            const prevRtCount = (this.roomTypes || []).length;
-            const remainingRt = (this.roomTypes || []).filter((rt) => {
-              const rtId = String(rt.id || '').trim().toLowerCase();
-              const rtCode = String(rt.code || '').trim().toLowerCase();
-              const rtName = String(rt.name || '').trim().toLowerCase();
-              return (
-                !this.deletedRoomTypeIds.has(rtId) &&
-                !this.deletedRoomTypeIds.has(rtCode) &&
-                !this.deletedRoomTypeIds.has(rtName)
-              );
-            });
-
-            if (remainingRt.length !== prevRtCount) {
-              this.roomTypes = remainingRt;
-              const fallbackRt = remainingRt.length > 0 ? remainingRt[0] : null;
-
-              this.rooms = (this.rooms || []).map((r) => {
-                const rTypeId = String(r.roomTypeId || '').trim().toLowerCase();
-                const rTypeName = String(r.roomTypeName || r.roomType || '').trim().toLowerCase();
-                if (this.deletedRoomTypeIds.has(rTypeId) || this.deletedRoomTypeIds.has(rTypeName)) {
-                  return {
-                    ...r,
-                    roomTypeId: fallbackRt ? fallbackRt.id : '',
-                    roomTypeName: fallbackRt ? fallbackRt.name : 'Unassigned',
-                    roomType: fallbackRt ? fallbackRt.name : 'Unassigned'
-                  };
-                }
-                return r;
-              });
-
-              this.reservations = (this.reservations || []).map((res) => {
-                const resTypeId = String(res.roomTypeId || '').trim().toLowerCase();
-                const resTypeName = String(res.roomTypeName || res.roomType || '').trim().toLowerCase();
-                if (this.deletedRoomTypeIds.has(resTypeId) || this.deletedRoomTypeIds.has(resTypeName)) {
-                  return {
-                    ...res,
-                    roomTypeId: fallbackRt ? fallbackRt.id : (res.roomTypeId || ''),
-                    roomTypeName: fallbackRt ? fallbackRt.name : (res.roomTypeName || 'Unassigned'),
-                    roomType: fallbackRt ? fallbackRt.name : (res.roomType || 'Unassigned')
-                  };
-                }
-                return res;
-              });
-
-              stateChanged = true;
-            }
           }
+
+          this.canonicalizeRoomsAndRoomTypes();
 
           if (stateChanged) {
             this.save();
@@ -1114,70 +1010,73 @@ class PMSStore {
             } catch (_) {}
           }
 
-          const cloudRooms = docs.map((d) => {
-            const data = d.data() || {};
-            const cleanNum = String(data.roomNumber || data.id || d.id || '')
-              .trim()
-              .replace(/^rm_/, '');
-            const matchedRt = (this.roomTypes || []).find(
-              (rt) =>
-                rt.id === data.roomTypeId ||
-                rt.code === data.roomTypeId ||
-                rt.name?.toLowerCase() === String(data.roomType || data.roomTypeName || '').toLowerCase() ||
-                (data.roomTypeCode && rt.code?.toLowerCase() === String(data.roomTypeCode).toLowerCase())
-            );
-            return {
-              ...data,
-              id: data.id || d.id,
-              _firestoreDocId: d.id,
-              roomNumber: cleanNum,
-              roomTypeId: data.roomTypeId || (matchedRt ? matchedRt.id : (this.roomTypes?.[0]?.id || 'rt_deluxe')),
-              roomTypeName: data.roomTypeName || data.roomType || (matchedRt ? matchedRt.name : 'Delux Room'),
-              roomType: data.roomType || data.roomTypeName || (matchedRt ? matchedRt.name : 'Delux Room'),
-              status: data.status || 'clean',
-              operational: data.operational || 'available'
-            };
-          });
+          const obsoleteRtKeys = new Set([
+            'rt_standard', 'rt_normal', 'rt_ultra_premium', 'rt_premium',
+            'ultra premium', 'premium', 'normal', 'standard', 'standard room',
+            'nrm', 'ulp', 'prm'
+          ]);
           const deletedSet = this.deletedRoomIds || new Set();
 
-          const isRoomDeleted = (cr) => {
-            const numKey = String(cr.roomNumber || cr.id || '').trim().toLowerCase().replace(/^rm_/, '');
-            return (
-              deletedSet.has(String(cr._firestoreDocId)) ||
-              deletedSet.has(String(cr.id)) ||
-              deletedSet.has(String(cr.roomNumber || '')) ||
-              deletedSet.has(numKey) ||
-              deletedSet.has(`rm_${numKey}`)
-            );
-          };
+          const cloudRooms = docs
+            .map((d) => {
+              const data = d.data() || {};
+              const cleanNum = String(data.roomNumber || data.id || d.id || '')
+                .trim()
+                .replace(/^rm_/, '');
+              if (!cleanNum || cleanNum === '501') return null;
 
-          // Filter out any cloud room docs that were explicitly deleted
-          const survivingCloudRooms = cloudRooms.filter((cr) => !isRoomDeleted(cr));
+              if (
+                deletedSet.has(d.id) ||
+                deletedSet.has(cleanNum) ||
+                deletedSet.has(`rm_${cleanNum}`) ||
+                (data.id && deletedSet.has(String(data.id)))
+              ) {
+                return null;
+              }
 
-          // When Cloud Firestore returns rooms, it is the authoritative source across all devices.
-          // Any room previously in local state that is missing from Firestore was deleted on another device.
-          // Only preserve local rooms that were newly created in this session with _pendingSync: true.
-          let finalRooms = survivingCloudRooms;
-          if (cloudRooms.length > 0) {
-            const cloudKeys = new Set(
-              survivingCloudRooms.map((cr) =>
-                String(cr.roomNumber || cr.id || '').trim().toLowerCase().replace(/^rm_/, '')
-              )
-            );
-            const pendingLocalRooms = (this.rooms || []).filter(
-              (r) =>
-                r &&
-                r._pendingSync &&
-                !isRoomDeleted(r) &&
-                !cloudKeys.has(String(r.roomNumber || '').trim().toLowerCase().replace(/^rm_/, ''))
-            );
-            finalRooms = [...survivingCloudRooms, ...pendingLocalRooms];
-          } else {
-            finalRooms = (this.rooms || []).filter((r) => !isRoomDeleted(r));
-          }
+              let rTypeId = data.roomTypeId;
+              let rTypeName = data.roomTypeName || data.roomType;
+              const isObsolete = !rTypeId || obsoleteRtKeys.has(String(rTypeId).toLowerCase());
 
-          const deduped = this.dedupeRoomsByNumber(finalRooms, false);
+              if (isObsolete) {
+                if (cleanNum.startsWith('2')) {
+                  rTypeId = 'rt_supirior';
+                  rTypeName = 'SUPIRIOR';
+                } else if (cleanNum.startsWith('3')) {
+                  rTypeId = 'rt_double_single';
+                  rTypeName = 'DOUBLE SIGNLE';
+                } else {
+                  rTypeId = 'rt_deluxe';
+                  rTypeName = 'Delux Room';
+                }
+              } else {
+                const matchedRt = (this.roomTypes || []).find(
+                  (rt) => rt.id === rTypeId || rt.code === rTypeId
+                );
+                if (matchedRt) {
+                  rTypeName = matchedRt.name;
+                }
+              }
+
+              return {
+                ...data,
+                id: data.id || d.id || `rm_${cleanNum}`,
+                _firestoreDocId: d.id,
+                roomNumber: cleanNum,
+                roomTypeId: rTypeId,
+                roomTypeName: rTypeName || 'Room',
+                roomType: rTypeName || 'Room',
+                floor: data.floor || cleanNum.charAt(0) || '1',
+                status: data.status || 'clean',
+                operational: data.operational || 'available',
+                notes: data.notes || 'Ready for check-in'
+              };
+            })
+            .filter(Boolean);
+
+          const deduped = this.dedupeRoomsByNumber(cloudRooms, false);
           this.rooms = this.sanitizeStaleOccupiedRooms(deduped, this.reservations);
+          this.canonicalizeRoomsAndRoomTypes();
           this.cloudStatus = 'LIVE';
           this.save();
           this.notify();
@@ -1197,39 +1096,26 @@ class PMSStore {
             const data = d.data() || {};
             return { ...data, id: data.id || d.id, _docId: d.id };
           });
-          const deletedRt = this.deletedRoomTypeIds || new Set();
-          const isDeleted = (rt) => {
-            if (!rt || !deletedRt || deletedRt.size === 0) return false;
-            const kId = String(rt.id || '').trim().toLowerCase();
-            const kDocId = String(rt._docId || '').trim().toLowerCase();
-            const kCode = String(rt.code || '').trim().toLowerCase();
-            const kName = String(rt.name || '').trim().toLowerCase();
-            return Array.from(deletedRt).some((del) => {
-              const d = String(del || '').trim().toLowerCase();
-              return (
-                (kId && (d === kId || d === `rt_${kId}` || `rt_${d}` === kId)) ||
-                (kDocId && (d === kDocId || d === `rt_${kDocId}` || `rt_${d}` === kDocId)) ||
-                (kCode && d === kCode) ||
-                (kName && d === kName)
-              );
-            });
-          };
-
-          const surviving = cloudRt.filter((rt) => !isDeleted(rt));
+          const obsoleteRtKeys = new Set([
+            'rt_standard', 'rt_normal', 'rt_ultra_premium', 'rt_premium',
+            'ultra premium', 'premium', 'normal', 'standard', 'standard room',
+            'nrm', 'ulp', 'prm'
+          ]);
+          const surviving = cloudRt.filter((rt) => {
+            if (!rt) return false;
+            const id = String(rt.id || '').trim().toLowerCase();
+            const name = String(rt.name || '').trim().toLowerCase();
+            const code = String(rt.code || '').trim().toLowerCase();
+            return !obsoleteRtKeys.has(id) && !obsoleteRtKeys.has(name) && !obsoleteRtKeys.has(code);
+          });
           if (cloudRt.length > 0) {
             const map = new Map();
             surviving.forEach((rt) => {
               const key = rt.id || rt.code || rt.name;
               if (key) map.set(key, rt);
             });
-            // Keep pending room types created in this tab
-            (this.roomTypes || []).forEach((rt) => {
-              if (rt && rt._pendingSync && !isDeleted(rt)) {
-                const key = rt.id || rt.code || rt.name;
-                if (key && !map.has(key)) map.set(key, rt);
-              }
-            });
-            this.roomTypes = Array.from(map.values()).filter((rt) => !isDeleted(rt));
+            this.roomTypes = Array.from(map.values());
+            this.canonicalizeRoomsAndRoomTypes();
             this.save();
             this.notify();
           }
@@ -1338,7 +1224,8 @@ class PMSStore {
       this.unsubscribers.push(unsubAudit);
 
       // Keep main database (both subcollection and root mirror) 100% updated with exact room types, room numbers, and summaries
-      this.syncAllRoomsAndTypesToCloud();
+      await this.purgeObsoleteRoomsAndTypesFromCloud();
+      await this.syncAllRoomsAndTypesToCloud();
 
       this.cloudStatus = 'LIVE';
       this.notify();
@@ -1368,46 +1255,26 @@ class PMSStore {
           const data = d.data() || {};
           return { ...data, id: data.id || d.id, _docId: d.id };
         });
-        const deletedRt = this.deletedRoomTypeIds || new Set();
-        const isDeleted = (rt) => {
-          if (!rt || !deletedRt || deletedRt.size === 0) return false;
-          const kId = String(rt.id || '').trim().toLowerCase();
-          const kDocId = String(rt._docId || '').trim().toLowerCase();
-          const kCode = String(rt.code || '').trim().toLowerCase();
-          const kName = String(rt.name || '').trim().toLowerCase();
-          return Array.from(deletedRt).some((del) => {
-            const d = String(del || '').trim().toLowerCase();
-            return (
-              (kId && (d === kId || d === `rt_${kId}` || `rt_${d}` === kId)) ||
-              (kDocId && (d === kDocId || d === `rt_${kDocId}` || `rt_${d}` === kDocId)) ||
-              (kCode && d === kCode) ||
-              (kName && d === kName)
-            );
-          });
-        };
-
-        cloudRt.forEach((rt) => {
-          if (isDeleted(rt)) {
-            this.deleteDocFromFirestore('roomTypes', rt.id);
-            if (rt._docId && rt._docId !== rt.id) {
-              this.deleteDocFromFirestore('roomTypes', rt._docId);
-            }
-          }
+        const obsoleteRtKeys = new Set([
+          'rt_standard', 'rt_normal', 'rt_ultra_premium', 'rt_premium',
+          'ultra premium', 'premium', 'normal', 'standard', 'standard room',
+          'nrm', 'ulp', 'prm'
+        ]);
+        const surviving = cloudRt.filter((rt) => {
+          if (!rt) return false;
+          const id = String(rt.id || '').trim().toLowerCase();
+          const name = String(rt.name || '').trim().toLowerCase();
+          const code = String(rt.code || '').trim().toLowerCase();
+          return !obsoleteRtKeys.has(id) && !obsoleteRtKeys.has(name) && !obsoleteRtKeys.has(code);
         });
 
         const map = new Map();
-        cloudRt.forEach((rt) => {
-          if (!rt || isDeleted(rt)) return;
+        surviving.forEach((rt) => {
           const key = rt.id || rt.code || rt.name;
           if (key) map.set(key, rt);
         });
-        (this.roomTypes || []).forEach((rt) => {
-          if (rt && rt._pendingSync && !isDeleted(rt)) {
-            const key = rt.id || rt.code || rt.name;
-            if (key && !map.has(key)) map.set(key, rt);
-          }
-        });
-        this.roomTypes = Array.from(map.values()).filter((rt) => !isDeleted(rt));
+        this.roomTypes = Array.from(map.values());
+        this.canonicalizeRoomsAndRoomTypes();
         hasChanges = true;
       }
 
@@ -1528,10 +1395,22 @@ class PMSStore {
           rt.name?.toLowerCase() === String(data.roomTypeId || '').toLowerCase() ||
           (data.roomTypeName && rt.name?.toLowerCase() === String(data.roomTypeName).toLowerCase())
         );
+        let fallbackName = 'Delux Room';
+        let fallbackId = 'rt_deluxe';
+        let fallbackCode = 'DXL';
+        if (cleanRoomNum.startsWith('2')) {
+          fallbackName = 'SUPIRIOR';
+          fallbackId = 'rt_supirior';
+          fallbackCode = 'SUP';
+        } else if (cleanRoomNum.startsWith('3')) {
+          fallbackName = 'DOUBLE SIGNLE';
+          fallbackId = 'rt_double_single';
+          fallbackCode = 'DS';
+        }
         payload.roomNumber = cleanRoomNum;
-        payload.roomTypeId = matchedRt ? matchedRt.id : (data.roomTypeId || '');
-        payload.roomTypeCode = matchedRt ? (matchedRt.code || '') : '';
-        payload.roomTypeName = matchedRt ? matchedRt.name : (data.roomTypeName || data.roomType || 'Standard');
+        payload.roomTypeId = matchedRt ? matchedRt.id : fallbackId;
+        payload.roomTypeCode = matchedRt ? (matchedRt.code || fallbackCode) : fallbackCode;
+        payload.roomTypeName = matchedRt ? matchedRt.name : fallbackName;
         payload.roomType = payload.roomTypeName;
       }
 
@@ -1600,9 +1479,48 @@ class PMSStore {
     }
   }
 
+  async purgeObsoleteRoomsAndTypesFromCloud() {
+    if (!db) return;
+    try {
+      console.info('🔥 [Firebase Cloud] Checking and purging obsolete room types and non-canonical rooms...');
+      const batch = writeBatch(db);
+      let purgeCount = 0;
+
+      // 1. Obsolete room types to delete
+      const obsoleteRtIds = [
+        'rt_standard', 'rt_normal', 'rt_ultra_premium', 'rt_premium',
+        'Standard', 'Normal', 'Ultra Premium', 'Premium',
+        'standard', 'normal', 'ultra_premium', 'premium'
+      ];
+      obsoleteRtIds.forEach((id) => {
+        const nestedRef = doc(db, 'properties', this.propertyId, 'roomTypes', id);
+        batch.delete(nestedRef);
+        const rootRef = doc(db, 'roomTypes', id);
+        batch.delete(rootRef);
+        purgeCount += 2;
+      });
+
+      // 2. Obsolete room documents to delete (such as 501, rm_501)
+      const obsoleteRoomIds = ['501', 'rm_501'];
+      obsoleteRoomIds.forEach((id) => {
+        const nestedRef = doc(db, 'properties', this.propertyId, 'rooms', id);
+        batch.delete(nestedRef);
+        const rootRef = doc(db, 'rooms', id);
+        batch.delete(rootRef);
+        purgeCount += 2;
+      });
+
+      await batch.commit();
+      console.info(`🔥 [Firebase Cloud] Obsolete room purge committed (${purgeCount} targets removed).`);
+    } catch (err) {
+      console.warn('[Firebase Cloud] Obsolete room purge note:', err?.message);
+    }
+  }
+
   async syncAllRoomsAndTypesToCloud() {
     if (!db) return;
     try {
+      this.canonicalizeRoomsAndRoomTypes();
       console.info('🔥 [Firebase Cloud] Syncing all room types and rooms with exact info to main database...');
       const batch = writeBatch(db);
 
@@ -1646,14 +1564,27 @@ class PMSStore {
             (rm.roomTypeName && rt.name?.toLowerCase() === String(rm.roomTypeName).toLowerCase())
         );
 
+        let fallbackName = 'Delux Room';
+        let fallbackId = 'rt_deluxe';
+        let fallbackCode = 'DXL';
+        if (cleanNum.startsWith('2')) {
+          fallbackName = 'SUPIRIOR';
+          fallbackId = 'rt_supirior';
+          fallbackCode = 'SUP';
+        } else if (cleanNum.startsWith('3')) {
+          fallbackName = 'DOUBLE SIGNLE';
+          fallbackId = 'rt_double_single';
+          fallbackCode = 'DS';
+        }
+
         const payload = this.cleanDataForFirestore({
           ...rm,
           id: docId,
           roomNumber: cleanNum,
-          roomTypeId: matchedRt ? matchedRt.id : (rm.roomTypeId || ''),
-          roomTypeCode: matchedRt ? (matchedRt.code || '') : '',
-          roomTypeName: matchedRt ? matchedRt.name : (rm.roomTypeName || rm.roomType || 'Standard'),
-          roomType: matchedRt ? matchedRt.name : (rm.roomTypeName || rm.roomType || 'Standard'),
+          roomTypeId: matchedRt ? matchedRt.id : fallbackId,
+          roomTypeCode: matchedRt ? (matchedRt.code || fallbackCode) : fallbackCode,
+          roomTypeName: matchedRt ? matchedRt.name : fallbackName,
+          roomType: matchedRt ? matchedRt.name : fallbackName,
           propertyId: this.propertyId,
           lastSyncedAt: new Date().toISOString()
         });
@@ -5210,25 +5141,80 @@ class PMSStore {
 
   updateRoom(roomId, patch) {
     let updated = null;
-    let oldRoomNumber = null;
-    this.rooms = (this.rooms || []).map(rm => {
-      if (rm.id === roomId) {
-        oldRoomNumber = rm.roomNumber;
-        updated = { ...rm, ...patch };
+    let oldRoom = null;
+    const targetKey = String(roomId || '').trim().toLowerCase().replace(/^rm_/, '');
+
+    this.rooms = (this.rooms || []).map((rm) => {
+      const rKey = String(rm.roomNumber || rm.id || '').trim().toLowerCase().replace(/^rm_/, '');
+      if (rm.id === roomId || rm.roomNumber === roomId || (targetKey && rKey === targetKey)) {
+        oldRoom = { ...rm };
+        let rtName = patch.roomTypeName;
+        let rtCode = patch.roomTypeCode;
+        if (patch.roomTypeId) {
+          const matchedRt = (this.roomTypes || []).find(
+            (rt) => rt.id === patch.roomTypeId || rt.code === patch.roomTypeId
+          );
+          if (matchedRt) {
+            rtName = matchedRt.name;
+            rtCode = matchedRt.code;
+          }
+        }
+        const cleanNewNum = patch.roomNumber ? String(patch.roomNumber).trim() : rm.roomNumber;
+        updated = {
+          ...rm,
+          ...patch,
+          roomNumber: cleanNewNum,
+          roomTypeId: patch.roomTypeId || rm.roomTypeId,
+          roomTypeName: rtName || patch.roomTypeName || rm.roomTypeName,
+          roomType: rtName || patch.roomTypeName || rm.roomType || rm.roomTypeName,
+          roomTypeCode: rtCode || rm.roomTypeCode,
+          floor: patch.floor || (cleanNewNum ? cleanNewNum.charAt(0) : rm.floor) || '1',
+          updatedAt: new Date().toISOString()
+        };
         return updated;
       }
       return rm;
     });
-    this.logAudit('UPDATE_ROOM', 'PROPERTIES', roomId, `Updated room.`);
-    this.save();
+
     if (updated) {
-      this.syncDocToFirestore('rooms', roomId, updated);
-      if (oldRoomNumber && patch.roomNumber && oldRoomNumber !== patch.roomNumber && oldRoomNumber !== roomId) {
-        this.deleteDocFromFirestore('rooms', oldRoomNumber);
+      const oldNum = String(oldRoom?.roomNumber || '').trim();
+      const newNum = String(updated.roomNumber || '').trim();
+
+      // If room number changed, delete old document keys from Firestore and update reservations
+      if (oldNum && newNum && oldNum !== newNum) {
+        this.deleteDocFromFirestore('rooms', `rm_${oldNum}`);
+        this.deleteDocFromFirestore('rooms', oldNum);
+        if (oldRoom?.id && oldRoom.id !== updated.id) {
+          this.deleteDocFromFirestore('rooms', oldRoom.id);
+        }
+        (this.reservations || []).forEach((res) => {
+          if (res.roomId === oldRoom?.id || res.roomNumber === oldNum) {
+            res.roomId = updated.id;
+            res.roomNumber = newNum;
+          }
+        });
       }
+
+      // If room type changed, update reservations assigned to this room
+      if (patch.roomTypeId && updated.roomTypeId) {
+        (this.reservations || []).forEach((res) => {
+          if (res.roomId === updated.id || res.roomNumber === updated.roomNumber) {
+            res.roomTypeId = updated.roomTypeId;
+            res.roomTypeName = updated.roomTypeName;
+          }
+        });
+      }
+
+      this.logAudit('UPDATE_ROOM', 'PROPERTIES', updated.roomNumber, `Updated room ${updated.roomNumber}`);
+      this.save();
+      this.syncDocToFirestore('rooms', updated.id, updated);
+      if (updated.roomNumber) {
+        this.syncDocToFirestore('rooms', `rm_${updated.roomNumber}`, updated);
+      }
+      this.syncAllRoomsAndTypesToCloud();
+      this.notify();
     }
-    this.syncAllRoomsAndTypesToCloud();
-    this.notify();
+    return { success: !!updated, room: updated };
   }
 
   deleteRoom(roomId) {
@@ -5265,6 +5251,14 @@ class PMSStore {
       });
       this.purgeMatchingCloudRooms(rm.id, rmNumKey);
       this.recordCloudDeletion('rooms', Array.from(toDelete));
+
+      // Clear room allocation from active reservations so they don't hold a deleted room
+      (this.reservations || []).forEach((res) => {
+        if (res.roomId === rm.id || res.roomNumber === rm.roomNumber) {
+          res.roomId = '';
+          res.roomNumber = '';
+        }
+      });
     } else {
       const canonicalId = targetNumKey ? `rm_${targetNumKey}` : roomId;
       this.deleteDocFromFirestore('rooms', canonicalId);

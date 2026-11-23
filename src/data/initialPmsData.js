@@ -41,21 +41,6 @@ export const initialProperty = {
 
 export const initialRoomTypes = [
   {
-    id: 'rt_deluxe',
-    name: 'Delux Room',
-    code: 'DXL',
-    description: 'Spacious deluxe room with premium linen, balcony, and mini-bar.',
-    baseAdults: 1,
-    maxAdults: 2,
-    baseChildren: 2,
-    maxChildren: 2,
-    basePrice: 2500,
-    extraAdultPrice: 1000,
-    extraChildPrice: 500,
-    status: 'ACTIVE',
-    color: '#3b82f6'
-  },
-  {
     id: 'rt_supirior',
     name: 'SUPIRIOR',
     code: 'SUP',
@@ -86,60 +71,33 @@ export const initialRoomTypes = [
     color: '#0ea5e9'
   },
   {
-    id: 'rt_ultra_premium',
-    name: 'Ultra Premium',
-    code: 'ULP',
-    description: 'Ultra luxurious presidential suite with panoramic views and dedicated butler.',
-    baseAdults: 2,
-    maxAdults: 4,
-    baseChildren: 1,
-    maxChildren: 2,
-    basePrice: 6500,
-    extraAdultPrice: 2000,
-    extraChildPrice: 1000,
-    status: 'ACTIVE',
-    color: '#10b981'
-  },
-  {
-    id: 'rt_premium',
-    name: 'Premium',
-    code: 'PRM',
-    description: 'Luxury premium suite with jacuzzi and executive lounge access.',
-    baseAdults: 4,
-    maxAdults: 6,
+    id: 'rt_deluxe',
+    name: 'Delux Room',
+    code: 'DXL',
+    description: 'Spacious deluxe room with premium linen, balcony, and mini-bar.',
+    baseAdults: 1,
+    maxAdults: 2,
     baseChildren: 2,
-    maxChildren: 4,
-    basePrice: 4500,
-    extraAdultPrice: 1500,
-    extraChildPrice: 750,
+    maxChildren: 2,
+    basePrice: 2500,
+    extraAdultPrice: 1000,
+    extraChildPrice: 500,
     status: 'ACTIVE',
-    color: '#8b5cf6'
-  },
-  {
-    id: 'rt_standard',
-    name: 'Normal',
-    code: 'NRM',
-    description: 'Comfortable air-conditioned room with king bed and work desk.',
-    baseAdults: 2,
-    maxAdults: 4,
-    baseChildren: 1,
-    maxChildren: 1,
-    basePrice: 1000,
-    extraAdultPrice: 800,
-    extraChildPrice: 400,
-    status: 'ACTIVE',
-    color: '#06b6d4'
+    color: '#3b82f6'
   }
 ];
 
 export const initialRooms = [
-  { id: 'rm_101', roomNumber: '101', roomTypeId: 'rt_deluxe', roomTypeName: 'Delux Room', floor: '1', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_102', roomNumber: '102', roomTypeId: 'rt_deluxe', roomTypeName: 'Delux Room', floor: '1', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_201', roomNumber: '201', roomTypeId: 'rt_supirior', roomTypeName: 'SUPIRIOR', floor: '2', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_202', roomNumber: '202', roomTypeId: 'rt_supirior', roomTypeName: 'SUPIRIOR', floor: '2', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_301', roomNumber: '301', roomTypeId: 'rt_double_single', roomTypeName: 'DOUBLE SIGNLE', floor: '3', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_302', roomNumber: '302', roomTypeId: 'rt_premium', roomTypeName: 'Premium', floor: '3', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_501', roomNumber: '501', roomTypeId: 'rt_ultra_premium', roomTypeName: 'Ultra Premium', floor: '5', status: 'clean', operational: 'available', notes: 'Ready for check-in' }
+  { id: 'rm_101', roomNumber: '101', roomTypeId: 'rt_deluxe', roomTypeName: 'Delux Room', roomType: 'Delux Room', floor: '1', status: 'clean', operational: 'occupied', notes: 'Ready for check-in' },
+  { id: 'rm_102', roomNumber: '102', roomTypeId: 'rt_deluxe', roomTypeName: 'Delux Room', roomType: 'Delux Room', floor: '1', status: 'clean', operational: 'occupied', notes: 'Ready for check-in' },
+  { id: 'rm_103', roomNumber: '103', roomTypeId: 'rt_deluxe', roomTypeName: 'Delux Room', roomType: 'Delux Room', floor: '1', status: 'clean', operational: 'occupied', notes: 'Ready for check-in' },
+  { id: 'rm_201', roomNumber: '201', roomTypeId: 'rt_supirior', roomTypeName: 'SUPIRIOR', roomType: 'SUPIRIOR', floor: '2', status: 'clean', operational: 'occupied', notes: 'Ready for check-in' },
+  { id: 'rm_202', roomNumber: '202', roomTypeId: 'rt_supirior', roomTypeName: 'SUPIRIOR', roomType: 'SUPIRIOR', floor: '2', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_203', roomNumber: '203', roomTypeId: 'rt_supirior', roomTypeName: 'SUPIRIOR', roomType: 'SUPIRIOR', floor: '2', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_204', roomNumber: '204', roomTypeId: 'rt_supirior', roomTypeName: 'SUPIRIOR', roomType: 'SUPIRIOR', floor: '2', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_301', roomNumber: '301', roomTypeId: 'rt_double_single', roomTypeName: 'DOUBLE SIGNLE', roomType: 'DOUBLE SIGNLE', floor: '3', status: 'clean', operational: 'occupied', notes: 'Ready for check-in' },
+  { id: 'rm_302', roomNumber: '302', roomTypeId: 'rt_double_single', roomTypeName: 'DOUBLE SIGNLE', roomType: 'DOUBLE SIGNLE', floor: '3', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_303', roomNumber: '303', roomTypeId: 'rt_double_single', roomTypeName: 'DOUBLE SIGNLE', roomType: 'DOUBLE SIGNLE', floor: '3', status: 'clean', operational: 'available', notes: 'Ready for check-in' }
 ];
 
 export const initialMealPlans = [
@@ -169,9 +127,9 @@ export const initialRatePlans = [
     mealPlanId: 'mp_std',
     mealPlanName: 'Standard',
     roomTypeRates: {
-      rt_deluxe: { active: true, basePrice: 2500, extraAdult: 800, extraChild: 400 },
-      rt_normal: { active: true, basePrice: 1500, extraAdult: 500, extraChild: 250 },
-      rt_standard: { active: true, basePrice: 1500, extraAdult: 500, extraChild: 250 }
+      rt_supirior: { active: true, basePrice: 3200, extraAdult: 1000, extraChild: 500 },
+      rt_double_single: { active: true, basePrice: 2800, extraAdult: 800, extraChild: 400 },
+      rt_deluxe: { active: true, basePrice: 2500, extraAdult: 1000, extraChild: 500 }
     }
   },
   {
@@ -182,9 +140,9 @@ export const initialRatePlans = [
     mealPlanId: null,
     mealPlanName: '-',
     roomTypeRates: {
-      rt_deluxe: { active: false, basePrice: 0, extraAdult: 0, extraChild: 0 },
-      rt_normal: { active: false, basePrice: 0, extraAdult: 0, extraChild: 0 },
-      rt_standard: { active: false, basePrice: 0, extraAdult: 0, extraChild: 0 }
+      rt_supirior: { active: true, basePrice: 3200, extraAdult: 1000, extraChild: 500 },
+      rt_double_single: { active: true, basePrice: 2800, extraAdult: 800, extraChild: 400 },
+      rt_deluxe: { active: true, basePrice: 2500, extraAdult: 1000, extraChild: 500 }
     }
   }
 ];
@@ -205,8 +163,8 @@ export const initialReservations = [
     },
     roomId: 'rm_201',
     roomNumber: '201',
-    roomTypeId: 'rt_standard',
-    roomTypeName: 'Normal',
+    roomTypeId: 'rt_supirior',
+    roomTypeName: 'SUPIRIOR',
     ratePlanCode: 'BAR_EP',
     ratePlanName: 'test plan',
     checkInDate: '2026-11-12',
@@ -246,8 +204,8 @@ export const initialReservations = [
     },
     roomId: '',
     roomNumber: '',
-    roomTypeId: 'rt_standard',
-    roomTypeName: 'Standard Room',
+    roomTypeId: 'rt_deluxe',
+    roomTypeName: 'Delux Room',
     ratePlanCode: 'BAR_EP',
     ratePlanName: 'test plan',
     checkInDate: '2026-11-12',
@@ -372,8 +330,8 @@ export const initialReservations = [
     },
     roomId: 'rm_101',
     roomNumber: '101',
-    roomTypeId: 'rt_standard',
-    roomTypeName: 'Standard Room',
+    roomTypeId: 'rt_deluxe',
+    roomTypeName: 'Delux Room',
     ratePlanCode: 'BAR_EP',
     ratePlanName: 'Best Available Rate - Room Only',
     checkInDate: '2026-11-02',
@@ -417,8 +375,8 @@ export const initialReservations = [
     },
     roomId: 'rm_101',
     roomNumber: '101',
-    roomTypeId: 'rt_standard',
-    roomTypeName: 'Standard Room',
+    roomTypeId: 'rt_deluxe',
+    roomTypeName: 'Delux Room',
     ratePlanCode: 'test_plan',
     ratePlanName: 'test plan',
     checkInDate: '2026-10-26', // Mon 26, Oct 2026
@@ -462,8 +420,8 @@ export const initialReservations = [
     },
     roomId: 'rm_102',
     roomNumber: '102',
-    roomTypeId: 'rt_standard',
-    roomTypeName: 'Standard Room',
+    roomTypeId: 'rt_deluxe',
+    roomTypeName: 'Delux Room',
     ratePlanCode: 'BAR_EP',
     ratePlanName: 'test plan',
     checkInDate: '2026-10-26', // Mon 26, Oct 2026
@@ -541,7 +499,8 @@ export const initialReservations = [
     },
     roomId: 'rm_102',
     roomNumber: '102',
-    roomTypeId: 'rt_standard',
+    roomTypeId: 'rt_deluxe',
+    roomTypeName: 'Delux Room',
     ratePlanCode: 'BAR_EP',
     checkInDate: '2026-10-24', // Sat 24, Oct 2026
     checkOutDate: '2026-10-26', // Mon 26, Oct 2026
@@ -600,8 +559,8 @@ export const initialReservations = [
     },
     roomId: 'rm_102',
     roomNumber: '102',
-    roomTypeId: 'rt_standard',
-    roomTypeName: 'Standard Room',
+    roomTypeId: 'rt_deluxe',
+    roomTypeName: 'Delux Room',
     ratePlanCode: 'BAR_EP',
     checkInDate: '2026-10-24', // Sat 24, Oct 2026
     checkOutDate: '2026-10-31', // Sat 31, Oct 2026
