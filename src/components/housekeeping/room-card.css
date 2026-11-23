@@ -10,7 +10,7 @@
   height: 100%;
   width: 100%;
   background-color: #ffffff;
-  padding: 16px 24px;
+  padding: 16px 20px 32px;
   box-sizing: border-box;
   overflow-y: auto;
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif);
@@ -196,7 +196,7 @@
   cursor: pointer;
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
-  max-width: 260px;
+  max-width: none;
   width: 100%;
 }
 
@@ -680,9 +680,10 @@ div.flex.items-center.gap-1\.5 {
 /* Grid Layout */
 .hk-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(235px, 255px));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 16px;
   align-items: start;
+  width: 100%;
 }
 
 /* Card Container */
@@ -697,7 +698,6 @@ div.flex.items-center.gap-1\.5 {
   justify-content: space-between;
   min-height: 122px;
   width: 100%;
-  max-width: 255px;
   box-sizing: border-box;
   transition: all 0.18s ease;
   cursor: pointer;

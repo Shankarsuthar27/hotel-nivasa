@@ -6,6 +6,7 @@ import {
   X,
   FileText
 } from 'lucide-react';
+import { getAccurateArrivalTime } from '../../services/dateUtils';
 
 // Format date to "Nov 12, 2026"
 function formatDisplayDate(dateStr) {
@@ -57,32 +58,6 @@ export default function ReservationConfirmationModal({
   reservation,
   onViewBookingDetails
 }) {
-  if (!isOpen || !reservation) return null;
-
-  // Extract Guest Name
-  const guestFullName =
-    reservation.primaryGuest?.name ||
-    [reservation.primaryGuest?.title, reservation.primaryGuest?.firstName, reservation.primaryGuest?.lastName]
-      .filter(Boolean)
-      .join(' ') ||
-    reservation.guestName ||
-    'Mr Shankar Suthar';
-
-  // Confirmation Number (stripped of '#', e.g. RES_10)
-  const rawRef = reservation.bookingReference || reservation.id || 'RES_10';
-  const cleanConfirmationNumber = String(rawRef).replace('#', '').toUpperCase();
-
-  // Dates & Times
-  const checkInDateFormatted = formatDisplayDate(reservation.checkInDate);
-  const checkOutDateFormatted = formatDisplayDate(reservation.checkOutDate);
-  const checkInTimeFormatted = reservation.checkInTime || '11:59';
-  const checkOutTimeFormatted = reservation.checkOutTime || '11:00';
-
-  // Guests & Rooms
-  const adults = reservation.adults !== undefined ? reservation.adults : 1;
-  const children = reservation.children !== undefined ? reservation.children : 2;
-  const roomsCount = reservation.roomsCount || 1;
-
   // Remove scrollbar from page and lock scrolling while modal is open
   useEffect(() => {
     if (!isOpen) return;
@@ -111,6 +86,32 @@ export default function ReservationConfirmationModal({
       });
     };
   }, [isOpen]);
+
+  if (!isOpen || !reservation) return null;
+
+  // Extract Guest Name
+  const guestFullName =
+    reservation.primaryGuest?.name ||
+    [reservation.primaryGuest?.title, reservation.primaryGuest?.firstName, reservation.primaryGuest?.lastName]
+      .filter(Boolean)
+      .join(' ') ||
+    reservation.guestName ||
+    'Mr Shankar Suthar';
+
+  // Confirmation Number (stripped of '#', e.g. RES_10)
+  const rawRef = reservation.bookingReference || reservation.id || 'RES_10';
+  const cleanConfirmationNumber = String(rawRef).replace('#', '').toUpperCase();
+
+  // Dates & Times
+  const checkInDateFormatted = formatDisplayDate(reservation.checkInDate);
+  const checkOutDateFormatted = formatDisplayDate(reservation.checkOutDate);
+  const checkInTimeFormatted = getAccurateArrivalTime(reservation);
+  const checkOutTimeFormatted = reservation.checkOutTime || '11:00';
+
+  // Guests & Rooms
+  const adults = reservation.adults !== undefined ? reservation.adults : 1;
+  const children = reservation.children !== undefined ? reservation.children : 2;
+  const roomsCount = reservation.roomsCount || 1;
 
   const handleAction = () => {
     if (onViewBookingDetails) {

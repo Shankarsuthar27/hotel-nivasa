@@ -31,6 +31,7 @@ import {
   normalizeDateStr,
   getTodayIsoDate,
   getNextDayIsoDate,
+  getCurrentTimeString,
   doDateRangesOverlap,
   isResMatchingRoom
 } from '../../services/dateUtils';
@@ -86,9 +87,10 @@ const ChevronDownCustom = ({ size = 13, color = '#334155', isOpen = false }) => 
 );
 
 // Custom Time Picker matching screenshot using CustomTimePickerModal
-function CustomTimePicker({ value, onChange, label = 'Time', required = true, placement = 'left' }) {
+function CustomTimePicker({ value, onChange, label = 'Time', required = true, placement = 'left', onSetCurrentTime }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
+  const currentTimeFallback = useMemo(() => getCurrentTimeString(), []);
 
   return (
     <div
@@ -96,9 +98,38 @@ function CustomTimePicker({ value, onChange, label = 'Time', required = true, pl
       ref={containerRef}
       style={{ position: 'relative', zIndex: isOpen ? 1300 : undefined }}
     >
-      <label className="custom-cal-label">
-        {label} {required && <span className="custom-cal-star">*</span>}
-      </label>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <label className="custom-cal-label" style={{ marginBottom: 0 }}>
+          {label} {required && <span className="custom-cal-star">*</span>}
+        </label>
+        {onSetCurrentTime && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onSetCurrentTime();
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: '0 2px',
+              fontSize: '11px',
+              fontWeight: 600,
+              color: '#2563eb',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px',
+              lineHeight: 1
+            }}
+            title="Set to Current Time"
+          >
+            <Clock size={11} color="#2563eb" />
+            <span>Set Current Time</span>
+          </button>
+        )}
+      </div>
       <div
         className={`custom-time-box ${isOpen ? 'active' : ''}`}
         onClick={() => setIsOpen(!isOpen)}
@@ -106,14 +137,14 @@ function CustomTimePicker({ value, onChange, label = 'Time', required = true, pl
       >
         <div className="custom-time-left">
           <ClockIconCustom />
-          <span className="custom-time-text">{value || '14:00'}</span>
+          <span className="custom-time-text">{value || currentTimeFallback}</span>
         </div>
         <ChevronDownCustom isOpen={isOpen} />
       </div>
 
       <CustomTimePickerModal
         isOpen={isOpen}
-        value={value || '14:00'}
+        value={value || currentTimeFallback}
         onClose={() => setIsOpen(false)}
         onSave={(newTime) => {
           onChange(newTime);
@@ -216,7 +247,7 @@ export default function AddReservationView({
 
   // Stay Details State - defaults to today's date and next day
   const [checkInDate, setCheckInDate] = useState(initialCheckIn);
-  const [checkInTime, setCheckInTime] = useState('14:00');
+  const [checkInTime, setCheckInTime] = useState(() => initialData?.checkInTime || getCurrentTimeString());
   const [checkOutDate, setCheckOutDate] = useState(initialCheckOut);
   const [checkOutTime, setCheckOutTime] = useState('11:00');
   const [reservationType, setReservationType] = useState('CONFIRMED');
@@ -225,12 +256,17 @@ export default function AddReservationView({
   const [sendConfirmationMail, setSendConfirmationMail] = useState(true);
   const [createdReservation, setCreatedReservation] = useState(null);
 
-  // Sync dates when explicit initialData is passed (e.g. clicking a specific cell on calendar)
+  // Sync dates & times when explicit initialData is passed (e.g. clicking a specific cell on calendar)
   useEffect(() => {
     if (initialData?.date || initialData?.checkInDate) {
       const inDate = initialData.date || initialData.checkInDate;
       setCheckInDate(inDate);
       setCheckOutDate(initialData.checkOutDate || getNextDayIsoDate(inDate));
+    }
+    if (initialData?.checkInTime) {
+      setCheckInTime(initialData.checkInTime);
+    } else {
+      setCheckInTime(getCurrentTimeString());
     }
   }, [initialData]);
 
@@ -828,7 +864,10 @@ export default function AddReservationView({
       nationality,
       checkInDate,
       checkOutDate,
-      checkInTime,
+      checkInTime: checkInTime || getCurrentTimeString(),
+      actualCheckInTime: targetStatus === 'in_house' ? (checkInTime || getCurrentTimeString()) : undefined,
+      arrivalTime: checkInTime || getCurrentTimeString(),
+      checkedInAt: targetStatus === 'in_house' ? new Date().toISOString() : undefined,
       checkOutTime,
       nights,
       roomsCount: configuredRooms.length || 1,
@@ -957,10 +996,11 @@ export default function AddReservationView({
               />
 
               <CustomTimePicker
-                label="Time"
+                label="Check-in Time"
                 required={true}
                 value={checkInTime}
                 onChange={(t) => setCheckInTime(t)}
+                onSetCurrentTime={() => setCheckInTime(getCurrentTimeString())}
                 placement="left"
               />
 

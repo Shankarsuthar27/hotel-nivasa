@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import './booking-details-drawer.css';
 import {
@@ -10,11 +10,15 @@ import {
   User,
   Calendar,
   Clock,
+  Pencil,
   ArrowLeftRight,
   SlidersHorizontal,
   MessageSquare,
   Ban
 } from 'lucide-react';
+import CustomTimePickerModal from '../common/CustomTimePickerModal';
+import { pmsStore } from '../../services/pmsStore';
+import { formatTimeToHhMm, getAccurateArrivalTime } from '../../services/dateUtils';
 
 export default function BookingDetailsDrawer({
   isOpen,
@@ -24,6 +28,11 @@ export default function BookingDetailsDrawer({
 }) {
   const bodyRef = useRef(null);
   const rightColRef = useRef(null);
+
+  const [localCheckInTime, setLocalCheckInTime] = useState('');
+  const [localCheckOutTime, setLocalCheckOutTime] = useState('');
+  const [isEditingArrival, setIsEditingArrival] = useState(false);
+  const [isEditingDeparture, setIsEditingDeparture] = useState(false);
 
   // Lock background scrolling when drawer is open
   useEffect(() => {
@@ -42,6 +51,13 @@ export default function BookingDetailsDrawer({
       };
     }
   }, [isOpen, reservation?.id]);
+
+  useEffect(() => {
+    if (reservation) {
+      setLocalCheckInTime(getAccurateArrivalTime(reservation));
+      setLocalCheckOutTime(reservation.checkOutTime || '');
+    }
+  }, [reservation?.id, reservation?.checkInTime, reservation?.actualCheckInTime, reservation?.arrivalTime, reservation?.checkedInAt, reservation?.checkOutTime]);
 
   if (!isOpen || !reservation) return null;
 
@@ -113,6 +129,10 @@ export default function BookingDetailsDrawer({
     statusLabel = reservation.status || 'Checked Out';
     statusBadgeClass = 'badge-checked-out';
   }
+
+  const displayCheckInTime = localCheckInTime || getAccurateArrivalTime(reservation);
+  const displayCheckOutTime = localCheckOutTime || reservation.checkOutTime || '11:00';
+  const isLocked = isCancelled || isNoShow;
 
   const sourceLabel = (reservation.bookingSource === 'WALK_IN' ? 'walk-in' : (reservation.bookingSource || 'walk-in')).toLowerCase();
   const ratePlanLabel = (reservation.ratePlanName || reservation.ratePlanCode || 'test plan').toLowerCase().replace(/_/g, ' ');
@@ -292,14 +312,47 @@ export default function BookingDetailsDrawer({
                 </div>
 
                 {/* Tile 3: Arrival Date */}
-                <div className="booking-info-tile">
+                <div className="booking-info-tile" style={{ position: 'relative' }}>
                   <div className="booking-info-tile-content">
                     <span className="booking-info-tile-label">Arrival Date</span>
                     <span className="booking-info-tile-val font-bold">{arrivalDateFormatted}</span>
-                    {reservation.checkInTime && (
-                      <span className="booking-info-tile-time" style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px' }}>
-                        <Clock size={12} color="#64748b" /> {reservation.checkInTime}
-                      </span>
+                    {displayCheckInTime && (
+                      <div
+                        className="booking-info-tile-time"
+                        onClick={() => !isLocked && setIsEditingArrival(true)}
+                        style={{
+                          fontSize: '12px',
+                          color: '#64748b',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          marginTop: '3px',
+                          cursor: !isLocked ? 'pointer' : 'default'
+                        }}
+                        title={!isLocked ? 'Click to edit arrival time' : undefined}
+                      >
+                        <Clock size={12} color="#64748b" />
+                        <span>{displayCheckInTime}</span>
+                        {!isLocked && <Pencil size={11} color="#94a3b8" style={{ marginLeft: '2px' }} />}
+                      </div>
+                    )}
+                    {isEditingArrival && (
+                      <CustomTimePickerModal
+                        isOpen={true}
+                        initialTime={displayCheckInTime}
+                        onClose={() => setIsEditingArrival(false)}
+                        onSave={(newTime) => {
+                          setLocalCheckInTime(newTime);
+                          setIsEditingArrival(false);
+                          pmsStore.updateReservation(reservation.id, {
+                            checkInTime: newTime,
+                            actualCheckInTime: newTime,
+                            arrivalTime: newTime
+                          });
+                        }}
+                        label="Select Arrival Time"
+                        placement="left"
+                      />
                     )}
                   </div>
                   <div className="booking-info-tile-icon-box">
@@ -308,14 +361,43 @@ export default function BookingDetailsDrawer({
                 </div>
 
                 {/* Tile 4: Departure Date */}
-                <div className="booking-info-tile">
+                <div className="booking-info-tile" style={{ position: 'relative' }}>
                   <div className="booking-info-tile-content">
                     <span className="booking-info-tile-label">Departure Date</span>
                     <span className="booking-info-tile-val font-bold">{departureDateFormatted}</span>
-                    {reservation.checkOutTime && (
-                      <span className="booking-info-tile-time" style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px' }}>
-                        <Clock size={12} color="#64748b" /> {reservation.checkOutTime}
-                      </span>
+                    {displayCheckOutTime && (
+                      <div
+                        className="booking-info-tile-time"
+                        onClick={() => !isLocked && setIsEditingDeparture(true)}
+                        style={{
+                          fontSize: '12px',
+                          color: '#64748b',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          marginTop: '3px',
+                          cursor: !isLocked ? 'pointer' : 'default'
+                        }}
+                        title={!isLocked ? 'Click to edit departure time' : undefined}
+                      >
+                        <Clock size={12} color="#64748b" />
+                        <span>{displayCheckOutTime}</span>
+                        {!isLocked && <Pencil size={11} color="#94a3b8" style={{ marginLeft: '2px' }} />}
+                      </div>
+                    )}
+                    {isEditingDeparture && (
+                      <CustomTimePickerModal
+                        isOpen={true}
+                        initialTime={displayCheckOutTime}
+                        onClose={() => setIsEditingDeparture(false)}
+                        onSave={(newTime) => {
+                          setLocalCheckOutTime(newTime);
+                          setIsEditingDeparture(false);
+                          pmsStore.updateReservation(reservation.id, { checkOutTime: newTime });
+                        }}
+                        label="Select Departure Time"
+                        placement="left"
+                      />
                     )}
                     {isEarlyCheckOut && (
                       <span className="booking-info-tile-subtext text-early-checkout">(Early Check-out)</span>

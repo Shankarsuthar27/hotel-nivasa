@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Search } from 'lucide-react';
+import { getCurrentTimeString } from '../../services/dateUtils';
 import './custom-picker.css';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
@@ -8,20 +9,23 @@ const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
 export default function CustomTimePickerModal({
   isOpen,
   onClose,
-  value = '12:00',
+  value,
   initialTime,
   onSave,
   label = 'Select time',
   placement = 'left'
 }) {
-  const effectiveValue = initialTime || value || '12:00';
+  const effectiveValue = initialTime || value || getCurrentTimeString();
 
   // Parse initial hour and minute
   const parsedTime = useMemo(() => {
-    if (!effectiveValue || !effectiveValue.includes(':')) {
-      return { hour: '12', minute: '00' };
+    const liveDefault = getCurrentTimeString();
+    const target = effectiveValue || liveDefault;
+    if (!target || !target.includes(':')) {
+      const [dh, dm] = liveDefault.split(':');
+      return { hour: dh, minute: dm };
     }
-    const [h, m] = effectiveValue.split(':');
+    const [h, m] = target.split(':');
     return {
       hour: String(h || '12').padStart(2, '0'),
       minute: String(m || '00').padStart(2, '0')
@@ -99,6 +103,14 @@ export default function CustomTimePickerModal({
         setSelectedHour(String(num).padStart(2, '0'));
       }
     }
+  };
+
+  const handleSetCurrentTime = () => {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    setSelectedHour(h);
+    setSelectedMinute(m);
   };
 
   const handleDone = () => {
@@ -210,18 +222,28 @@ export default function CustomTimePickerModal({
       <div className="custom-time-actions">
         <button
           type="button"
-          className="custom-time-btn-cancel"
-          onClick={onClose}
+          className="custom-time-btn-now"
+          onClick={handleSetCurrentTime}
+          title="Set time to right now"
         >
-          Cancel
+          Now
         </button>
-        <button
-          type="button"
-          className="custom-time-btn-done"
-          onClick={handleDone}
-        >
-          Done
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            className="custom-time-btn-cancel"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="custom-time-btn-done"
+            onClick={handleDone}
+          >
+            Done
+          </button>
+        </div>
       </div>
     </div>
   );

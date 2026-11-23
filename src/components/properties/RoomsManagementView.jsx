@@ -709,6 +709,7 @@ export default function RoomsManagementView({
         roomTypes={roomTypes}
         existingRooms={rooms}
         onAddRooms={onAddRooms}
+        onCreateRoomType={onAddRoomType}
         showToast={showToast}
       />
 

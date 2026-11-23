@@ -1,0 +1,766 @@
+/* ==========================================================================
+   Night Audit Module Styles (night-audit.css)
+   Clean Desktop-First SaaS Styling + @media print rules (A4 & 80mm thermal)
+   ========================================================================== */
+
+/* Root & Theme Variables */
+:root {
+  --na-primary: #2563eb;
+  --na-primary-hover: #1d4ed8;
+  --na-primary-light: #eff6ff;
+  --na-success: #16a34a;
+  --na-success-light: #f0fdf4;
+  --na-warning: #ea580c;
+  --na-warning-light: #fff7ed;
+  --na-danger: #dc2626;
+  --na-danger-light: #fef2f2;
+  --na-slate-900: #0f172a;
+  --na-slate-800: #1e293b;
+  --na-slate-700: #334155;
+  --na-slate-600: #475569;
+  --na-slate-500: #64748b;
+  --na-slate-400: #94a3b8;
+  --na-slate-200: #e2e8f0;
+  --na-slate-100: #f1f5f9;
+  --na-slate-50: #f8fafc;
+  --na-border: #e2e8f0;
+  --na-radius-sm: 6px;
+  --na-radius-md: 10px;
+  --na-radius-lg: 14px;
+  --na-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --na-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --na-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.08);
+}
+
+.na-container {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 1.25rem 1.5rem 3rem;
+  color: var(--na-slate-800);
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   1. Top Business Date Banner
+   -------------------------------------------------------------------------- */
+.na-banner {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border-radius: var(--na-radius-lg);
+  padding: 1.75rem 2rem;
+  color: #ffffff;
+  box-shadow: var(--na-shadow-md);
+  margin-bottom: 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.na-banner::after {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.18) 0%, rgba(37, 99, 235, 0) 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.na-banner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.na-banner-title-area {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.na-banner-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--na-radius-md);
+  background: rgba(37, 99, 235, 0.2);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #60a5fa;
+  flex-shrink: 0;
+}
+
+.na-banner-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.na-banner-subtitle {
+  font-size: 0.85rem;
+  color: var(--na-slate-400);
+  margin: 0.25rem 0 0;
+}
+
+.na-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.na-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.na-status-pill.pending {
+  background: rgba(234, 88, 12, 0.15);
+  color: #fb923c;
+  border: 1px solid rgba(251, 146, 60, 0.3);
+}
+
+.na-status-pill.completed {
+  background: rgba(22, 163, 74, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
+.na-status-pill.running {
+  background: rgba(37, 99, 235, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+}
+
+.na-btn-start {
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: var(--na-radius-md);
+  padding: 0.75rem 1.5rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  transition: all 0.2s ease;
+}
+
+.na-btn-start:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.na-banner-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.na-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.na-stat-label {
+  font-size: 0.75rem;
+  color: var(--na-slate-400);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.na-stat-val {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+/* --------------------------------------------------------------------------
+   2. 5-Step Guided Audit Wizard Navigation
+   -------------------------------------------------------------------------- */
+.na-wizard-card {
+  background: #ffffff;
+  border-radius: var(--na-radius-lg);
+  border: 1px solid var(--na-border);
+  box-shadow: var(--na-shadow-sm);
+  margin-bottom: 2.5rem;
+  overflow: hidden;
+}
+
+.na-wizard-nav {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  background: var(--na-slate-50);
+  border-bottom: 1px solid var(--na-border);
+}
+
+.na-wizard-step-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.15rem 1rem;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--na-border);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.na-wizard-step-btn:last-child {
+  border-right: none;
+}
+
+.na-wizard-step-btn.active {
+  background: #ffffff;
+}
+
+.na-wizard-step-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--na-primary);
+}
+
+.na-wizard-step-btn.completed .na-step-num {
+  background: var(--na-success);
+  color: #ffffff;
+}
+
+.na-wizard-step-btn.active .na-step-num {
+  background: var(--na-primary);
+  color: #ffffff;
+}
+
+.na-wizard-step-btn.blocked .na-step-num {
+  background: var(--na-danger);
+  color: #ffffff;
+}
+
+.na-step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--na-slate-200);
+  color: var(--na-slate-600);
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.na-step-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.na-step-title {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--na-slate-800);
+}
+
+.na-step-sub {
+  font-size: 0.72rem;
+  color: var(--na-slate-500);
+}
+
+.na-wizard-body {
+  padding: 2rem;
+}
+
+/* --------------------------------------------------------------------------
+   3. Wizard Steps Content Styling
+   -------------------------------------------------------------------------- */
+.na-section-header {
+  margin-bottom: 1.5rem;
+}
+
+.na-section-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--na-slate-900);
+  margin: 0 0 0.35rem 0;
+}
+
+.na-section-desc {
+  font-size: 0.88rem;
+  color: var(--na-slate-500);
+  margin: 0;
+}
+
+/* Notice / Blockers Banner */
+.na-alert-box {
+  border-radius: var(--na-radius-md);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+
+.na-alert-box.danger {
+  background: var(--na-danger-light);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  color: #991b1b;
+}
+
+.na-alert-box.success {
+  background: var(--na-success-light);
+  border: 1px solid rgba(22, 163, 74, 0.25);
+  color: #166534;
+}
+
+.na-alert-box.warning {
+  background: var(--na-warning-light);
+  border: 1px solid rgba(234, 88, 12, 0.25);
+  color: #9a3412;
+}
+
+.na-alert-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.na-alert-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+  margin-bottom: 0.2rem;
+}
+
+.na-alert-text {
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+/* Modern Tables */
+.na-table-wrap {
+  border: 1px solid var(--na-border);
+  border-radius: var(--na-radius-md);
+  overflow: hidden;
+  margin-bottom: 1.75rem;
+  background: #ffffff;
+}
+
+.na-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+  text-align: left;
+}
+
+.na-table thead {
+  background: var(--na-slate-50);
+  border-bottom: 1px solid var(--na-border);
+}
+
+.na-table th {
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--na-slate-600);
+}
+
+.na-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--na-border);
+  color: var(--na-slate-800);
+  vertical-align: middle;
+}
+
+.na-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.na-table tbody tr:hover {
+  background: var(--na-slate-50);
+}
+
+/* Empty Table State */
+.na-empty-state {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--na-slate-500);
+}
+
+.na-empty-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--na-slate-100);
+  color: var(--na-slate-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 0.75rem;
+}
+
+/* Action Buttons in tables */
+.na-btn-action {
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--na-radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.15s ease;
+}
+
+.na-btn-action.primary {
+  background: var(--na-primary-light);
+  color: var(--na-primary);
+  border-color: rgba(37, 99, 235, 0.2);
+}
+
+.na-btn-action.primary:hover {
+  background: #dbeafe;
+}
+
+.na-btn-action.danger {
+  background: var(--na-danger-light);
+  color: var(--na-danger);
+  border-color: rgba(220, 38, 38, 0.2);
+}
+
+.na-btn-action.danger:hover {
+  background: #fee2e2;
+}
+
+.na-btn-action.success {
+  background: var(--na-success-light);
+  color: var(--na-success);
+  border-color: rgba(22, 163, 74, 0.2);
+}
+
+.na-btn-action.success:hover {
+  background: #dcfce7;
+}
+
+/* Wizard Footer Navigation */
+.na-wizard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--na-border);
+  margin-top: 2rem;
+}
+
+.na-btn-nav {
+  padding: 0.7rem 1.4rem;
+  border-radius: var(--na-radius-md);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  transition: all 0.15s ease;
+}
+
+.na-btn-nav.prev {
+  background: #ffffff;
+  color: var(--na-slate-700);
+  border: 1px solid var(--na-border);
+}
+
+.na-btn-nav.prev:hover {
+  background: var(--na-slate-50);
+}
+
+.na-btn-nav.next {
+  background: var(--na-primary);
+  color: #ffffff;
+  border: none;
+}
+
+.na-btn-nav.next:hover:not(:disabled) {
+  background: var(--na-primary-hover);
+}
+
+.na-btn-nav.next:disabled {
+  background: var(--na-slate-200);
+  color: var(--na-slate-400);
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   4. Step 2 & 4 Special Layouts (Reconciliation & Postings)
+   -------------------------------------------------------------------------- */
+.na-recon-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.na-recon-card {
+  border: 1px solid var(--na-border);
+  border-radius: var(--na-radius-md);
+  padding: 1.5rem;
+  background: #ffffff;
+}
+
+.na-recon-card-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--na-slate-800);
+  margin: 0 0 1rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.na-recon-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.na-recon-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px dashed var(--na-border);
+  font-size: 0.86rem;
+}
+
+.na-recon-row:last-child {
+  border-bottom: none;
+}
+
+.na-recon-total-bar {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 2px solid var(--na-border);
+  display: flex;
+  justify-content: space-between;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* KPI Projection Card in Step 4 */
+.na-kpi-projection {
+  background: var(--na-slate-50);
+  border: 1px solid var(--na-border);
+  border-radius: var(--na-radius-md);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.na-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.na-kpi-box {
+  background: #ffffff;
+  border: 1px solid var(--na-border);
+  border-radius: var(--na-radius-sm);
+  padding: 0.85rem;
+  text-align: center;
+}
+
+.na-kpi-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--na-slate-500);
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+}
+
+.na-kpi-val {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--na-slate-900);
+}
+
+/* --------------------------------------------------------------------------
+   5. Audit History Table
+   -------------------------------------------------------------------------- */
+.na-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.na-history-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--na-slate-900);
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   6. Modal Styling (Inspection Drilldown)
+   -------------------------------------------------------------------------- */
+.na-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.na-modal-box {
+  background: #ffffff;
+  border-radius: var(--na-radius-lg);
+  box-shadow: var(--na-shadow-lg);
+  width: 100%;
+  max-width: 980px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.na-modal-header {
+  padding: 1.25rem 1.75rem;
+  border-bottom: 1px solid var(--na-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--na-slate-50);
+}
+
+.na-modal-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--na-border);
+  background: #ffffff;
+  padding: 0 1.5rem;
+}
+
+.na-modal-tab-btn {
+  padding: 0.85rem 1.25rem;
+  border: none;
+  background: transparent;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--na-slate-600);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.na-modal-tab-btn.active {
+  color: var(--na-primary);
+  border-bottom-color: var(--na-primary);
+}
+
+.na-modal-body {
+  padding: 1.75rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* --------------------------------------------------------------------------
+   7. @media print Rules (A4 Daily Report & 80mm Thermal Receipt Friendly)
+   -------------------------------------------------------------------------- */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+  }
+
+  /* Hide navigation, buttons, controls during print */
+  nav,
+  aside,
+  header,
+  .sidebar,
+  .na-banner-actions,
+  .na-wizard-nav,
+  .na-wizard-footer,
+  .na-modal-tabs,
+  .na-btn-action,
+  .na-btn-start,
+  .no-print {
+    display: none !important;
+  }
+
+  .na-container,
+  .na-modal-box {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* A4 Report Header */
+  .na-print-header {
+    display: block !important;
+    text-align: center;
+    border-bottom: 2px solid #000;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+  }
+
+  .na-table {
+    border: 1px solid #000 !important;
+    width: 100% !important;
+  }
+
+  .na-table th,
+  .na-table td {
+    border: 1px solid #ccc !important;
+    padding: 6px 8px !important;
+    font-size: 9pt !important;
+  }
+
+  /* 80mm Thermal Printer Class Override */
+  .thermal-80mm {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    padding: 2mm !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 8pt !important;
+    line-height: 1.2 !important;
+  }
+
+  .thermal-80mm table {
+    width: 100% !important;
+    font-size: 7.5pt !important;
+  }
+}

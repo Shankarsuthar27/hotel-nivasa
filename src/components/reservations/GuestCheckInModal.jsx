@@ -14,7 +14,7 @@ import {
   Star
 } from 'lucide-react';
 import { pmsStore } from '../../services/pmsStore';
-import { normalizeDateStr } from '../../services/dateUtils';
+import { normalizeDateStr, getCurrentTimeString, getAccurateArrivalTime } from '../../services/dateUtils';
 
 export default function GuestCheckInModal({
   isOpen,
@@ -369,12 +369,16 @@ export default function GuestCheckInModal({
               <div>
                 <span style={{ color: '#64748b', fontSize: '0.75rem', display: 'block' }}>Check-In</span>
                 <strong style={{ color: '#0f172a' }}>{checkInDate}</strong>
-                <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'block' }}>14:00</span>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'block' }}>
+                  {getAccurateArrivalTime(reservation)}
+                </span>
               </div>
               <div>
                 <span style={{ color: '#64748b', fontSize: '0.75rem', display: 'block' }}>Check-Out</span>
                 <strong style={{ color: '#0f172a' }}>{checkOutDate}</strong>
-                <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'block' }}>11:00</span>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'block' }}>
+                  {reservation.checkOutTime || '11:00'}
+                </span>
               </div>
               <div>
                 <span style={{ color: '#64748b', fontSize: '0.75rem', display: 'block' }}>Duration</span>

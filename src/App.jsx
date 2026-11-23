@@ -5,7 +5,7 @@ import TapeChartView from './components/calendar/TapeChartView';
 import ReservationsView from './components/reservations/ReservationsView';
 import HousekeepingView from './components/housekeeping/HousekeepingView';
 import RatesMatrixView from './components/rates/RatesMatrixView';
-import NightAuditView from './components/nightaudit/NightAuditView';
+import NightAuditPage from './pages/NightAuditPage';
 import ReportsView from './components/reports/ReportsView';
 import GuestCrmView from './components/guests/GuestCrmView';
 import TeamPermissionsView from './components/permissions/TeamPermissionsView';
@@ -235,6 +235,16 @@ export default function App() {
       document.title = titles[activeTab] || 'Hotel Astha PMS';
     }
   }, [isCreatingReservation, editingReservation, activeTab]);
+
+  // Background automated scheduler for Night Audit at configured time (e.g. 01:00 AM)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (typeof pmsStore?.checkAndRunScheduledNightAudit === 'function') {
+        pmsStore.checkAndRunScheduledNightAudit();
+      }
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Disallow editing cancelled or no-show reservations - redirect to /reservations with toast
   useEffect(() => {
@@ -540,7 +550,7 @@ export default function App() {
             )}
 
         {/* Dynamic Viewport with Page Transitions */}
-        <main className={`content-viewport ${activeTab === 'reservations' || activeTab === 'dashboard' || activeTab === 'rates' || activeTab === 'guests' || activeTab === 'myteam' || activeTab === 'permissions' || activeTab === 'properties' || activeTab === 'calendar' ? 'no-pad-viewport' : ''} ${activeTab === 'calendar' ? 'calendar-viewport' : ''} ${activeTab === 'rates' ? 'rates-viewport' : ''} ${activeTab === 'reservations' ? 'reservations-viewport' : ''}`}>
+        <main className={`content-viewport ${activeTab === 'reservations' || activeTab === 'dashboard' || activeTab === 'rates' || activeTab === 'guests' || activeTab === 'myteam' || activeTab === 'permissions' || activeTab === 'properties' || activeTab === 'calendar' || activeTab === 'nightaudit' || activeTab === 'housekeeping' ? 'no-pad-viewport' : ''} ${activeTab === 'calendar' ? 'calendar-viewport' : ''} ${activeTab === 'rates' ? 'rates-viewport' : ''} ${activeTab === 'reservations' ? 'reservations-viewport' : ''}`}>
           <div key={activeTab} className="pms-page-view">
             {!canAccessRoute(state.currentUser, activeTab) ? (
               <AccessDeniedView
@@ -748,13 +758,7 @@ export default function App() {
           )}
 
           {activeTab === 'nightaudit' && (
-            <NightAuditView
-              property={state.property}
-              reservations={state.reservations}
-              rooms={state.rooms}
-              nightAudits={state.nightAudits}
-              onExecuteAudit={handleExecuteNightAudit}
-            />
+            <NightAuditPage onNavigate={(tab) => navigate(tab === 'dashboard' ? '/dashboard' : '/' + tab)} />
           )}
 
           {activeTab === 'reports' && (

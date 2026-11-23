@@ -67,6 +67,7 @@ export default function GuestCrmView({
 }) {
   const [selectedGuest, setSelectedGuest] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'in_house' | 'checked_out' | 'confirmed' | 'vip'
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
@@ -87,11 +88,13 @@ export default function GuestCrmView({
       const nightsDisplay = `${nightsCount} ${nightsCount === 1 ? 'Night' : 'Nights'}`;
 
       const { label: statusLabel, className: statusClass } = getStatusDisplay(r.status);
+      const roomNum = r.roomNumber || (r.roomId ? String(r.roomId).replace(/^rm_/, '') : '');
 
       return {
         id: r.id,
         bookingId: bookingIdFormatted,
         bookingIdClean,
+        roomNumber: roomNum,
         checkInDate: r.checkInDate,
         checkOutDate: r.checkOutDate,
         stayDatesDisplay,
@@ -104,8 +107,18 @@ export default function GuestCrmView({
       };
     };
 
-    // Legacy mock reservation IDs that should not spawn dynamic guest rows
-    const legacySeedIds = new Set(['res_1', 'res_2', 'res_3', 'res_4', 'res_5', 'res_6', 'res_7']);
+    const sortStays = (staysList) => {
+      return [...staysList].sort((a, b) => {
+        const getWeight = (status) => {
+          const s = String(status || '').toLowerCase().replace(/[\s-]/g, '_');
+          if (s === 'in_house' || s === 'checked_in') return 1;
+          if (s === 'confirmed' || s === 'expected' || s === 'arriving') return 2;
+          if (s === 'checked_out') return 3;
+          return 4;
+        };
+        return getWeight(a.status) - getWeight(b.status);
+      });
+    };
 
     // 1. Process base registered profiles matching initialGuests
     const registered = (initialGuests || []).map((base) => {
@@ -126,7 +139,6 @@ export default function GuestCrmView({
       // Also attach any other live reservation matching this guest's email, phone, or name
       reservations.forEach((r) => {
         if (stays.some((s) => s.id === r.id)) return;
-        if (legacySeedIds.has(r.id) && !base.reservationIds?.includes(r.id)) return;
 
         const rEmail = (r.primaryGuest?.email || '').toLowerCase().trim();
         const rPhone = (r.primaryGuest?.phone || '').replace(/\D/g, '');
@@ -144,6 +156,9 @@ export default function GuestCrmView({
           stays.push(mapReservationToStay(r));
         }
       });
+
+      // Sort stays so in-house (checked-in) stays come first, then confirmed, then checked-out
+      stays = sortStays(stays);
 
       // Active stay is the primary stay displayed in the table (stays[0])
       const activeStay = stays.length > 0 ? stays[0] : null;
@@ -166,14 +181,12 @@ export default function GuestCrmView({
       };
     });
 
-    // 2. Discover newly created guests from new user-created PMS reservations
+    // 2. Discover newly created guests from all other PMS reservations
     const handledResIds = new Set(
       registered.flatMap((g) => g.stays.map((s) => s.id))
     );
 
-    const otherReservations = reservations.filter(
-      (r) => !handledResIds.has(r.id) && !legacySeedIds.has(r.id)
-    );
+    const otherReservations = reservations.filter((r) => !handledResIds.has(r.id));
     const dynamicMap = {};
 
     otherReservations.forEach((r) => {
@@ -188,11 +201,11 @@ export default function GuestCrmView({
           phone: g.phone || '—',
           gender: g.gender || 'Adult',
           guestType: g.guestType || 'Adult',
-          nationality: g.nationality || g.country || '—',
+          nationality: g.nationality || g.country || 'India',
           birthDate: g.birthDate || null,
           birthDateDisplay: formatStayDate(g.birthDate),
-          addedOn: r.createdAt || '2026-11-12',
-          addedOnDisplay: formatStayDate(r.createdAt || '2026-11-12'),
+          addedOn: r.createdAt || '2026-10-26',
+          addedOnDisplay: formatStayDate(r.createdAt || '2026-10-26'),
           isVIP: Boolean(r.isVIP || g.isVIP),
           stays: []
         };
@@ -201,6 +214,7 @@ export default function GuestCrmView({
     });
 
     Object.values(dynamicMap).forEach((dyn) => {
+      dyn.stays = sortStays(dyn.stays);
       dyn.activeStay = dyn.stays.length > 0 ? dyn.stays[0] : null;
       registered.push(dyn);
     });
@@ -208,17 +222,80 @@ export default function GuestCrmView({
     return registered;
   }, [reservations]);
 
-  // Search filter
+  // Counts by Status
+  const counts = useMemo(() => {
+    let all = allGuests.length;
+    let inHouse = 0;
+    let checkedOut = 0;
+    let confirmed = 0;
+    let vip = 0;
+
+    allGuests.forEach((g) => {
+      const activeSt = (g.activeStay?.status || '').toLowerCase().replace(/[\s-]/g, '_');
+      const hasInHouse =
+        activeSt === 'in_house' ||
+        activeSt === 'checked_in' ||
+        g.stays?.some((s) => s.status === 'in_house' || s.status === 'checked_in');
+      const hasCheckedOut =
+        activeSt === 'checked_out' ||
+        g.stays?.some((s) => s.status === 'checked_out');
+      const hasConfirmed =
+        activeSt === 'confirmed' ||
+        g.stays?.some((s) => s.status === 'confirmed');
+
+      if (hasInHouse) inHouse++;
+      if (hasCheckedOut) checkedOut++;
+      if (hasConfirmed && !hasInHouse) confirmed++;
+      if (g.isVIP) vip++;
+    });
+
+    return { all, inHouse, checkedOut, confirmed, vip };
+  }, [allGuests]);
+
+  // Search & Status filter
   const filteredGuests = useMemo(() => {
-    if (!searchQuery.trim()) return allGuests;
-    const q = searchQuery.toLowerCase().trim();
-    return allGuests.filter(
-      (g) =>
-        (g.name && g.name.toLowerCase().includes(q)) ||
-        (g.email && g.email.toLowerCase().includes(q)) ||
-        (g.phone && g.phone.toLowerCase().includes(q))
-    );
-  }, [allGuests, searchQuery]);
+    let list = allGuests;
+
+    if (statusFilter === 'in_house') {
+      list = list.filter((g) => {
+        const activeSt = (g.activeStay?.status || '').toLowerCase().replace(/[\s-]/g, '_');
+        return (
+          activeSt === 'in_house' ||
+          activeSt === 'checked_in' ||
+          g.stays?.some((s) => s.status === 'in_house' || s.status === 'checked_in')
+        );
+      });
+    } else if (statusFilter === 'checked_out') {
+      list = list.filter((g) => {
+        const activeSt = (g.activeStay?.status || '').toLowerCase().replace(/[\s-]/g, '_');
+        return (
+          activeSt === 'checked_out' ||
+          g.stays?.some((s) => s.status === 'checked_out')
+        );
+      });
+    } else if (statusFilter === 'confirmed') {
+      list = list.filter((g) => {
+        const activeSt = (g.activeStay?.status || '').toLowerCase().replace(/[\s-]/g, '_');
+        return activeSt === 'confirmed' || g.stays?.some((s) => s.status === 'confirmed');
+      });
+    } else if (statusFilter === 'vip') {
+      list = list.filter((g) => g.isVIP);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (g) =>
+          (g.name && g.name.toLowerCase().includes(q)) ||
+          (g.email && g.email.toLowerCase().includes(q)) ||
+          (g.phone && g.phone.toLowerCase().includes(q)) ||
+          (g.activeStay?.bookingId && g.activeStay.bookingId.toLowerCase().includes(q)) ||
+          (g.activeStay?.roomNumber && g.activeStay.roomNumber.toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }, [allGuests, statusFilter, searchQuery]);
 
   // Pagination calculation
   const totalResults = filteredGuests.length;
@@ -260,14 +337,75 @@ export default function GuestCrmView({
            VIEW A: Guests List Table (Matching media_1794028040709_f689d485.png)
            ===================================================================== */
         <div className="guests-list-content">
-          {/* Search Row */}
-          <div className="guests-search-row">
+          {/* Top Filter Tabs & Search Row */}
+          <div className="guests-filter-tabs-row">
+            <div className="guests-filter-tabs">
+              <button
+                type="button"
+                className={`guests-filter-tab ${statusFilter === 'all' ? 'active' : ''}`}
+                onClick={() => {
+                  setStatusFilter('all');
+                  setCurrentPage(1);
+                }}
+              >
+                <span>All Guests</span>
+                <span className="guests-filter-count">{counts.all}</span>
+              </button>
+
+              <button
+                type="button"
+                className={`guests-filter-tab ${statusFilter === 'in_house' ? 'active' : ''}`}
+                onClick={() => {
+                  setStatusFilter('in_house');
+                  setCurrentPage(1);
+                }}
+              >
+                <span className="status-dot in-house" />
+                <span>Checked In ({counts.inHouse})</span>
+              </button>
+
+              <button
+                type="button"
+                className={`guests-filter-tab ${statusFilter === 'checked_out' ? 'active' : ''}`}
+                onClick={() => {
+                  setStatusFilter('checked_out');
+                  setCurrentPage(1);
+                }}
+              >
+                <span className="status-dot checked-out" />
+                <span>Checked Out ({counts.checkedOut})</span>
+              </button>
+
+              <button
+                type="button"
+                className={`guests-filter-tab ${statusFilter === 'confirmed' ? 'active' : ''}`}
+                onClick={() => {
+                  setStatusFilter('confirmed');
+                  setCurrentPage(1);
+                }}
+              >
+                <span>Confirmed ({counts.confirmed})</span>
+              </button>
+
+              <button
+                type="button"
+                className={`guests-filter-tab ${statusFilter === 'vip' ? 'active' : ''}`}
+                onClick={() => {
+                  setStatusFilter('vip');
+                  setCurrentPage(1);
+                }}
+              >
+                <Star size={11} color="#d97706" />
+                <span>VIP ({counts.vip})</span>
+              </button>
+            </div>
+
             <div className="guests-search-wrapper">
               <Search size={15} className="guests-search-icon" />
               <input
                 type="text"
                 className="guests-search-input"
-                placeholder="Search by name, email or phone..."
+                placeholder="Search name, phone, room..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -319,10 +457,17 @@ export default function GuestCrmView({
                         <div className="guest-phone-text">{guest.phone || '—'}</div>
                       </td>
 
-                      {/* Column 3: Booking ID */}
+                      {/* Column 3: Booking ID & Room */}
                       <td>
                         {stay ? (
-                          <span className="guest-booking-id">{stay.bookingId}</span>
+                          <div>
+                            <span className="guest-booking-id">{stay.bookingId}</span>
+                            {stay.roomNumber && (
+                              <span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                                Room {stay.roomNumber}
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <span className="guest-dash">&mdash;</span>
                         )}

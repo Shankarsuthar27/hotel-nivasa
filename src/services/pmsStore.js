@@ -21,7 +21,7 @@ import {
 import { calculateRoomTax, setActiveTaxRules } from './taxEngine';
 import { getRoleDefaultPermissions } from '../data/rolePresets';
 import { hasPermission as checkUserPermission } from '../utils/permissions';
-import { normalizeDateStr, getNextDayIsoDate, getTodayIsoDate } from './dateUtils';
+import { normalizeDateStr, getNextDayIsoDate, getTodayIsoDate, getCurrentTimeString, formatTimeToHhMm, getAccurateArrivalTime, formatDisplayDate } from './dateUtils';
 import {
   doc,
   setDoc,
@@ -2010,6 +2010,9 @@ class PMSStore {
     const checkOutIso = normalizeDateStr(bookingData.checkOutDate) ||
       getNextDayIsoDate(checkInIso);
 
+    const liveTimeStr = getCurrentTimeString();
+    const effectiveCheckInTime = bookingData.checkInTime || liveTimeStr;
+
     const newRes = {
       ...bookingData,
       id,
@@ -2037,7 +2040,9 @@ class PMSStore {
       ratePlanCode: bookingData.ratePlanCode || 'BAR_CP',
       checkInDate: checkInIso,
       checkOutDate: checkOutIso,
-      checkInTime: bookingData.checkInTime || '11:59',
+      checkInTime: effectiveCheckInTime,
+      actualCheckInTime: bookingData.actualCheckInTime || (bookingData.status === 'in_house' ? effectiveCheckInTime : undefined),
+      arrivalTime: effectiveCheckInTime,
       checkOutTime: bookingData.checkOutTime || '11:00',
       roomsCount: bookingData.roomsCount || (bookingData.configuredRooms ? bookingData.configuredRooms.length : 1),
       nights: Number(bookingData.nights) || 1,
@@ -2127,9 +2132,14 @@ class PMSStore {
       });
     }
 
-    const isCheckIn = (bookingData.status || '').toLowerCase() === 'in_house';
-    if (isCheckIn && !newRes.checkedInAt) {
-      newRes.checkedInAt = new Date().toISOString();
+    const isCheckIn = (bookingData.status || '').toLowerCase() === 'in_house' || bookingData.isCheckIn;
+    if (isCheckIn) {
+      if (!newRes.checkedInAt) {
+        newRes.checkedInAt = new Date().toISOString();
+      }
+      newRes.actualCheckInTime = effectiveCheckInTime;
+      newRes.checkInTime = effectiveCheckInTime;
+      newRes.arrivalTime = effectiveCheckInTime;
     }
 
     const updatedRooms = [];
@@ -2291,9 +2301,14 @@ class PMSStore {
         console.warn(`[PMSStore] Cannot modify checked-out reservation ${resId}. Details are locked.`);
         return null;
       }
+      const fieldsToApply = { ...updatedFields };
+      if (fieldsToApply.checkInTime) {
+        fieldsToApply.actualCheckInTime = fieldsToApply.checkInTime;
+        fieldsToApply.arrivalTime = fieldsToApply.checkInTime;
+      }
       this.reservations[idx] = {
         ...this.reservations[idx],
-        ...updatedFields,
+        ...fieldsToApply,
         updatedAt: new Date().toISOString()
       };
       const updated = this.reservations[idx];
@@ -2777,6 +2792,7 @@ class PMSStore {
     targetRoomId = room?.id || targetRoomId || '';
     const roomNumber = room ? room.roomNumber : (res.roomNumber || '');
     const nowIso = new Date().toISOString();
+    const liveCheckInTime = getCurrentTimeString();
     const targetId = res.id;
     const targetRef = res.bookingReference || `#${targetId}`;
     const guestName = res.primaryGuest?.name || res.guestName || 'Guest';
@@ -2815,7 +2831,10 @@ class PMSStore {
         roomTypeId: updatedRoomTypeId,
         roomTypeName: updatedRoomTypeName,
         status: 'in_house',
-        checkedInAt: r.checkedInAt || nowIso,
+        checkedInAt: nowIso,
+        actualCheckInTime: liveCheckInTime,
+        checkInTime: liveCheckInTime,
+        arrivalTime: liveCheckInTime,
         updatedAt: nowIso
       };
     });
@@ -3916,6 +3935,26 @@ class PMSStore {
 
   // --- NIGHT AUDIT AUTOMATION & FINANCIAL DAY-CLOSE ---
 
+  checkAndRunScheduledNightAudit() {
+    try {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const autoAuditEnabled = this.property?.autoNightAuditEnabled;
+      const scheduledHour = this.property?.nightAuditHour ?? 1; // Default 01:00 AM
+      if (autoAuditEnabled && currentHour === scheduledHour && currentMinute === 0) {
+        const curDate = this.property?.businessDate;
+        const alreadyDone = (this.nightAudits || []).some(a => a.date === curDate || a.auditDate === curDate);
+        if (!alreadyDone) {
+          return this.executeNightAudit('System Automated Scheduler');
+        }
+      }
+    } catch (err) {
+      console.error('[PMSStore] checkAndRunScheduledNightAudit error:', err);
+    }
+    return null;
+  }
+
   executeNightAudit(auditorName = 'Amit Patel (Night Auditor)') {
     const curDate = this.property.businessDate;
     const inHouse = this.reservations.filter(r => r.status === 'in_house');
@@ -3969,10 +4008,23 @@ class PMSStore {
       businessDate: nextDate
     };
 
+    const now = new Date();
+    const timeFormatted = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const curDateFormatted = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
     const auditRecord = {
       id: `na_${curDate.replace(/-/g, '')}`,
       auditDate: curDate,
-      performedAt: new Date().toISOString(),
+      date: formatDisplayDate(curDate),
+      newBusinessDate: formatDisplayDate(nextDate),
+      newBusinessDateIso: nextDate,
+      startedTime: `${curDateFormatted} ${timeFormatted}`,
+      startedDate: curDateFormatted,
+      startedHour: timeFormatted,
+      completedTime: `${curDateFormatted} ${timeFormatted}`,
+      completedDate: curDateFormatted,
+      completedHour: timeFormatted,
+      performedAt: now.toISOString(),
       performedBy: auditorName,
       totalRevenue: totalRev,
       totalTax: totalTax,
@@ -4003,6 +4055,19 @@ class PMSStore {
     this.syncDocToFirestore('', this.propertyId, { businessDate: nextDate });
 
     return auditRecord;
+  }
+
+  setBusinessDate(newDate) {
+    if (!newDate) return this.property?.businessDate;
+    const cleanDate = normalizeDateStr(newDate) || newDate;
+    this.property = {
+      ...(this.property || {}),
+      businessDate: cleanDate
+    };
+    this.save();
+    this.syncDocToFirestore('', this.propertyId, { businessDate: cleanDate });
+    this.notify();
+    return cleanDate;
   }
 
   // --- MULTI-PROPERTY TEAM INVITATION & GRANULAR RBAC ENGINE ---

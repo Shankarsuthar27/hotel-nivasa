@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Calendar,
+  Clock,
   User,
   CreditCard,
   Building,
@@ -11,6 +12,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { calculateRoomTax } from '../../services/taxEngine';
+import { getTodayIsoDate, getNextDayIsoDate, getCurrentTimeString } from '../../services/dateUtils';
 import CustomDatePicker from '../common/CustomDatePicker';
 
 export default function CreateReservationModal({
@@ -22,13 +24,27 @@ export default function CreateReservationModal({
   ratePlans = [],
   onSubmit
 }) {
+  const todayDefault = useMemo(() => getTodayIsoDate(), []);
   // Form State
-  const [checkInDate, setCheckInDate] = useState(initialData?.date || '2026-10-24');
-  const [checkOutDate, setCheckOutDate] = useState('2026-10-26');
-  const [checkInTime, setCheckInTime] = useState('14:00');
+  const [checkInDate, setCheckInDate] = useState(initialData?.date || todayDefault);
+  const [checkOutDate, setCheckOutDate] = useState(() => initialData?.checkOutDate || getNextDayIsoDate(initialData?.date || todayDefault));
+  const [checkInTime, setCheckInTime] = useState(() => initialData?.checkInTime || getCurrentTimeString());
   const [checkOutTime, setCheckOutTime] = useState('11:00');
   const [marketSegment, setMarketSegment] = useState('WALK_IN');
   const [bookingSource, setBookingSource] = useState('WALK_IN');
+
+  // Reset/sync check-in time to current live time and dates when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      if (!initialData?.checkInTime) {
+        setCheckInTime(getCurrentTimeString());
+      }
+      if (initialData?.date) {
+        setCheckInDate(initialData.date);
+        setCheckOutDate(initialData.checkOutDate || getNextDayIsoDate(initialData.date));
+      }
+    }
+  }, [isOpen, initialData]);
 
   // Flags
   const [isVIP, setIsVIP] = useState(false);
@@ -178,7 +194,9 @@ export default function CreateReservationModal({
       ratePlanCode,
       checkInDate,
       checkOutDate,
-      checkInTime,
+      checkInTime: checkInTime || getCurrentTimeString(),
+      actualCheckInTime: checkInTime || getCurrentTimeString(),
+      arrivalTime: checkInTime || getCurrentTimeString(),
       checkOutTime,
       nights,
       adults,
@@ -257,6 +275,51 @@ export default function CreateReservationModal({
                       onChange={(val) => setCheckOutDate(val)}
                       outputFormat="iso"
                       displayFormat="dmy"
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '0.35rem' }}>
+                  <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                      <label className="form-label" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock size={13} color="#2563eb" /> Check-In Time
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setCheckInTime(getCurrentTimeString())}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#2563eb',
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          padding: 0
+                        }}
+                        title="Set to Current Time"
+                      >
+                        Set Current Time
+                      </button>
+                    </div>
+                    <input
+                      type="time"
+                      className="form-input"
+                      value={checkInTime}
+                      onChange={(e) => setCheckInTime(e.target.value)}
+                      style={{ width: '100%', height: '38px', borderRadius: 'var(--radius-md)' }}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                    <label className="form-label" style={{ marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Clock size={13} color="#64748b" /> Check-Out Time
+                    </label>
+                    <input
+                      type="time"
+                      className="form-input"
+                      value={checkOutTime}
+                      onChange={(e) => setCheckOutTime(e.target.value)}
+                      style={{ width: '100%', height: '38px', borderRadius: 'var(--radius-md)' }}
                     />
                   </div>
                 </div>

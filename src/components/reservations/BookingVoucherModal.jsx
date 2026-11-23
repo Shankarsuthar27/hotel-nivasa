@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Printer, Send, Building, CheckCircle, Calendar, User, ShieldCheck } from 'lucide-react';
+import { getAccurateArrivalTime } from '../../services/dateUtils';
 
 export default function BookingVoucherModal({ isOpen, onClose, reservation, property }) {
   if (!isOpen || !reservation) return null;
@@ -109,7 +110,7 @@ export default function BookingVoucherModal({ isOpen, onClose, reservation, prop
                 Dates: <strong>{reservation.checkInDate}</strong> to <strong>{reservation.checkOutDate}</strong> ({reservation.nights} Nights)
               </div>
               <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                Check-in: 14:00 • Check-out: 11:00
+                Check-in: {getAccurateArrivalTime(reservation)} • Check-out: {reservation.checkOutTime || '11:00'}
               </div>
             </div>
           </div>

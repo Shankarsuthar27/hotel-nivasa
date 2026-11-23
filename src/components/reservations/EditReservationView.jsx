@@ -57,7 +57,7 @@ import CountrySelect from '../common/CountrySelect';
 import SearchableSelect from '../common/SearchableSelect';
 import CustomTimePickerModal from '../common/CustomTimePickerModal';
 import { getStatesForCountry, getCitiesForState } from '../../data/geoData';
-import { getTodayIsoDate, normalizeDateStr, isResMatchingRoom } from '../../services/dateUtils';
+import { getTodayIsoDate, normalizeDateStr, isResMatchingRoom, getCurrentTimeString, formatTimeToHhMm, getAccurateArrivalTime } from '../../services/dateUtils';
 
 /**
  * EditReservationView Component
@@ -81,6 +81,11 @@ export default function EditReservationView({
   onAddFolioTransaction,
   onSettleFolio
 }) {
+  // Live reservation from pmsStore
+  const currentRes = (typeof pmsStore?.getReservation === 'function'
+    ? pmsStore.getReservation(reservation?.id)
+    : pmsStore?.getState?.()?.reservations?.find(r => r.id === reservation?.id)) || reservation || {};
+
   const [activeTab, setActiveTab] = useState('guest'); // 'guest' | 'booking' | 'folio' | 'charges' | 'audit'
   const [auditFilter, setAuditFilter] = useState('all'); // 'all' | 'room'
 
@@ -163,9 +168,21 @@ export default function EditReservationView({
   });
 
   // Arrival & Departure Time editing (Image 8)
-  const [checkInTime, setCheckInTime] = useState(reservation.checkInTime || '12:30');
-  const [checkOutTime, setCheckOutTime] = useState(reservation.checkOutTime || '11:00');
+  const [checkInTime, setCheckInTime] = useState(() =>
+    getAccurateArrivalTime(currentRes)
+  );
+  const [checkOutTime, setCheckOutTime] = useState(currentRes.checkOutTime || '11:00');
   const [editingTimeType, setEditingTimeType] = useState(null); // 'checkIn' | 'checkOut' | null
+
+  // Keep check-in and check-out times in sync with live currentRes
+  useEffect(() => {
+    if (currentRes) {
+      setCheckInTime(getAccurateArrivalTime(currentRes));
+      if (currentRes.checkOutTime) {
+        setCheckOutTime(currentRes.checkOutTime);
+      }
+    }
+  }, [currentRes?.id, currentRes?.checkInTime, currentRes?.actualCheckInTime, currentRes?.arrivalTime, currentRes?.checkOutTime, currentRes?.checkedInAt]);
 
   const primaryNameDisplay = `${guestForm.firstName || ''} ${guestForm.lastName || ''}`.trim();
 
@@ -723,10 +740,7 @@ export default function EditReservationView({
     return () => document.removeEventListener('click', handleOutsideClick);
   }, [openTxMenuId]);
 
-  // Live reservation and folio from pmsStore
-  const currentRes = (typeof pmsStore?.getReservation === 'function'
-    ? pmsStore.getReservation(reservation?.id)
-    : pmsStore?.getState?.()?.reservations?.find(r => r.id === reservation?.id)) || reservation || {};
+  // Live folio from pmsStore
   const currentFolio = (pmsStore?.getState?.()?.folios && pmsStore.getState().folios[currentRes.folioId]) || {
     folioNumber: `FOL_${currentRes.id ? currentRes.id.replace('res_', '') : '1'}`,
     status: (currentRes.balanceDue || 0) <= 0 ? 'SETTLED' : 'OPEN',
@@ -1679,15 +1693,22 @@ export default function EditReservationView({
                 <CustomTimePickerModal
                   isOpen={true}
                   initialTime={checkInTime}
+                  label="Select Arrival Time"
                   onClose={() => setEditingTimeType(null)}
                   onSave={(newTime) => {
                     setCheckInTime(newTime);
                     setEditingTimeType(null);
-                    pmsStore.updateReservation(currentRes.id, { checkInTime: newTime });
+                    pmsStore.updateReservation(currentRes.id, {
+                      checkInTime: newTime,
+                      actualCheckInTime: newTime,
+                      arrivalTime: newTime
+                    });
                     if (onSave) {
                       onSave({
                         ...currentRes,
-                        checkInTime: newTime
+                        checkInTime: newTime,
+                        actualCheckInTime: newTime,
+                        arrivalTime: newTime
                       });
                     }
                   }}
@@ -1714,6 +1735,7 @@ export default function EditReservationView({
                 <CustomTimePickerModal
                   isOpen={true}
                   initialTime={checkOutTime}
+                  label="Select Departure Time"
                   onClose={() => setEditingTimeType(null)}
                   onSave={(newTime) => {
                     setCheckOutTime(newTime);

@@ -20,7 +20,9 @@ export default function EditRoomModal({
       setRoomNumber(room.roomNumber || '');
       const currentRt =
         roomTypes.find((rt) => rt.id === room.roomTypeId) ||
+        roomTypes.find((rt) => rt.code && (rt.code === room.roomTypeId || rt.code === room.code)) ||
         roomTypes.find((rt) => rt.name?.toLowerCase() === room.roomTypeName?.toLowerCase()) ||
+        roomTypes.find((rt) => rt.name?.toLowerCase() === room.roomType?.toLowerCase()) ||
         roomTypes[0] ||
         null;
       setSelectedRoomType(currentRt);
