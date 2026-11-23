@@ -52,24 +52,9 @@ export async function checkAndSeedFirestore(propertyId = 'prop_astha_01', force 
       updatedAt: new Date().toISOString()
     });
 
-    // 2. Batch write Room Types (excluding any deleted room types)
-    let deletedRoomTypeIds = new Set();
-    try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem('pms_deleted_entities') : null;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        (parsed.roomTypes || []).forEach(id => deletedRoomTypeIds.add(String(id).toLowerCase()));
-      }
-    } catch (_) {}
-
+    // 2. Batch write Room Types
     const batch1 = writeBatch(db);
     initialRoomTypes.forEach((rt) => {
-      const idLower = String(rt.id).toLowerCase();
-      const codeLower = String(rt.code || '').toLowerCase();
-      const nameLower = String(rt.name || '').toLowerCase();
-      if (deletedRoomTypeIds.has(idLower) || deletedRoomTypeIds.has(codeLower) || deletedRoomTypeIds.has(nameLower)) {
-        return;
-      }
       const rtRef = doc(db, 'properties', propertyId, 'roomTypes', rt.id);
       batch1.set(rtRef, rt);
       const rootRtRef = doc(db, 'roomTypes', rt.id);
@@ -77,23 +62,9 @@ export async function checkAndSeedFirestore(propertyId = 'prop_astha_01', force 
     });
     await batch1.commit();
 
-    // 3. Batch write Rooms (respecting deletions)
-    let deletedRoomIds = new Set();
-    try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem('pms_deleted_entities') : null;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        (parsed.rooms || []).forEach(id => deletedRoomIds.add(String(id).toLowerCase()));
-      }
-    } catch (_) {}
-
+    // 3. Batch write Rooms
     const batch2 = writeBatch(db);
     initialRooms.forEach((r) => {
-      const idLower = String(r.id).toLowerCase();
-      const numLower = String(r.roomNumber || '').toLowerCase();
-      if (deletedRoomIds.has(idLower) || deletedRoomIds.has(numLower) || deletedRoomIds.has(`rm_${numLower}`)) {
-        return;
-      }
       const rRef = doc(db, 'properties', propertyId, 'rooms', r.id);
       batch2.set(rRef, r);
       const rootRRef = doc(db, 'rooms', r.id);

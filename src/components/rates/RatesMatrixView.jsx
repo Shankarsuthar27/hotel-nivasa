@@ -309,15 +309,15 @@ export default function RatesMatrixView({
   const allRooms = useMemo(() => {
     if (!roomTypes || roomTypes.length === 0) return [];
 
-    const priorityOrder = { 'Delux Room': 1, 'Deluxe Room': 1, 'Normal': 2, 'Premium': 3, 'Ultra Premium': 4 };
+    const priorityOrder = { 'SUPIRIOR': 1, 'DOUBLE SIGNLE': 2, 'Delux Room': 3, 'Deluxe Room': 3 };
     const sorted = [...roomTypes].sort((a, b) => (priorityOrder[a.name] || 99) - (priorityOrder[b.name] || 99));
 
     return sorted.map((rt) => {
       const matchingPhysicalRooms = (rooms || []).filter(
         (r) =>
           r.roomTypeId === rt.id ||
-          (rt.id === 'rt_standard' && r.roomTypeId === 'rt_normal') ||
-          (rt.id === 'rt_normal' && r.roomTypeId === 'rt_standard')
+          r.roomTypeId === rt.code ||
+          String(r.roomTypeName || r.roomType || '').toLowerCase() === String(rt.name || '').toLowerCase()
       );
 
       // Find active rate plans configured for this room type (e.g. STR, 132)

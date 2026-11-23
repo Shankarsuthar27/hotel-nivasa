@@ -181,8 +181,10 @@ export default function RoomsManagementView({
         (rm?.roomTypeName && t.name?.toLowerCase() === String(rm.roomTypeName).toLowerCase())
     );
     if (rt) return rt.name;
-    if (rm?.roomTypeName && String(rm.roomTypeName).trim() !== '') {
-      return rm.roomTypeName;
+    const obsoleteNames = ['standard', 'ultra premium', 'normal', 'premium', 'standard room', 'rt_standard', 'rt_ultra_premium', 'rt_normal', 'rt_premium'];
+    const rName = String(rm?.roomTypeName || rm?.roomType || '').trim();
+    if (rName && !obsoleteNames.includes(rName.toLowerCase())) {
+      return rName;
     }
     const cleanNum = String(rm?.roomNumber || '').trim();
     if (cleanNum.startsWith('2')) return 'SUPIRIOR';

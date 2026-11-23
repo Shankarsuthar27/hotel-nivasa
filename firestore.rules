@@ -139,6 +139,46 @@ service cloud.firestore {
         allow create: if isActiveStaff(propertyId);
         allow update, delete: if false;
       }
+
+      // Metadata (e.g. deletion tombstones)
+      match /metadata/{metaId} {
+        allow read, write: if isActiveStaff(propertyId);
+      }
+
+      // Announcements / Staff notes
+      match /announcements/{noteId} {
+        allow read, write: if isActiveStaff(propertyId);
+      }
+
+      // Maintenance Blocks
+      match /maintenanceBlocks/{blockId} {
+        allow read, write: if isActiveStaff(propertyId);
+      }
+
+      // Guests
+      match /guests/{guestId} {
+        allow read, write: if isActiveStaff(propertyId);
+      }
+    }
+
+    // Root Mirror Collections for Cross-System Fallback & Legacy Compatibility
+    match /rooms/{roomId} {
+      allow read, write: if request.auth != null;
+    }
+    match /roomTypes/{rtId} {
+      allow read, write: if request.auth != null;
+    }
+    match /reservations/{resId} {
+      allow read, write: if request.auth != null;
+    }
+    match /ratePlans/{rpId} {
+      allow read, write: if request.auth != null;
+    }
+    match /mealPlans/{mpId} {
+      allow read, write: if request.auth != null;
+    }
+    match /settings/{docId} {
+      allow read, write: if request.auth != null;
     }
   }
 }

@@ -88,16 +88,16 @@ export const initialRoomTypes = [
 ];
 
 export const initialRooms = [
-  { id: 'rm_101', roomNumber: '101', roomTypeId: 'rt_deluxe', roomTypeName: 'Delux Room', roomType: 'Delux Room', floor: '1', status: 'clean', operational: 'occupied', notes: 'Ready for check-in' },
-  { id: 'rm_102', roomNumber: '102', roomTypeId: 'rt_deluxe', roomTypeName: 'Delux Room', roomType: 'Delux Room', floor: '1', status: 'clean', operational: 'occupied', notes: 'Ready for check-in' },
-  { id: 'rm_103', roomNumber: '103', roomTypeId: 'rt_deluxe', roomTypeName: 'Delux Room', roomType: 'Delux Room', floor: '1', status: 'clean', operational: 'occupied', notes: 'Ready for check-in' },
-  { id: 'rm_201', roomNumber: '201', roomTypeId: 'rt_supirior', roomTypeName: 'SUPIRIOR', roomType: 'SUPIRIOR', floor: '2', status: 'clean', operational: 'occupied', notes: 'Ready for check-in' },
-  { id: 'rm_202', roomNumber: '202', roomTypeId: 'rt_supirior', roomTypeName: 'SUPIRIOR', roomType: 'SUPIRIOR', floor: '2', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_203', roomNumber: '203', roomTypeId: 'rt_supirior', roomTypeName: 'SUPIRIOR', roomType: 'SUPIRIOR', floor: '2', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_204', roomNumber: '204', roomTypeId: 'rt_supirior', roomTypeName: 'SUPIRIOR', roomType: 'SUPIRIOR', floor: '2', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_301', roomNumber: '301', roomTypeId: 'rt_double_single', roomTypeName: 'DOUBLE SIGNLE', roomType: 'DOUBLE SIGNLE', floor: '3', status: 'clean', operational: 'occupied', notes: 'Ready for check-in' },
-  { id: 'rm_302', roomNumber: '302', roomTypeId: 'rt_double_single', roomTypeName: 'DOUBLE SIGNLE', roomType: 'DOUBLE SIGNLE', floor: '3', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
-  { id: 'rm_303', roomNumber: '303', roomTypeId: 'rt_double_single', roomTypeName: 'DOUBLE SIGNLE', roomType: 'DOUBLE SIGNLE', floor: '3', status: 'clean', operational: 'available', notes: 'Ready for check-in' }
+  { id: 'rm_1000', roomNumber: '1000', roomTypeId: 'rt_1795416894010', roomTypeName: 'SUPIRIOR', roomType: 'SUPIRIOR', floor: '1', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_500', roomNumber: '500', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '5', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_1794810935899_0', roomNumber: '502', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '5', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_1794810935899_1', roomNumber: '503', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '5', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_1794810935899_2', roomNumber: '504', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '5', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_1794810935899_3', roomNumber: '505', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '5', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_1794905339438_0', roomNumber: '601', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '6', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_1794905339438_1', roomNumber: '602', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '6', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_702', roomNumber: '702', roomTypeId: 'rt_1795416631373', roomTypeName: 'DELUXE', roomType: 'DELUXE', floor: '7', status: 'clean', operational: 'available', notes: 'Ready for check-in' },
+  { id: 'rm_801', roomNumber: '801', roomTypeId: 'rt_1795416894010', roomTypeName: 'SUPIRIOR', roomType: 'SUPIRIOR', floor: '8', status: 'clean', operational: 'available', notes: 'Ready for check-in' }
 ];
 
 export const initialMealPlans = [
@@ -161,8 +161,8 @@ export const initialReservations = [
       country: 'India',
       isPrimary: true
     },
-    roomId: 'rm_201',
-    roomNumber: '201',
+    roomId: '',
+    roomNumber: '',
     roomTypeId: 'rt_supirior',
     roomTypeName: 'SUPIRIOR',
     ratePlanCode: 'BAR_EP',
@@ -180,7 +180,7 @@ export const initialReservations = [
     totalAmount: 1050.00,
     paidAmount: 0.00,
     balanceDue: 1050.00,
-    status: 'in_house',
+    status: 'checked_out',
     bookingSource: 'walk-in',
     marketSegment: 'FIT',
     createdAt: '2026-11-12 12:30 PM',
@@ -243,8 +243,8 @@ export const initialReservations = [
       country: 'India',
       isPrimary: true
     },
-    roomId: 'rm_102',
-    roomNumber: '102',
+    roomId: '',
+    roomNumber: '',
     roomTypeId: 'rt_deluxe',
     roomTypeName: 'Delux Room',
     ratePlanCode: 'BAR_EP',
@@ -262,7 +262,7 @@ export const initialReservations = [
     totalAmount: 1200.00,
     paidAmount: 0.00,
     balanceDue: 1200.00,
-    status: 'in_house',
+    status: 'checked_out',
     bookingSource: 'walk-in',
     marketSegment: 'FIT',
     createdAt: '2026-11-12 12:30 PM',
@@ -284,8 +284,8 @@ export const initialReservations = [
       country: 'India',
       isPrimary: true
     },
-    roomId: 'rm_102',
-    roomNumber: '102',
+    roomId: '',
+    roomNumber: '',
     roomTypeId: 'rt_deluxe',
     roomTypeName: 'Deluxe Room',
     ratePlanCode: 'BAR_EP',
@@ -328,8 +328,8 @@ export const initialReservations = [
       country: 'India',
       isPrimary: true
     },
-    roomId: 'rm_101',
-    roomNumber: '101',
+    roomId: '',
+    roomNumber: '',
     roomTypeId: 'rt_deluxe',
     roomTypeName: 'Delux Room',
     ratePlanCode: 'BAR_EP',
@@ -351,10 +351,7 @@ export const initialReservations = [
     totalAmount: 3675.00,
     paidAmount: 0.00,
     balanceDue: 3675.00,
-    status: 'in_house',
-    bookingSource: 'walk-in',
-    marketSegment: 'FIT',
-    createdAt: '2026-11-02 10:00 AM',
+    status: 'checked_out',
     bookingDateFormatted: '02 Nov 2026, 10:00 AM',
     specialRequests: '',
     notes: '',
@@ -373,8 +370,8 @@ export const initialReservations = [
       country: 'India',
       isPrimary: true
     },
-    roomId: 'rm_101',
-    roomNumber: '101',
+    roomId: '',
+    roomNumber: '',
     roomTypeId: 'rt_deluxe',
     roomTypeName: 'Delux Room',
     ratePlanCode: 'test_plan',
@@ -418,8 +415,8 @@ export const initialReservations = [
       country: 'India',
       isPrimary: true
     },
-    roomId: 'rm_102',
-    roomNumber: '102',
+    roomId: '',
+    roomNumber: '',
     roomTypeId: 'rt_deluxe',
     roomTypeName: 'Delux Room',
     ratePlanCode: 'BAR_EP',
@@ -497,8 +494,8 @@ export const initialReservations = [
       gstin: '',
       nationality: 'Indian'
     },
-    roomId: 'rm_102',
-    roomNumber: '102',
+    roomId: '',
+    roomNumber: '',
     roomTypeId: 'rt_deluxe',
     roomTypeName: 'Delux Room',
     ratePlanCode: 'BAR_EP',
@@ -557,8 +554,8 @@ export const initialReservations = [
       expiryDate: '2026-10-28',
       gstin: ''
     },
-    roomId: 'rm_102',
-    roomNumber: '102',
+    roomId: '',
+    roomNumber: '',
     roomTypeId: 'rt_deluxe',
     roomTypeName: 'Delux Room',
     ratePlanCode: 'BAR_EP',
@@ -598,7 +595,7 @@ export const initialFolios = {
   fol_1: {
     folioNumber: 'FOL_1',
     reservationId: 'res_1',
-    roomNumber: '102',
+    roomNumber: '',
     status: 'OPEN',
     transactions: [
       { id: 'tx_11', date: '2026-10-25', particulars: 'Room', type: 'ROOM_CHARGE', desc: 'Room charge for 2026-10-25', reference: '-', direction: 'Debit', amount: 2625, tax: 125 },
@@ -609,7 +606,7 @@ export const initialFolios = {
   fol_2: {
     folioNumber: 'FOL_2',
     reservationId: 'res_2',
-    roomNumber: '102',
+    roomNumber: '',
     status: 'OPEN',
     transactions: [
       { id: 'tx_21', date: '2026-10-24', type: 'ROOM_CHARGE', desc: 'Room Tariff (5 Nights)', amount: 18733.33, tax: 0, direction: 'DEBIT' }
@@ -618,14 +615,14 @@ export const initialFolios = {
   fol_3: {
     folioNumber: 'FOL_3',
     reservationId: 'res_3',
-    roomNumber: '201',
+    roomNumber: '',
     status: 'CLOSED',
     transactions: []
   },
   fol_4: {
     folioNumber: 'FOL_4',
     reservationId: 'res_4',
-    roomNumber: '102',
+    roomNumber: '',
     status: 'SETTLED',
     transactions: [
       { id: 'tx_41', date: '2026-10-26', particulars: 'Room', type: 'ROOM_CHARGE', desc: 'Room Tariff (1 Night)', reference: '-', direction: 'Debit', amount: 2625, tax: 0 },
@@ -635,7 +632,7 @@ export const initialFolios = {
   fol_5: {
     folioNumber: 'FOL_5',
     reservationId: 'res_5',
-    roomNumber: '101',
+    roomNumber: '',
     status: 'SETTLED',
     transactions: [
       { id: 'tx_51', date: '2026-10-26', particulars: 'Room', type: 'ROOM_CHARGE', desc: 'Room Tariff (1 Night)', reference: '-', direction: 'Debit', amount: 2625, tax: 0 },
@@ -645,7 +642,7 @@ export const initialFolios = {
   fol_6: {
     folioNumber: 'FOL_6',
     reservationId: 'res_6',
-    roomNumber: '101',
+    roomNumber: '',
     status: 'OPEN',
     transactions: [
       { id: 'tx_61', date: '2026-11-02', particulars: 'Room', type: 'ROOM_CHARGE', desc: 'Room Tariff (1 Night)', reference: '-', direction: 'Debit', amount: 3500, tax: 175 }
@@ -654,7 +651,7 @@ export const initialFolios = {
   fol_7: {
     folioNumber: 'FOL_7',
     reservationId: 'res_7',
-    roomNumber: '102',
+    roomNumber: '',
     status: 'CLOSED',
     transactions: []
   }
