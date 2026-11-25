@@ -2586,18 +2586,7 @@ class PMSStore {
     this.save();
     this.notify();
 
-    // 1. Store Reservation in Cloud Firestore
-    await this.syncDocToFirestore('reservations', id, newRes);
-
-    // 2. Store Folio in Cloud Firestore
-    await this.syncDocToFirestore('folios', folioId, newFolio);
-
-    // 3. Store Updated Rooms in Cloud Firestore
-    for (const upRm of updatedRooms) {
-      await this.syncDocToFirestore('rooms', upRm.id, upRm);
-    }
-
-    // 4. Store Guest Profile in Cloud Firestore (CRM)
+    // 1. Store in Cloud Firestore in background (non-blocking) so reservation creation & check-in completes instantly
     const guestPhoneClean = (newRes.primaryGuest.phone || '').replace(/[^0-9]/g, '');
     const guestId = `gst_${guestPhoneClean || Date.now()}`;
     const guestDoc = {
@@ -2625,9 +2614,17 @@ class PMSStore {
       status: newRes.status,
       updatedAt: new Date().toISOString()
     };
-    await this.syncDocToFirestore('guests', guestId, guestDoc);
 
-    console.info(`🔥 [Firebase Cloud] Successfully stored Reservation ${ref}, Room ${roomNumber}, Folio ${folioId}, and Guest Profile in Cloud Firestore.`);
+    Promise.allSettled([
+      this.syncDocToFirestore('reservations', id, newRes),
+      this.syncDocToFirestore('folios', folioId, newFolio),
+      ...updatedRooms.map((upRm) => this.syncDocToFirestore('rooms', upRm.id, upRm)),
+      this.syncDocToFirestore('guests', guestId, guestDoc)
+    ]).then(() => {
+      console.info(`🔥 [Firebase Cloud] Successfully stored Reservation ${ref}, Room ${roomNumber}, Folio ${folioId}, and Guest Profile in Cloud Firestore.`);
+    }).catch((err) => {
+      console.warn(`[Firebase Cloud Sync Note]:`, err);
+    });
 
     return newRes;
   }

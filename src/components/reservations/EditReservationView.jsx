@@ -56,8 +56,17 @@ import CustomDatePicker from '../common/CustomDatePicker';
 import CountrySelect from '../common/CountrySelect';
 import SearchableSelect from '../common/SearchableSelect';
 import CustomTimePickerModal from '../common/CustomTimePickerModal';
+import SlidingTabBar from '../common/SlidingTabBar';
 import { getStatesForCountry, getCitiesForState } from '../../data/geoData';
 import { getTodayIsoDate, normalizeDateStr, isResMatchingRoom, getCurrentTimeString, formatTimeToHhMm, getAccurateArrivalTime } from '../../services/dateUtils';
+
+const EDIT_RES_TABS = [
+  { id: 'guest', label: 'Guest Details' },
+  { id: 'booking', label: 'Booking Details' },
+  { id: 'folio', label: 'Folio Operations' },
+  { id: 'charges', label: 'Room Charges' },
+  { id: 'audit', label: 'Audit Trail' }
+];
 
 /**
  * EditReservationView Component
@@ -87,7 +96,22 @@ export default function EditReservationView({
     : pmsStore?.getState?.()?.reservations?.find(r => r.id === reservation?.id)) || reservation || {};
 
   const [activeTab, setActiveTab] = useState('guest'); // 'guest' | 'booking' | 'folio' | 'charges' | 'audit'
+  const [tabDirection, setTabDirection] = useState('forward');
+  const hasSwitchedTabRef = useRef(false);
   const [auditFilter, setAuditFilter] = useState('all'); // 'all' | 'room'
+
+  const handleTabChange = (nextTabId) => {
+    if (nextTabId === activeTab) return;
+    const prevIdx = EDIT_RES_TABS.findIndex((t) => t.id === activeTab);
+    const nextIdx = EDIT_RES_TABS.findIndex((t) => t.id === nextTabId);
+    hasSwitchedTabRef.current = true;
+    setTabDirection(nextIdx >= prevIdx ? 'forward' : 'backward');
+    setActiveTab(nextTabId);
+    if (nextTabId !== 'guest') {
+      setIsAddingSharer(false);
+      setEditingSharerIndex(null);
+    }
+  };
 
   // Sub-sidebar accordion state
   const [isRoomAccordionOpen, setIsRoomAccordionOpen] = useState(true);
@@ -1919,35 +1943,26 @@ export default function EditReservationView({
         </div>
       )}
 
-      {/* 3. Horizontal Navigation Tabs */}
-      <div className="edit-res-tabs-bar">
-        {[
-          { id: 'guest', label: 'Guest Details' },
-          { id: 'booking', label: 'Booking Details' },
-          { id: 'folio', label: 'Folio Operations' },
-          { id: 'charges', label: 'Room Charges' },
-          { id: 'audit', label: 'Audit Trail' }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            className={`edit-res-tab-item ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => {
-              setActiveTab(tab.id);
-              if (tab.id !== 'guest') {
-                setIsAddingSharer(false);
-                setEditingSharerIndex(null);
-              }
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* 3. Horizontal Navigation Tabs with Smooth Sliding Underline Animation */}
+      <SlidingTabBar
+        tabs={EDIT_RES_TABS}
+        activeTab={activeTab}
+        onChange={handleTabChange}
+        className="edit-res-sliding-tabs"
+        ariaLabel="Reservation detail navigation"
+      />
 
       {/* 4. Body 2-Column Split: Sub-sidebar + Content Area */}
       <div className="edit-res-body-layout">
         {/* Left Sub-Sidebar (Changes per tab) */}
-        <div className="edit-res-sub-sidebar">
+        <div
+          key={`sidebar-${activeTab}`}
+          className={`edit-res-sub-sidebar ${
+            hasSwitchedTabRef.current
+              ? (tabDirection === 'backward' ? 'edit-tab-slide-left' : 'edit-tab-slide-right')
+              : ''
+          }`.trim()}
+        >
           {activeTab === 'guest' && (
             <>
               <div className="edit-res-sidebar-header">
@@ -2179,7 +2194,14 @@ export default function EditReservationView({
         </div>
 
         {/* Right Main Content Area */}
-        <div key={activeTab} className="edit-res-main-content edit-tab-fade-enter">
+        <div
+          key={`content-${activeTab}`}
+          className={`edit-res-main-content ${
+            hasSwitchedTabRef.current
+              ? (tabDirection === 'backward' ? 'edit-tab-slide-left' : 'edit-tab-slide-right')
+              : 'edit-tab-fade-enter'
+          }`}
+        >
           {/* TAB 1: GUEST DETAILS */}
           {activeTab === 'guest' && (
             (isAddingSharer || editingSharerIndex !== null) ? (

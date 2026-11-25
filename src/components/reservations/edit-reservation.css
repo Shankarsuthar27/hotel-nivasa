@@ -438,6 +438,79 @@ body.has-res-modal-open .edit-res-page,
   border-radius: 2px 2px 0 0;
 }
 
+/* Smooth Sliding Tab Bar Overrides & Directional Tab Content Animations */
+.edit-res-sliding-tabs.sliding-tabs-nav {
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 12px;
+  gap: 24px;
+}
+
+.edit-res-sliding-tabs .sliding-tab-btn {
+  padding: 10px 4px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  color: #64748b;
+  transition: color 200ms ease, transform 150ms ease;
+  -webkit-font-smoothing: antialiased;
+}
+
+.edit-res-sliding-tabs .sliding-tab-btn:hover {
+  color: #0f172a;
+}
+
+.edit-res-sliding-tabs .sliding-tab-btn:active {
+  transform: scale(0.97);
+}
+
+.edit-res-sliding-tabs .sliding-tab-btn.is-active {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.edit-res-sliding-tabs .sliding-tab-indicator {
+  height: 2px;
+  background-color: #2563eb;
+  border-radius: 2px 2px 0 0;
+}
+
+@keyframes editTabSlideRight {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes editTabSlideLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.edit-tab-slide-right {
+  animation: editTabSlideRight 0.28s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.edit-tab-slide-left {
+  animation: editTabSlideLeft 0.28s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edit-tab-slide-right,
+  .edit-tab-slide-left {
+    animation: none;
+  }
+}
+
 /* 4. Body 2-Column Split: Sidebar + Main Area */
 .edit-res-body-layout {
   display: grid;

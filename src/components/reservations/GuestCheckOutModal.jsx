@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import {
   X,
@@ -17,11 +17,14 @@ export default function GuestCheckOutModal({
   onClose,
   reservation,
   onSettleFolio,
+  onQuickSettle,
   onConfirmCheckOut
 }) {
-  const [paymentMode, setPaymentMode] = useState('UPI');
+  const [paymentMode, setPaymentMode] = useState('');
+  const [paymentModeError, setPaymentModeError] = useState(false);
   const [settlementRef, setSettlementRef] = useState('');
   const [isSettling, setIsSettling] = useState(false);
+  const paymentSelectRef = useRef(null);
 
   const guestName = reservation?.primaryGuest?.name || 'Guest';
   const roomNumber = reservation?.roomNumber || '102';
@@ -41,9 +44,16 @@ export default function GuestCheckOutModal({
   // Handle Quick Settlement directly in the modal
   const handleQuickSettle = () => {
     if (balanceDue <= 0 || !reservation) return;
+    if (!paymentMode) {
+      setPaymentModeError(true);
+      paymentSelectRef.current?.focus();
+      return;
+    }
+    setPaymentModeError(false);
     setIsSettling(true);
-    if (onSettleFolio) {
-      onSettleFolio(reservation.id, paymentMode, settlementRef || 'Front Desk Checkout Settlement');
+    const settleHandler = onSettleFolio || onQuickSettle;
+    if (settleHandler) {
+      settleHandler(reservation.id, paymentMode, settlementRef || 'Front Desk Checkout Settlement');
     }
     setTimeout(() => {
       setIsSettling(false);
@@ -66,6 +76,10 @@ export default function GuestCheckOutModal({
 
   useEffect(() => {
     if (isOpen) {
+      setPaymentMode('');
+      setPaymentModeError(false);
+      setSettlementRef('');
+      setIsSettling(false);
       document.body.classList.add('modal-open');
       const prev = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
@@ -74,7 +88,7 @@ export default function GuestCheckOutModal({
         document.body.style.overflow = prev;
       };
     }
-  }, [isOpen]);
+  }, [isOpen, reservation?.id]);
 
   if (!isOpen || !reservation) return null;
 
@@ -259,23 +273,29 @@ export default function GuestCheckOutModal({
                 </span>
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr auto', gap: '0.6rem' }}>
                   <select
+                    ref={paymentSelectRef}
                     value={paymentMode}
-                    onChange={(e) => setPaymentMode(e.target.value)}
+                    onChange={(e) => {
+                      setPaymentMode(e.target.value);
+                      if (e.target.value) setPaymentModeError(false);
+                    }}
                     style={{
                       padding: '0.55rem',
                       borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
+                      border: paymentModeError ? '1.5px solid #ef4444' : '1px solid #cbd5e1',
                       fontSize: '0.85rem',
-                      fontWeight: 600,
+                      fontWeight: paymentMode ? 600 : 400,
+                      color: paymentMode ? '#0f172a' : '#64748b',
                       background: '#ffffff'
                     }}
                   >
-                    <option value="UPI">UPI Payment</option>
-                    <option value="CARD">Credit/Debit CARD</option>
-                    <option value="CASH">CASH</option>
-                    <option value="BANK">BANK Transfer</option>
-                    <option value="CITY LEDGER">CITY LEDGER</option>
-                    <option value="TDS">TDS Deducted</option>
+                    <option value="">Select Payment Mode</option>
+                    <option value="UPI" style={{ color: '#0f172a' }}>UPI Payment</option>
+                    <option value="CARD" style={{ color: '#0f172a' }}>Credit/Debit CARD</option>
+                    <option value="CASH" style={{ color: '#0f172a' }}>CASH</option>
+                    <option value="BANK" style={{ color: '#0f172a' }}>BANK Transfer</option>
+                    <option value="CITY LEDGER" style={{ color: '#0f172a' }}>CITY LEDGER</option>
+                    <option value="TDS" style={{ color: '#0f172a' }}>TDS Deducted</option>
                   </select>
 
                   <input
@@ -303,7 +323,8 @@ export default function GuestCheckOutModal({
                       padding: '0.55rem 1rem',
                       fontSize: '0.85rem',
                       fontWeight: 700,
-                      cursor: 'pointer',
+                      cursor: isSettling ? 'not-allowed' : 'pointer',
+                      opacity: isSettling ? 0.7 : 1,
                       display: 'flex',
                       alignItems: 'center',
                       gap: '4px',
@@ -314,6 +335,11 @@ export default function GuestCheckOutModal({
                     <span>Post & Settle</span>
                   </button>
                 </div>
+                {paymentModeError && (
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#dc2626' }}>
+                    Please select a payment mode before settling.
+                  </span>
+                )}
               </div>
             </div>
           ) : (

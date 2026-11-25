@@ -36,6 +36,7 @@ export default function CreateReservationModal({
   // Reset/sync check-in time to current live time and dates when modal opens
   useEffect(() => {
     if (isOpen) {
+      setPaymentMethod('');
       if (!initialData?.checkInTime) {
         setCheckInTime(getCurrentTimeString());
       }
@@ -140,7 +141,7 @@ export default function CreateReservationModal({
   // Advance Payment
   const [collectAdvance, setCollectAdvance] = useState(true);
   const [advanceAmount, setAdvanceAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('UPI');
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
 
   // Duration computation
@@ -177,6 +178,11 @@ export default function CreateReservationModal({
     e.preventDefault();
     if (!guestName.trim()) {
       alert('Please enter guest full name');
+      return;
+    }
+
+    if (collectAdvance && Number(advanceAmount) > 0 && !paymentMethod) {
+      alert('Please select a payment mode for advance collection');
       return;
     }
 
@@ -607,8 +613,13 @@ export default function CreateReservationModal({
                             className="form-select"
                             value={paymentMethod}
                             onChange={(e) => setPaymentMethod(e.target.value)}
-                            style={{ fontSize: '0.78rem', padding: '0.4rem 0.5rem' }}
+                            style={{
+                              fontSize: '0.78rem',
+                              padding: '0.4rem 0.5rem',
+                              color: paymentMethod ? undefined : '#64748b'
+                            }}
                           >
+                            <option value="">Select Mode</option>
                             <option value="UPI">UPI / QR</option>
                             <option value="CASH">Cash</option>
                             <option value="CARD">Credit/Debit Card</option>

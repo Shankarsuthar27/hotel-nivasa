@@ -850,6 +850,31 @@ div.flex.items-center.gap-1\.5 {
   background-color: rgba(0, 0, 0, 0.08);
 }
 
+/* Broom Action Button - Exact OTAL PMS Specification */
+.hk-card-action-btn.hk-broom-btn {
+  color: #4ccaa0;
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.hk-card-action-btn.hk-broom-btn:hover {
+  background-color: rgba(76, 202, 160, 0.14);
+  color: #2bb386;
+}
+
+.hk-card-action-btn.hk-broom-btn.is-dirty {
+  color: #ef4444;
+}
+
+.hk-card-action-btn.hk-broom-btn.is-dirty:hover {
+  background-color: rgba(239, 68, 68, 0.14);
+  color: #dc2626;
+}
+
 /* Badges */
 .hk-badge-pill {
   display: inline-flex;

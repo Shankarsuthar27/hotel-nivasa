@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, CheckCircle2, ChevronDown } from 'lucide-react';
 
 /**
@@ -13,8 +13,18 @@ export default function SettleFolioModal({
   outstandingBalance = 0,
   reservationId
 }) {
-  const [paymentMethod, setPaymentMethod] = useState('UPI');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentMethodError, setPaymentMethodError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const selectRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setPaymentMethod('');
+      setPaymentMethodError(false);
+      setIsSubmitting(false);
+    }
+  }, [isOpen, folioNumber, reservationId]);
 
   if (!isOpen) return null;
 
@@ -23,6 +33,12 @@ export default function SettleFolioModal({
   const isZeroBalance = balanceNum <= 0.001;
 
   const handleConfirm = async () => {
+    if (!isZeroBalance && !paymentMethod) {
+      setPaymentMethodError(true);
+      selectRef.current?.focus();
+      return;
+    }
+    setPaymentMethodError(false);
     try {
       setIsSubmitting(true);
       if (onSettle) {
@@ -207,18 +223,22 @@ export default function SettleFolioModal({
             </label>
             <div style={{ position: 'relative', width: '100%' }}>
               <select
+                ref={selectRef}
                 id="settle-payment-method"
                 value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
+                onChange={(e) => {
+                  setPaymentMethod(e.target.value);
+                  if (e.target.value) setPaymentMethodError(false);
+                }}
                 style={{
                   width: '100%',
                   height: '40px',
                   padding: '0 36px 0 12px',
                   borderRadius: '8px',
-                  border: '1px solid #CBD5E1',
+                  border: paymentMethodError ? '1.5px solid #EF4444' : '1px solid #CBD5E1',
                   fontSize: '13.5px',
-                  fontWeight: 500,
-                  color: '#0F172A',
+                  fontWeight: paymentMethod ? 500 : 400,
+                  color: paymentMethod ? '#0F172A' : '#64748B',
                   backgroundColor: '#FFFFFF',
                   appearance: 'none',
                   WebkitAppearance: 'none',
@@ -228,11 +248,12 @@ export default function SettleFolioModal({
                   boxSizing: 'border-box'
                 }}
               >
-                <option value="UPI">UPI</option>
-                <option value="CASH">Cash</option>
-                <option value="CREDIT_CARD">Credit Card</option>
-                <option value="DEBIT_CARD">Debit Card</option>
-                <option value="NET_BANKING">Net Banking</option>
+                <option value="">Select Payment Mode</option>
+                <option value="UPI" style={{ color: '#0F172A' }}>UPI</option>
+                <option value="CASH" style={{ color: '#0F172A' }}>Cash</option>
+                <option value="CREDIT_CARD" style={{ color: '#0F172A' }}>Credit Card</option>
+                <option value="DEBIT_CARD" style={{ color: '#0F172A' }}>Debit Card</option>
+                <option value="NET_BANKING" style={{ color: '#0F172A' }}>Net Banking</option>
               </select>
               <ChevronDown
                 size={16}
@@ -246,6 +267,11 @@ export default function SettleFolioModal({
                 }}
               />
             </div>
+            {paymentMethodError && (
+              <p style={{ margin: '6px 0 0 0', fontSize: '12px', fontWeight: 600, color: '#DC2626' }}>
+                Please select a payment mode before settling.
+              </p>
+            )}
           </div>
         )}
 

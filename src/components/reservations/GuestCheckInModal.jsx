@@ -11,7 +11,8 @@ import {
   AlertCircle,
   AlertTriangle,
   Tag,
-  Star
+  Star,
+  Loader2
 } from 'lucide-react';
 import { pmsStore } from '../../services/pmsStore';
 import { normalizeDateStr, getCurrentTimeString, getAccurateArrivalTime } from '../../services/dateUtils';
@@ -34,6 +35,7 @@ export default function GuestCheckInModal({
   );
   const [assignSuccessMsg, setAssignSuccessMsg] = useState('');
   const [isAssigning, setIsAssigning] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Sync when reservation changes
   useEffect(() => {
@@ -175,6 +177,8 @@ export default function GuestCheckInModal({
 
   // Handle clicking primary "Check-in" button
   const handleCheckInSubmit = () => {
+    if (isSubmitting) return; // Prevent double-clicks
+
     let roomIdToUse = selectedRoomId || reservation.roomId;
     let targetRm = rooms.find((r) => r.id === roomIdToUse || r.roomNumber === roomIdToUse);
 
@@ -189,10 +193,14 @@ export default function GuestCheckInModal({
       return;
     }
 
+    setIsSubmitting(true);
     if (onConfirmCheckIn) {
       onConfirmCheckIn(reservation.id || reservation.bookingReference, targetRm.id);
     }
-    onClose();
+    setTimeout(() => {
+      setIsSubmitting(false);
+      onClose();
+    }, 150);
   };
 
   useEffect(() => {
@@ -609,7 +617,7 @@ export default function GuestCheckInModal({
           <button
             type="button"
             onClick={handleCheckInSubmit}
-            disabled={!selectedRoomId || selectedRoomOccupancy.isFull}
+            disabled={isSubmitting || !selectedRoomId || selectedRoomOccupancy.isFull}
             title={selectedRoomOccupancy.isFull ? 'Cannot check in: room is full' : 'Complete check-in'}
             style={{
               background: selectedRoomOccupancy.isFull ? '#94a3b8' : (!selectedRoomId ? '#cbd5e1' : '#2563eb'),
@@ -619,15 +627,20 @@ export default function GuestCheckInModal({
               padding: '0.6rem 1.6rem',
               fontSize: '0.92rem',
               fontWeight: 700,
-              cursor: (!selectedRoomId || selectedRoomOccupancy.isFull) ? 'not-allowed' : 'pointer',
-              opacity: (!selectedRoomId || selectedRoomOccupancy.isFull) ? 0.7 : 1,
+              cursor: (isSubmitting || !selectedRoomId || selectedRoomOccupancy.isFull) ? 'not-allowed' : 'pointer',
+              opacity: (isSubmitting || !selectedRoomId || selectedRoomOccupancy.isFull) ? 0.7 : 1,
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
               boxShadow: (selectedRoomOccupancy.isFull || !selectedRoomId) ? 'none' : '0 2px 6px rgba(37, 99, 235, 0.3)'
             }}
           >
-            {selectedRoomOccupancy.isFull ? (
+            {isSubmitting ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                <span>Checking In...</span>
+              </>
+            ) : selectedRoomOccupancy.isFull ? (
               <>
                 <AlertTriangle size={16} />
                 <span>Room is Full (Cannot Check-in)</span>

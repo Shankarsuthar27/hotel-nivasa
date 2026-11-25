@@ -1377,6 +1377,113 @@ body.has-res-modal-open .add-res-page {
   transform: translateY(0);
 }
 
+.btn-billing-checkin.loading,
+.btn-billing-confirm-outline.loading {
+  opacity: 0.8;
+  cursor: wait !important;
+  pointer-events: none;
+}
+
+/* Full-Screen Loading Overlay to prevent double clicks & provide instant visual feedback */
+.add-res-loading-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background-color: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease-out;
+  pointer-events: all;
+  user-select: none;
+}
+
+.add-res-loading-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 2.25rem 2.5rem;
+  max-width: 440px;
+  width: 90%;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: scaleUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.add-res-loading-icon-wrap {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: #ecfdf5;
+  border: 2px solid #a7f3d0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.25rem;
+  color: #059669;
+}
+
+.add-res-loading-icon-wrap.confirm-mode {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
+}
+
+.add-res-loading-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.5rem;
+}
+
+.add-res-loading-sub {
+  font-size: 0.88rem;
+  color: #64748b;
+  line-height: 1.5;
+  margin-bottom: 1.35rem;
+}
+
+.add-res-loading-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background: #f1f5f9;
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.add-res-loading-bar-fill {
+  height: 100%;
+  width: 45%;
+  background: linear-gradient(90deg, #059669, #10b981);
+  border-radius: 9999px;
+  animation: loadingBarSlide 1.2s infinite ease-in-out;
+}
+
+.add-res-loading-bar-fill.confirm-mode {
+  background: linear-gradient(90deg, #2563eb, #3b82f6);
+}
+
+@keyframes loadingBarSlide {
+  0% { transform: translateX(-100%); }
+  50% { width: 60%; }
+  100% { transform: translateX(250%); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 /* ==========================================================================
    Custom Calendar & Time Picker Controls (Pixel-matched to OTAL PMS)
    ========================================================================== */

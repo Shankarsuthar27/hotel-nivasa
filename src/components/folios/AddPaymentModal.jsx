@@ -41,20 +41,20 @@ export default function AddPaymentModal({
   const [selectedFolio, setSelectedFolio] = useState(folioNumber);
   const [paymentDate, setPaymentDate] = useState(getTodayIsoDate());
   const [paymentType, setPaymentType] = useState('Select');
-  const [paymentMethod, setPaymentMethod] = useState('CARD');
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [receiptNumber, setReceiptNumber] = useState('');
   const [amount, setAmount] = useState('');
   const [hasTypedAmount, setHasTypedAmount] = useState(false);
   const [description, setDescription] = useState('');
 
-  // Reset form when modal opens (do not auto-fill amount; require manual typing)
+  // Reset form when modal opens (do not auto-fill amount or payment method)
   useEffect(() => {
     if (isOpen) {
       setAmount('');
       setHasTypedAmount(false);
       setPaymentDate(getTodayIsoDate());
       setPaymentType('Select');
-      setPaymentMethod('CARD');
+      setPaymentMethod('');
       setReceiptNumber('');
       setDescription('');
       setSelectedFolio(folio?.folioNumber || reservation?.folioId || 'FOL_1');
@@ -97,15 +97,18 @@ export default function AddPaymentModal({
   ];
 
   const isTypeSelected = Boolean(paymentType && paymentType !== 'Select');
+  const isMethodSelected = Boolean(paymentMethod);
   const numAmount = parseFloat(amount);
   const isAmountValid = Boolean(hasTypedAmount && !isNaN(numAmount) && numAmount > 0);
-  const isAccessible = Boolean(isTypeSelected && isAmountValid);
+  const isAccessible = Boolean(isTypeSelected && isMethodSelected && isAmountValid);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!isAccessible) {
       if (!isTypeSelected) {
         alert('Please select a payment Type');
+      } else if (!isMethodSelected) {
+        alert('Please select a Payment Method');
       } else if (!isAmountValid) {
         alert('Please type a valid payment amount greater than 0.00');
       }
@@ -298,7 +301,7 @@ export default function AddPaymentModal({
               type="submit"
               disabled={!isAccessible}
               className={`add-payment-btn-submit ${isAccessible ? 'active' : ''}`}
-              title={!isAccessible ? 'Please select Type and manually type Amount to enable' : 'Post Payment'}
+              title={!isAccessible ? 'Please select Type, Payment Method, and manually type Amount to enable' : 'Post Payment'}
             >
               <Check size={16} strokeWidth={2.5} />
               <span>Post Payment</span>

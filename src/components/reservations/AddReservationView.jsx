@@ -19,7 +19,8 @@ import {
   ChevronUp,
   ChevronLeft,
   ChevronRight,
-  Check
+  Check,
+  Loader2
 } from 'lucide-react';
 import { calculateRoomTax, isDefaultTaxInclusive } from '../../services/taxEngine';
 import ReservationConfirmationModal from './ReservationConfirmationModal';
@@ -255,6 +256,8 @@ export default function AddReservationView({
   const [bookingSource, setBookingSource] = useState('walk-in');
   const [sendConfirmationMail, setSendConfirmationMail] = useState(true);
   const [createdReservation, setCreatedReservation] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingAction, setSubmittingAction] = useState(null); // 'checkin' | 'confirm'
 
   // Sync dates & times when explicit initialData is passed (e.g. clicking a specific cell on calendar)
   useEffect(() => {
@@ -270,9 +273,9 @@ export default function AddReservationView({
     }
   }, [initialData]);
 
-  // Remove scrollbar from page and lock scrolling when confirmation modal is shown
+  // Remove scrollbar from page and lock scrolling when confirmation modal or loading screen is shown
   useEffect(() => {
-    if (!createdReservation) return;
+    if (!createdReservation && !isSubmitting) return;
 
     const originalBodyOverflow = document.body.style.overflow;
     const originalHtmlOverflow = document.documentElement.style.overflow;
@@ -297,7 +300,7 @@ export default function AddReservationView({
         overlay.classList.remove('has-modal-open');
       }
     };
-  }, [createdReservation]);
+  }, [createdReservation, isSubmitting]);
 
   const handleCheckInChange = (newDate) => {
     setCheckInDate(newDate);
@@ -741,7 +744,7 @@ export default function AddReservationView({
   const [guestGstin, setGuestGstin] = useState('');
   const [collectAdvance, setCollectAdvance] = useState(false);
   const [advanceAmount, setAdvanceAmount] = useState('');
-  const [paymentMode, setPaymentMode] = useState('CASH');
+  const [paymentMode, setPaymentMode] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
 
   // Calculations: Nights
@@ -827,6 +830,8 @@ export default function AddReservationView({
   // Handle Form Submit (Supports 'in_house' direct check-in or 'confirmed')
   const handleConfirmBooking = async (e, overrideStatus = null) => {
     e?.preventDefault();
+    if (isSubmitting) return; // Prevent double-clicks / repeated submissions
+
     if (!firstName.trim()) {
       alert('Please enter guest First Name');
       return;
@@ -847,6 +852,11 @@ export default function AddReservationView({
 
     if (overrideStatus === 'in_house' && !isRoomAssignedAndAvailable) {
       alert('Please assign an available room in Room Configuration to check-in directly.');
+      return;
+    }
+
+    if (collectAdvance && advanceVal > 0 && !paymentMode) {
+      alert('Please select a Payment Method for the advance payment.');
       return;
     }
 
@@ -944,11 +954,22 @@ export default function AddReservationView({
       }
     };
 
-    if (onSubmit) {
-      const res = await onSubmit(bookingPayload);
-      if (res) {
-        setCreatedReservation(res);
+    setIsSubmitting(true);
+    setSubmittingAction(overrideStatus === 'in_house' ? 'checkin' : 'confirm');
+
+    try {
+      if (onSubmit) {
+        const res = await onSubmit(bookingPayload);
+        if (res) {
+          setCreatedReservation(res);
+        }
       }
+    } catch (err) {
+      console.error('[AddReservationView] Booking submission error:', err);
+      alert(err?.message || 'Failed to process booking. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+      setSubmittingAction(null);
     }
   };
 
@@ -1834,7 +1855,9 @@ export default function AddReservationView({
                       className={`add-res-custom-select-btn ${activeDropdown === 'paymentMethod' ? 'open' : ''}`}
                       onClick={() => setActiveDropdown(activeDropdown === 'paymentMethod' ? null : 'paymentMethod')}
                     >
-                      <span>{paymentMode || 'CASH'}</span>
+                      <span style={!paymentMode ? { color: '#94a3b8', fontWeight: 400 } : undefined}>
+                        {paymentMode || 'Select Payment Mode'}
+                      </span>
                       {activeDropdown === 'paymentMethod' ? (
                         <ChevronUp size={15} color="#475569" />
                       ) : (
@@ -1845,7 +1868,7 @@ export default function AddReservationView({
                     {activeDropdown === 'paymentMethod' && (
                       <div className="add-res-custom-popover">
                         {['CARD', 'CASH', 'UPI', 'BANK', 'TDS'].map((method) => {
-                          const isSelected = (paymentMode || 'CASH') === method;
+                          const isSelected = paymentMode === method;
                           return (
                             <div
                               key={method}
@@ -1899,23 +1922,38 @@ export default function AddReservationView({
           <div className="add-res-billing-actions">
             <button
               type="button"
-              className={`btn-billing-checkin ${isRoomAssignedAndAvailable ? 'active' : 'disabled'}`}
+              className={`btn-billing-checkin ${isRoomAssignedAndAvailable ? 'active' : 'disabled'} ${isSubmitting && submittingAction === 'checkin' ? 'loading' : ''}`}
               onClick={(e) => handleConfirmBooking(e, 'in_house')}
-              disabled={!isRoomAssignedAndAvailable}
+              disabled={isSubmitting || !isRoomAssignedAndAvailable}
               title={
                 isRoomAssignedAndAvailable
                   ? 'Direct Check-In (In-House)'
                   : 'Assign an available room to enable Check-In'
               }
             >
-              Check-In
+              {isSubmitting && submittingAction === 'checkin' ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" style={{ marginRight: '6px' }} />
+                  Checking In...
+                </>
+              ) : (
+                'Check-In'
+              )}
             </button>
             <button
               type="button"
-              className="btn-billing-confirm-outline"
+              className={`btn-billing-confirm-outline ${isSubmitting && submittingAction === 'confirm' ? 'loading' : ''}`}
               onClick={(e) => handleConfirmBooking(e, 'confirmed')}
+              disabled={isSubmitting}
             >
-              Confirm Booking
+              {isSubmitting && submittingAction === 'confirm' ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" style={{ marginRight: '6px' }} />
+                  Confirming...
+                </>
+              ) : (
+                'Confirm Booking'
+              )}
             </button>
           </div>
         </div>
@@ -1940,6 +1978,28 @@ export default function AddReservationView({
             navigate(`/reservations/${targetId}/edit`);
           }}
         />
+      )}
+
+      {/* Full-Screen Loading Screen / Double-Click Shield */}
+      {isSubmitting && (
+        <div className="add-res-loading-backdrop" aria-busy="true" aria-live="assertive">
+          <div className="add-res-loading-card">
+            <div className={`add-res-loading-icon-wrap ${submittingAction === 'confirm' ? 'confirm-mode' : ''}`}>
+              <Loader2 size={34} className="animate-spin" />
+            </div>
+            <div className="add-res-loading-title">
+              {submittingAction === 'checkin' ? 'Checking In Guest...' : 'Confirming Reservation...'}
+            </div>
+            <div className="add-res-loading-sub">
+              {submittingAction === 'checkin'
+                ? 'Allocating room, updating live occupancy and generating guest folio. Please wait...'
+                : 'Securing dates, calculating taxes and generating reservation reference. Please wait...'}
+            </div>
+            <div className="add-res-loading-bar-wrap">
+              <div className={`add-res-loading-bar-fill ${submittingAction === 'confirm' ? 'confirm-mode' : ''}`} />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

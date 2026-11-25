@@ -481,7 +481,12 @@ export default function App() {
             }}
             onSubmit={async (bookingData) => {
               const newRes = await createReservationViaApi(bookingData);
-              showToast(`🎉 Reservation ${newRes.bookingReference || '#RES_CONFIRMED'} confirmed for ${newRes.primaryGuest?.name || 'Guest'}!`);
+              const isDirectCheckIn = (bookingData.status || '').toLowerCase() === 'in_house';
+              if (isDirectCheckIn) {
+                showToast(`🛎️ Guest ${newRes.primaryGuest?.name || 'Guest'} checked in directly to Room ${newRes.roomNumber || 'Assigned'} (${newRes.bookingReference || '#RES_CONFIRMED'})!`);
+              } else {
+                showToast(`🎉 Reservation ${newRes.bookingReference || '#RES_CONFIRMED'} confirmed for ${newRes.primaryGuest?.name || 'Guest'}!`);
+              }
               setSlotPrefillData(null);
               return newRes;
             }}
