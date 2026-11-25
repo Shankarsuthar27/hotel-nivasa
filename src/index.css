@@ -1382,6 +1382,20 @@ body.has-res-modal-open .tape-chart-container {
   gap: 0.45rem;
 }
 
+.sidebar-brand-logo-img {
+  height: 34px;
+  width: auto;
+  max-width: 155px;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.sidebar-brand-title:hover .sidebar-brand-logo-img {
+  opacity: 0.92;
+}
+
 .brand-logo-symbol {
   width: 28px;
   height: 28px;

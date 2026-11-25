@@ -17,7 +17,7 @@ export default function NewAnnouncementModal({ isOpen, onClose, onSubmit }) {
       message: message.trim(),
       priority,
       shift,
-      author: 'Astha India',
+      author: 'HOTEL NIVASA',
       authorRole: 'Owner',
       createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     });

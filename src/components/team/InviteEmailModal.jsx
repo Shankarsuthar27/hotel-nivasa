@@ -6,7 +6,7 @@ export default function InviteEmailModal({
   onClose,
   member,
   organizationName = 'HOTEL NIVASA',
-  inviterName = 'Astha India',
+  inviterName = 'HOTEL NIVASA',
   onNavigateToAccept
 }) {
   const [copied, setCopied] = useState(false);

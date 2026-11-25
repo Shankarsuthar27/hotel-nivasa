@@ -558,6 +558,10 @@ export default function ReservationsView({
             ? (reservations.find((r) => r.id === drawerReservation.id) || drawerReservation)
             : null
         }
+        onCheckOut={(res) => {
+          setDrawerReservation(null);
+          setCheckOutModalRes(res);
+        }}
         onEditReservation={(res) => {
           setDrawerReservation(null);
           handleEditReservation(res);

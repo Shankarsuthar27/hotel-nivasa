@@ -737,6 +737,8 @@ export default function AddReservationView({
   // Billing & Advance Payment State
   const [taxExempt, setTaxExempt] = useState(false);
   const [billTo, setBillTo] = useState('Guest');
+  const [company, setCompany] = useState('');
+  const [guestGstin, setGuestGstin] = useState('');
   const [collectAdvance, setCollectAdvance] = useState(false);
   const [advanceAmount, setAdvanceAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState('CASH');
@@ -906,6 +908,9 @@ export default function AddReservationView({
         };
       }),
       status: targetStatus,
+      billTo: billTo || 'Guest',
+      company: company || '',
+      guestGstin: guestGstin || '',
       bookingSource: bookingSource.toUpperCase().replace('-', '_'),
       marketSegment: marketSegment || 'corporate',
       isVIP,
@@ -913,7 +918,8 @@ export default function AddReservationView({
       noPosting,
       isComplimentary,
       isTaxExempt: taxExempt,
-      notes: specialRequests,
+      specialRequests: specialRequests || '',
+      notes: specialRequests || '',
       sendConfirmationMail: !!sendConfirmationMail,
       advanceAmount: advanceVal,
       paymentMethod: paymentMode,
@@ -926,6 +932,8 @@ export default function AddReservationView({
         phone: phone.trim(),
         countryCode,
         email: email.trim(),
+        gstin: guestGstin.trim(),
+        company: company || '',
         nationality,
         idType,
         idNumber: idNumber.trim(),
@@ -1742,10 +1750,49 @@ export default function AddReservationView({
                     <span>Guest</span>
                     {billTo === 'Guest' && <Check size={15} color="#3b82f6" strokeWidth={2.5} />}
                   </div>
+                  <div
+                    className={`add-res-custom-popover-item ${billTo === 'Company' ? 'selected' : ''}`}
+                    onClick={() => {
+                      setBillTo('Company');
+                      setActiveDropdown(null);
+                    }}
+                  >
+                    <span>Company</span>
+                    {billTo === 'Company' && <Check size={15} color="#3b82f6" strokeWidth={2.5} />}
+                  </div>
                 </div>
               )}
             </div>
           </div>
+
+          {billTo === 'Company' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+              <div className="add-res-billto-row">
+                <span className="add-res-billto-label">Company</span>
+                <select
+                  className="add-res-input"
+                  style={{ fontSize: '13px', padding: '6px 10px', height: '34px' }}
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                >
+                  <option value="">Select Company</option>
+                  <option value="tcs">Tata Consultancy Services</option>
+                  <option value="infosys">Infosys Limited</option>
+                </select>
+              </div>
+              <div className="add-res-billto-row">
+                <span className="add-res-billto-label">Guest GSTIN</span>
+                <input
+                  type="text"
+                  className="add-res-input"
+                  style={{ fontSize: '13px', padding: '6px 10px', height: '34px' }}
+                  placeholder="Enter Guest GSTIN"
+                  value={guestGstin}
+                  onChange={(e) => setGuestGstin(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Advance Payment Card */}
           <div className="add-res-advance-box">

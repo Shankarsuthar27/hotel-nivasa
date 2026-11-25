@@ -461,7 +461,7 @@ export function scanStayoverFolios(
  * 5. Sync to Cloud Firestore and lock the audited business date
  */
 export async function executeNightAuditAtomic({
-  auditorName = 'Astha India',
+  auditorName = 'HOTEL NIVASA',
   managerNotes = '',
   stayoverCharges = [],
   customTaxRate = null

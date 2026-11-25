@@ -1582,7 +1582,7 @@ export function generateNightAuditExport(nightAudits = []) {
       'Audit Date': '26 Oct 2026',
       'New Business Date': '27 Oct 2026',
       'Status': 'Completed',
-      'Started': 'Oct 27, 2026 01:00 by Astha India',
+      'Started': 'Oct 27, 2026 01:00 by HOTEL NIVASA',
       'Completed': 'Nov 3, 2026 12:03 by shankar l',
       'Charges Posted': 2,
       'Revenue (₹)': 5250,

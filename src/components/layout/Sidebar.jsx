@@ -43,14 +43,14 @@ export default function Sidebar({
     }
   }, [activeTab]);
 
-  const propertyName = property?.name || 'HOTEL NIVASA';
-  const propertyTagline = property?.tagline || 'HOTEL NIVASA';
-  const propertyInitials = property?.initials || 'HN';
+  const propertyName = (property?.name === 'HOTEL ASTHA' || property?.name === 'Hotel Astha' || !property?.name) ? 'HOTEL NIVASA' : property.name;
+  const propertyTagline = (property?.tagline === 'HOTEL ASTHA' || property?.tagline === 'Hotel Astha' || !property?.tagline) ? 'HOTEL NIVASA' : property.tagline;
+  const propertyInitials = (property?.initials === 'HA' || property?.initials === 'AI' || !property?.initials) ? 'HN' : property.initials;
 
   const activeUser = currentUser || property?.userProfile || {
-    name: 'Astha India',
+    name: 'HOTEL NIVASA',
     role: 'Owner',
-    initials: 'AI'
+    initials: 'HN'
   };
 
   const navItems = [
@@ -122,7 +122,7 @@ export default function Sidebar({
 
   return (
     <aside className={`sidebar-light ${isCollapsed ? 'collapsed' : ''}`}>
-      {/* 1. Header Bar: Hamburger + Modern Brand Logo (without OTAL name) */}
+      {/* 1. Header Bar: Hamburger + Asthastay Brand Logo */}
       <div className="sidebar-brand-row">
         <button
           className="sidebar-menu-btn"
@@ -131,8 +131,17 @@ export default function Sidebar({
         >
           <Menu size={18} color="#0f172a" />
         </button>
-        <div className="sidebar-brand-title">
-          <span className="brand-logo-text" style={{ color: '#2563eb', fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.02em' }}>OTAL</span>
+        <div
+          className="sidebar-brand-title"
+          onClick={() => setActiveTab && setActiveTab('calendar')}
+          style={{ cursor: 'pointer' }}
+          title="Asthastay"
+        >
+          <img
+            src="/logo/Gemini_Generated_Image_bxm6yabxm6yabxm6.png"
+            alt="Asthastay"
+            className="sidebar-brand-logo-img"
+          />
         </div>
       </div>
 
@@ -268,10 +277,10 @@ export default function Sidebar({
             title="Click to switch active role or profile"
           >
             <div className="user-avatar-ai">
-              {activeUser.initials || 'AI'}
+              {(activeUser.initials === 'AI' || !activeUser.initials) ? 'HN' : activeUser.initials}
             </div>
             <div className="user-details">
-              <div className="user-name">{activeUser.name}</div>
+              <div className="user-name">{activeUser.name === 'Astha India' ? 'HOTEL NIVASA' : activeUser.name}</div>
               <div className="user-role">{activeUser.role}</div>
             </div>
           </div>
@@ -331,7 +340,7 @@ export default function Sidebar({
                     }}
                   >
                     <span>👑</span>
-                    <span>Astha India (Owner)</span>
+                    <span>HOTEL NIVASA (Owner)</span>
                   </div>
 
                   {/* Team Members */}

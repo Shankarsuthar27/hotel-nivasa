@@ -95,10 +95,9 @@ export default function MyTeamView({
   const pageSize = 10;
 
   // Filter team members:
-  // Exclude the account owner (who is the master admin/inviter)
-  // Match selected property and search query
-  const eligibleMembers = teamMembers.filter(
-    (m) => m && m.role !== 'Owner' && m.id !== 'usr_02' && m.name !== 'Shankar L'
+  // Include all team members (including Owner HOTEL NIVASA)
+  const eligibleMembers = (teamMembers || []).filter(
+    (m) => m && m.id !== 'usr_02' && m.name !== 'Shankar L'
   );
 
   const filteredMembers = eligibleMembers.filter((m) => {
@@ -114,6 +113,7 @@ export default function MyTeamView({
     const matchesProp =
       memberProps.length === 0 ||
       memberProps.includes(targetProp) ||
+      memberProps.includes('HOTEL NIVASA') ||
       targetProp === 'ALL';
 
     // Search filter
@@ -496,35 +496,39 @@ export default function MyTeamView({
                         <Lock size={14} color="#334155" />
                         <span>Manage Permissions</span>
                       </button>
-                      <button
-                        type="button"
-                        className="my-team-action-item"
-                        onClick={() => {
-                          setOpenActionMenuId(null);
-                          if (onToggleStaffStatus) {
-                            onToggleStaffStatus(member.id);
-                          }
-                          if (showToast) {
-                            showToast(
-                              isSuspended
-                                ? `Reactivated ${member.name}'s account.`
-                                : `Suspended ${member.name}'s account.`
-                            );
-                          }
-                        }}
-                      >
-                        <Ban size={14} color={isSuspended ? '#059669' : '#D97706'} />
-                        <span>{isSuspended ? 'Reactivate Account' : 'Suspend Account'}</span>
-                      </button>
-                      <div className="my-team-menu-divider" />
-                      <button
-                        type="button"
-                        className="my-team-action-item danger"
-                        onClick={() => handleRemoveActiveMember(member)}
-                      >
-                        <Trash2 size={14} color="#EF4444" />
-                        <span>Remove Member</span>
-                      </button>
+                      {member.role !== 'Owner' && (
+                        <>
+                          <button
+                            type="button"
+                            className="my-team-action-item"
+                            onClick={() => {
+                              setOpenActionMenuId(null);
+                              if (onToggleStaffStatus) {
+                                onToggleStaffStatus(member.id);
+                              }
+                              if (showToast) {
+                                showToast(
+                                  isSuspended
+                                    ? `Reactivated ${member.name}'s account.`
+                                    : `Suspended ${member.name}'s account.`
+                                );
+                              }
+                            }}
+                          >
+                            <Ban size={14} color={isSuspended ? '#059669' : '#D97706'} />
+                            <span>{isSuspended ? 'Reactivate Account' : 'Suspend Account'}</span>
+                          </button>
+                          <div className="my-team-menu-divider" />
+                          <button
+                            type="button"
+                            className="my-team-action-item danger"
+                            onClick={() => handleRemoveActiveMember(member)}
+                          >
+                            <Trash2 size={14} color="#EF4444" />
+                            <span>Remove Member</span>
+                          </button>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
@@ -605,7 +609,7 @@ export default function MyTeamView({
         onClose={() => setPreviewEmailMember(null)}
         member={previewEmailMember}
         organizationName={currentProperty}
-        inviterName="Astha India"
+        inviterName="HOTEL NIVASA"
         onNavigateToAccept={(tok) => {
           setPreviewEmailMember(null);
           if (onNavigateToAccept) onNavigateToAccept(tok);

@@ -322,7 +322,7 @@ export default function NightAuditPage({ onNavigate }) {
     setIsExecuting(true);
     try {
       const result = await executeNightAuditAtomic({
-        auditorName: 'Astha India',
+        auditorName: 'HOTEL NIVASA',
         managerNotes: 'Daily end-of-day audit finalized.',
         stayoverCharges
       });

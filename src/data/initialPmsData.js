@@ -33,9 +33,9 @@ export const initialProperty = {
   fnbSacCode: '996331', // F&B SAC
   terms: [],
   userProfile: {
-    name: 'Astha India',
+    name: 'HOTEL NIVASA',
     role: 'Owner',
-    initials: 'AI'
+    initials: 'HN'
   }
 };
 
@@ -170,8 +170,8 @@ export const initialReservations = [
     roomNumber: '',
     roomTypeId: 'rt_supirior',
     roomTypeName: 'SUPIRIOR',
-    ratePlanCode: 'BAR_EP',
-    ratePlanName: 'test plan',
+    ratePlanCode: 'STR',
+    ratePlanName: 'Starting',
     checkInDate: '2026-11-12',
     checkOutDate: '2026-11-13',
     checkInTime: '12:30',
@@ -211,8 +211,8 @@ export const initialReservations = [
     roomNumber: '',
     roomTypeId: 'rt_deluxe',
     roomTypeName: 'Delux Room',
-    ratePlanCode: 'BAR_EP',
-    ratePlanName: 'test plan',
+    ratePlanCode: 'STR',
+    ratePlanName: 'Starting',
     checkInDate: '2026-11-12',
     checkOutDate: '2026-11-12',
     checkInTime: '10:00',
@@ -252,8 +252,8 @@ export const initialReservations = [
     roomNumber: '',
     roomTypeId: 'rt_deluxe',
     roomTypeName: 'Delux Room',
-    ratePlanCode: 'BAR_EP',
-    ratePlanName: 'test plan',
+    ratePlanCode: 'STR',
+    ratePlanName: 'Starting',
     checkInDate: '2026-11-12',
     checkOutDate: '2026-11-13',
     checkInTime: '12:30',
@@ -379,8 +379,8 @@ export const initialReservations = [
     roomNumber: '',
     roomTypeId: 'rt_deluxe',
     roomTypeName: 'Delux Room',
-    ratePlanCode: 'test_plan',
-    ratePlanName: 'test plan',
+    ratePlanCode: 'STR',
+    ratePlanName: 'Starting',
     checkInDate: '2026-10-26', // Mon 26, Oct 2026
     checkOutDate: '2026-10-26', // Mon 26, Oct 2026
     checkInTime: '13:08',
@@ -424,8 +424,8 @@ export const initialReservations = [
     roomNumber: '',
     roomTypeId: 'rt_deluxe',
     roomTypeName: 'Delux Room',
-    ratePlanCode: 'BAR_EP',
-    ratePlanName: 'test plan',
+    ratePlanCode: 'STR',
+    ratePlanName: 'Starting',
     checkInDate: '2026-10-26', // Mon 26, Oct 2026
     checkOutDate: '2026-10-26', // Mon 26, Oct 2026
     checkInTime: '13:02',
@@ -696,10 +696,11 @@ export const initialOtaChannels = [
 export const initialTeamMembers = [
   {
     id: 'usr_01',
-    name: 'Astha India',
+    name: 'HOTEL NIVASA',
     email: 'owner@hotelastha.com',
     role: 'Owner',
-    avatar: '👩‍💼',
+    avatar: '🏢',
+    initials: 'HN',
     status: 'ACTIVE',
     properties: ['HOTEL NIVASA'],
     permissions: {
@@ -724,8 +725,8 @@ export const initialNightAudits = [
     startedTime: '24 Nov 2026 09:40 pm',
     completedTime: '24 Nov 2026 09:42 pm',
     completedAt: '24 Nov 2026 09:42 pm',
-    startedBy: 'Astha India',
-    performedBy: 'Astha India',
+    startedBy: 'HOTEL NIVASA',
+    performedBy: 'HOTEL NIVASA',
     occupiedRooms: 0,
     vacantRooms: 40,
     occupancyPercent: 0,
@@ -802,8 +803,8 @@ export const initialNightAudits = [
     startedTime: '27 Oct 2026 01:00 am',
     completedTime: '27 Oct 2026 01:15 am',
     completedAt: 'Oct 27, 2026 01:15',
-    startedBy: 'Astha India',
-    performedBy: 'Astha India',
+    startedBy: 'HOTEL NIVASA',
+    performedBy: 'HOTEL NIVASA',
     occupiedRooms: 2,
     vacantRooms: 2,
     occupancyPercent: 25,
@@ -940,7 +941,7 @@ export const initialAuditTrail = [
   {
     id: 'at_01',
     timestamp: '2026-10-24 10:15:30',
-    actor: 'Astha India',
+    actor: 'HOTEL NIVASA',
     action: 'CHECK_IN',
     entity: 'RESERVATION',
     entityId: '#RES_001',
@@ -949,7 +950,7 @@ export const initialAuditTrail = [
   {
     id: 'at_02',
     timestamp: '2026-10-24 09:40:12',
-    actor: 'Astha India',
+    actor: 'HOTEL NIVASA',
     action: 'CHECK_OUT',
     entity: 'RESERVATION',
     entityId: '#RES_002',

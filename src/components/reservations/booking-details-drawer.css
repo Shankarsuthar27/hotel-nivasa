@@ -199,6 +199,34 @@
   white-space: nowrap;
 }
 
+.booking-details-checkout-btn {
+  width: 100%;
+  border: none;
+  background-color: #dc2626;
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.2);
+}
+
+.booking-details-checkout-btn:hover {
+  background-color: #b91c1c;
+}
+
+.booking-details-checkout-btn:active {
+  transform: scale(0.99);
+}
+
 .booking-details-edit-btn {
   width: 100%;
   border: 1.5px solid #2563eb;

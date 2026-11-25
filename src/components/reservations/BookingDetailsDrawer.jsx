@@ -14,9 +14,13 @@ import {
   ArrowLeftRight,
   SlidersHorizontal,
   MessageSquare,
-  Ban
+  Ban,
+  Building2,
+  Briefcase,
+  LogOut
 } from 'lucide-react';
 import CustomTimePickerModal from '../common/CustomTimePickerModal';
+import GuestCheckOutModal from './GuestCheckOutModal';
 import { pmsStore } from '../../services/pmsStore';
 import { formatTimeToHhMm, getAccurateArrivalTime } from '../../services/dateUtils';
 
@@ -24,7 +28,8 @@ export default function BookingDetailsDrawer({
   isOpen,
   onClose,
   reservation,
-  onEditReservation
+  onEditReservation,
+  onCheckOut
 }) {
   const bodyRef = useRef(null);
   const rightColRef = useRef(null);
@@ -33,6 +38,7 @@ export default function BookingDetailsDrawer({
   const [localCheckOutTime, setLocalCheckOutTime] = useState('');
   const [isEditingArrival, setIsEditingArrival] = useState(false);
   const [isEditingDeparture, setIsEditingDeparture] = useState(false);
+  const [isCheckOutModalOpen, setIsCheckOutModalOpen] = useState(false);
 
   // Lock background scrolling when drawer is open
   useEffect(() => {
@@ -135,7 +141,12 @@ export default function BookingDetailsDrawer({
   const isLocked = isCancelled || isNoShow;
 
   const sourceLabel = (reservation.bookingSource === 'WALK_IN' ? 'walk-in' : (reservation.bookingSource || 'walk-in')).toLowerCase();
-  const ratePlanLabel = (reservation.ratePlanName || reservation.ratePlanCode || 'test plan').toLowerCase().replace(/_/g, ' ');
+  const ratePlanLabel = (reservation.ratePlanName || reservation.ratePlanCode || 'BAR_CP').toLowerCase().replace(/_/g, ' ');
+  const marketSegmentLabel = (reservation.marketSegment || 'corporate').toLowerCase();
+  const companyLabel = reservation.company
+    ? (reservation.company === 'tcs' ? 'Tata Consultancy Services' : reservation.company === 'infosys' ? 'Infosys Limited' : reservation.company)
+    : (reservation.billTo === 'Company' ? 'Company' : 'Guest');
+  const gstinLabel = reservation.guestGstin || reservation.primaryGuest?.gstin || '';
   const hasCustomNotes = Boolean(
     reservation.specialRequests &&
     reservation.specialRequests.trim() !== '' &&
@@ -210,21 +221,42 @@ export default function BookingDetailsDrawer({
                 </div>
               </div>
 
-              {/* Edit / View Reservation Action - Disabled for Cancelled & No-Show Reservations */}
+              {/* Action Buttons: Check Out (when In-House or staying) + Edit Reservation */}
               {!isCancelled && !isNoShow ? (
-                <button
-                  type="button"
-                  className="booking-details-edit-btn"
-                  onClick={() => {
-                    onClose();
-                    if (onEditReservation) {
-                      onEditReservation(reservation);
-                    }
-                  }}
-                >
-                  <Edit3 size={15} />
-                  <span>Edit Reservation</span>
-                </button>
+                <>
+                  {!isCheckedOut && (
+                    <button
+                      type="button"
+                      className="booking-details-checkout-btn"
+                      onClick={() => {
+                        if (onCheckOut) {
+                          onClose();
+                          onCheckOut(reservation);
+                        } else {
+                          setIsCheckOutModalOpen(true);
+                        }
+                      }}
+                      title={`Check out Room ${reservation.roomNumber || ''}`}
+                    >
+                      <LogOut size={16} strokeWidth={2.4} />
+                      <span>Check Out</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    className="booking-details-edit-btn"
+                    onClick={() => {
+                      onClose();
+                      if (onEditReservation) {
+                        onEditReservation(reservation);
+                      }
+                    }}
+                  >
+                    <Edit3 size={15} />
+                    <span>Edit Reservation</span>
+                  </button>
+                </>
               ) : (
                 <div
                   className="booking-details-cancelled-tag"
@@ -440,6 +472,33 @@ export default function BookingDetailsDrawer({
                     <SlidersHorizontal size={18} />
                   </div>
                 </div>
+
+                {/* Tile 8: Business Account */}
+                <div className="booking-info-tile">
+                  <div className="booking-info-tile-content">
+                    <span className="booking-info-tile-label">Business Account</span>
+                    <span className="booking-info-tile-val font-bold">{companyLabel}</span>
+                    {gstinLabel ? (
+                      <span className="booking-info-tile-subtext" style={{ fontSize: '11px', color: '#64748b' }}>
+                        GSTIN: {gstinLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="booking-info-tile-icon-box">
+                    <Building2 size={18} />
+                  </div>
+                </div>
+
+                {/* Tile 9: Market Segment */}
+                <div className="booking-info-tile">
+                  <div className="booking-info-tile-content">
+                    <span className="booking-info-tile-label">Market Segment</span>
+                    <span className="booking-info-tile-val font-bold">{marketSegmentLabel}</span>
+                  </div>
+                  <div className="booking-info-tile-icon-box">
+                    <Briefcase size={18} />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -459,6 +518,27 @@ export default function BookingDetailsDrawer({
           </div>
         </div>
       </div>
+
+      {/* Guest Check Out Modal (when check out is initiated from drawer) */}
+      {isCheckOutModalOpen && (
+        <GuestCheckOutModal
+          isOpen={isCheckOutModalOpen}
+          onClose={() => setIsCheckOutModalOpen(false)}
+          reservation={reservation}
+          onSettleFolio={(resId, mode, ref) => {
+            pmsStore.settleFolio(reservation.folioId || resId, mode, 0, ref);
+          }}
+          onConfirmCheckOut={(resId) => {
+            const resResult = pmsStore.checkOutReservation(resId);
+            if (resResult && resResult.success === false) {
+              alert(resResult.message);
+              return;
+            }
+            setIsCheckOutModalOpen(false);
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 

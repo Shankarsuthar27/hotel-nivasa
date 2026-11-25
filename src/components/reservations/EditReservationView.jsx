@@ -708,12 +708,27 @@ export default function EditReservationView({
   const [bookingForm, setBookingForm] = useState({
     billTo: reservation.billTo || 'Guest',
     company: reservation.company || '',
-    guestGstin: reservation.primaryGuest?.gstin || '',
+    guestGstin: reservation.guestGstin || reservation.primaryGuest?.gstin || '',
     marketSegment: reservation.marketSegment?.toLowerCase() || 'corporate',
     bookingSource: reservation.bookingSource === 'WALK_IN' ? 'walk-in' : (reservation.bookingSource?.toLowerCase() || 'walk-in'),
-    specialRequests: reservation.specialRequests || '',
+    specialRequests: reservation.specialRequests || reservation.notes || '',
     applyToAllRooms: false
   });
+
+  // Keep bookingForm synced when currentRes updates
+  useEffect(() => {
+    if (currentRes) {
+      setBookingForm({
+        billTo: currentRes.billTo || 'Guest',
+        company: currentRes.company || '',
+        guestGstin: currentRes.guestGstin || currentRes.primaryGuest?.gstin || '',
+        marketSegment: currentRes.marketSegment?.toLowerCase() || 'corporate',
+        bookingSource: currentRes.bookingSource === 'WALK_IN' ? 'walk-in' : (currentRes.bookingSource?.toLowerCase() || 'walk-in'),
+        specialRequests: currentRes.specialRequests || currentRes.notes || '',
+        applyToAllRooms: false
+      });
+    }
+  }, [currentRes?.id, currentRes?.billTo, currentRes?.company, currentRes?.guestGstin, currentRes?.marketSegment, currentRes?.bookingSource, currentRes?.specialRequests, currentRes?.notes]);
 
   // Workflow & Folio Modal States
   const [showAddChargeModal, setShowAddChargeModal] = useState(false);
@@ -865,7 +880,7 @@ export default function EditReservationView({
         return {
           stay: dmy,
           room: currentRes.roomNumber || roomNum,
-          ratePlan: currentRes.ratePlanName || currentRes.ratePlan || currentRes.ratePlanCode || 'test plan',
+          ratePlan: currentRes.ratePlanName || currentRes.ratePlan || currentRes.ratePlanCode || 'Starting',
           pax: `${currentRes.adults || 1}/${currentRes.children || 0}`,
           charge: chargeVal.toFixed(2),
           tax: taxVal.toFixed(2),
@@ -894,7 +909,7 @@ export default function EditReservationView({
       list.push({
         stay: formatSlashedDate(iso || currentRes.checkInDate),
         room: currentRes.roomNumber || roomNum,
-        ratePlan: currentRes.ratePlanName || currentRes.ratePlan || currentRes.ratePlanCode || 'test plan',
+        ratePlan: currentRes.ratePlanName || currentRes.ratePlan || currentRes.ratePlanCode || 'Starting',
         pax: `${currentRes.adults || 1}/${currentRes.children || 0}`,
         charge: dailyBase.toFixed(2),
         tax: dailyTax.toFixed(2),
@@ -970,7 +985,7 @@ export default function EditReservationView({
       const dateStr = a.timestamp
         ? String(a.timestamp).split(/[T ]/)[0]
         : (meta.date || getTodayIsoDate());
-      const author = a.actor || a.userName || 'Astha India';
+      const author = a.actor || a.userName || 'HOTEL NIVASA';
 
       if (act === 'NIGHT_AUDIT_PROCESSED' || a.action === 'NIGHT_AUDIT_PROCESSED') {
         return {
@@ -1226,7 +1241,7 @@ export default function EditReservationView({
       title: 'Rate Overridden',
       time: '02:48:24 PM',
       date: '2026-11-16',
-      author: 'Astha India',
+      author: 'HOTEL NIVASA',
       affectsRoom: true,
       value: 'Date: 2026-11-17   amount: 0   tax Amount: 0',
       affectedDates: ['2026-11-17']
@@ -1239,7 +1254,7 @@ export default function EditReservationView({
       title: 'Rate Overridden',
       time: '01:51:53 PM',
       date: '2026-11-16',
-      author: 'Astha India',
+      author: 'HOTEL NIVASA',
       affectsRoom: true,
       oldValue: 'Date: 2026-11-14   amount: 0   tax Amount: 0',
       newValue: 'Date: 2026-11-14   amount: 100000   tax Amount: 0',
@@ -1253,7 +1268,7 @@ export default function EditReservationView({
       title: 'Stay Extended',
       time: '01:48:49 PM',
       date: '2026-11-16',
-      author: 'Astha India',
+      author: 'HOTEL NIVASA',
       affectsRoom: false,
       oldDates: '2026-11-13 → 2026-11-17',
       newDates: '2026-11-13 → 2026-11-18',
@@ -1267,7 +1282,7 @@ export default function EditReservationView({
       title: 'Stay Extended',
       time: '12:14:19 PM',
       date: '2026-11-16',
-      author: 'Astha India',
+      author: 'HOTEL NIVASA',
       affectsRoom: false,
       oldDates: '2026-11-13 → 2026-11-14',
       newDates: '2026-11-13 → 2026-11-17',
@@ -1281,7 +1296,7 @@ export default function EditReservationView({
       title: 'Room Reassigned',
       time: '12:03:52 PM',
       date: '2026-11-16',
-      author: 'Astha India',
+      author: 'HOTEL NIVASA',
       affectsRoom: true,
       oldRoom: '301',
       newRoom: '302',
@@ -1295,7 +1310,7 @@ export default function EditReservationView({
       title: 'Guest Checked In',
       time: '12:03:23 PM',
       date: '2026-11-16',
-      author: 'Astha India',
+      author: 'HOTEL NIVASA',
       affectsRoom: false,
       oldStatus: 'RESERVED',
       newStatus: 'CHECKED_IN'
@@ -1308,7 +1323,7 @@ export default function EditReservationView({
       title: 'Reservation Created',
       time: '12:03:25 PM',
       date: '2026-11-16',
-      author: 'Astha India',
+      author: 'HOTEL NIVASA',
       affectsRoom: false,
       bookingRef: '#RES_14',
       guestName: 'shankar suthar',
@@ -1383,7 +1398,7 @@ export default function EditReservationView({
             title: isAdv ? 'Advance Payment Received' : 'Payment Added',
             time: createdTimeStr,
             date: tx.date || createdDateStr,
-            author: 'Astha India',
+            author: 'HOTEL NIVASA',
             affectsRoom: false,
             isAdvance: isAdv,
             method: tx.paymentMethod || 'UPI',
@@ -1400,7 +1415,7 @@ export default function EditReservationView({
           title: 'Advance Payment Received',
           time: createdTimeStr,
           date: createdDateStr,
-          author: 'Astha India',
+          author: 'HOTEL NIVASA',
           affectsRoom: false,
           isAdvance: true,
           method: currentRes.paymentMethod || 'UPI',
@@ -1418,7 +1433,7 @@ export default function EditReservationView({
         title: 'Guest Checked Out',
         time: checkOutTimeStr,
         date: checkOutDateStr,
-        author: 'Astha India',
+        author: 'HOTEL NIVASA',
         affectsRoom: true,
         roomNumber: roomNum || '',
         guestName: guestForm.firstName ? `${guestForm.firstName} ${guestForm.lastName}` : (currentRes.primaryGuest?.name || 'Guest'),
@@ -1434,7 +1449,7 @@ export default function EditReservationView({
         title: 'Guest Checked In',
         time: checkInTimeStr,
         date: checkInDateStr,
-        author: 'Astha India',
+        author: 'HOTEL NIVASA',
         affectsRoom: false,
         oldStatus: 'RESERVED',
         newStatus: 'CHECKED_IN'
@@ -1447,7 +1462,7 @@ export default function EditReservationView({
         title: 'Room Assigned',
         time: roomAssignedTimeStr,
         date: roomAssignedDateStr,
-        author: 'Astha India',
+        author: 'HOTEL NIVASA',
         affectsRoom: true,
         oldRoom: 'UNASSIGNED',
         newRoom: roomNum,
@@ -1462,7 +1477,7 @@ export default function EditReservationView({
         title: 'Reservation Created',
         time: createdTimeStr,
         date: createdDateStr,
-        author: 'Astha India',
+        author: 'HOTEL NIVASA',
         affectsRoom: false,
         bookingRef: currentRes.bookingReference || '#RES_1',
         guestName: guestForm.firstName ? `${guestForm.firstName} ${guestForm.lastName}` : (currentRes.primaryGuest?.name || 'Guest'),
@@ -1552,10 +1567,18 @@ export default function EditReservationView({
       ...currentRes,
       checkInTime,
       checkOutTime,
+      billTo: bookingForm.billTo || 'Guest',
+      company: bookingForm.company || '',
+      guestGstin: bookingForm.guestGstin || '',
+      marketSegment: (bookingForm.marketSegment || 'corporate').toLowerCase(),
+      bookingSource: (bookingForm.bookingSource || 'walk-in').toLowerCase(),
+      specialRequests: bookingForm.specialRequests || '',
+      notes: bookingForm.specialRequests || '',
       primaryGuest: {
         ...currentRes.primaryGuest,
         ...guestForm,
-        name: `${guestForm.title} ${guestForm.firstName} ${guestForm.lastName}`.trim()
+        name: `${guestForm.title} ${guestForm.firstName} ${guestForm.lastName}`.trim(),
+        gstin: bookingForm.guestGstin || currentRes.primaryGuest?.gstin || ''
       },
       additionalGuests,
       ...bookingForm

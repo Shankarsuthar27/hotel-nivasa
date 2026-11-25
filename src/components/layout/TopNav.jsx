@@ -71,7 +71,7 @@ export default function TopNav({
         {/* User Profile Badge & Quick Sign Out */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderLeft: '1px solid #E2E8F0', paddingLeft: '0.75rem', marginLeft: '0.25rem' }}>
           <div
-            title={`Signed in as ${currentUser?.name || 'Astha India'} (${currentUser?.role || 'Staff'})`}
+            title={`Signed in as ${currentUser?.name === 'Astha India' ? 'HOTEL NIVASA' : (currentUser?.name || 'HOTEL NIVASA')} (${currentUser?.role || 'Staff'})`}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -96,10 +96,10 @@ export default function TopNav({
                 justifyContent: 'center'
               }}
             >
-              {currentUser?.initials || (currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'AI')}
+              {(currentUser?.initials === 'AI' || !currentUser?.initials) ? 'HN' : currentUser.initials}
             </div>
             <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#334155' }}>
-              {currentUser?.name ? currentUser.name.split(' ')[0] : 'Staff'}
+              {currentUser?.name === 'Astha India' ? 'HOTEL NIVASA' : (currentUser?.name ? currentUser.name.split(' ')[0] : 'Staff')}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#64748B', backgroundColor: '#F1F5F9', padding: '1px 5px', borderRadius: '4px' }}>
               {currentUser?.role || 'Staff'}

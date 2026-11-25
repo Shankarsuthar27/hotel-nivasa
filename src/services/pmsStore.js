@@ -102,8 +102,20 @@ class PMSStore {
       if (rawUser) savedSessionUser = JSON.parse(rawUser);
     } catch (_) {}
 
+    if (savedSessionUser && (savedSessionUser.name === 'Astha India' || savedSessionUser.name === 'HOTEL NIVASA' || savedSessionUser.role === 'Owner')) {
+      savedSessionUser.name = 'HOTEL NIVASA';
+      savedSessionUser.initials = 'HN';
+      try {
+        localStorage.setItem('pms_current_user', JSON.stringify(savedSessionUser));
+      } catch (_) {}
+    }
+
     this.isAuthenticated = authSaved === 'true';
     this.currentUser = this.isAuthenticated ? savedSessionUser : null;
+    if (this.currentUser && (this.currentUser.name === 'Astha India' || this.currentUser.name === 'HOTEL NIVASA' || this.currentUser.role === 'Owner')) {
+      this.currentUser.name = 'HOTEL NIVASA';
+      this.currentUser.initials = 'HN';
+    }
 
     // Room types & Rooms: Initialized in-memory only; authoritative data comes directly from Firebase
     this.roomTypes = initialRoomTypes.map((rt) => ({ ...rt }));
@@ -126,9 +138,17 @@ class PMSStore {
         if (this.property) {
           if (!this.property.name || this.property.name === 'HOTEL ASTHA' || this.property.name === 'Hotel Astha' || this.property.name === 'Astha') {
             this.property.name = 'HOTEL NIVASA';
+          }
+          if (!this.property.tagline || this.property.tagline === 'HOTEL ASTHA' || this.property.tagline === 'Hotel Astha' || this.property.tagline === 'Astha') {
             this.property.tagline = 'HOTEL NIVASA';
+          }
+          if (!this.property.legalName || this.property.legalName === 'HOTEL ASTHA' || this.property.legalName === 'Hotel Astha' || this.property.legalName === 'Astha') {
             this.property.legalName = 'HOTEL NIVASA';
+          }
+          if (!this.property.tradeName || this.property.tradeName === 'HOTEL ASTHA' || this.property.tradeName === 'Hotel Astha' || this.property.tradeName === 'Astha') {
             this.property.tradeName = 'HOTEL NIVASA';
+          }
+          if (!this.property.initials || this.property.initials === 'HA' || this.property.initials === 'AI') {
             this.property.initials = 'HN';
           }
           const todayStr = getTodayIsoDate();
@@ -287,7 +307,15 @@ class PMSStore {
         });
         this.announcements = parsed.announcements || initialStaffNotes || [];
         this.otaChannels = parsed.otaChannels || initialOtaChannels;
-        this.teamMembers = (parsed.teamMembers || initialTeamMembers)
+        const existingMembers = Array.isArray(parsed.teamMembers) ? parsed.teamMembers : [];
+        const memberMap = new Map();
+        (initialTeamMembers || []).forEach((m) => {
+          if (m && m.id) memberMap.set(m.id, m);
+        });
+        existingMembers.forEach((m) => {
+          if (m && m.id) memberMap.set(m.id, m);
+        });
+        this.teamMembers = Array.from(memberMap.values())
           .filter((m) => m && m.id !== 'usr_02' && m.name !== 'Shankar L')
           .map((m) => ({
             ...m,
@@ -1356,12 +1384,28 @@ class PMSStore {
           if (snapshot.exists()) {
             const cloudProp = snapshot.data();
             this.property = { ...this.property, ...cloudProp };
+            let propNeedsSync = false;
             if (!this.property.name || this.property.name === 'HOTEL ASTHA' || this.property.name === 'Hotel Astha' || this.property.name === 'Astha') {
               this.property.name = 'HOTEL NIVASA';
+              propNeedsSync = true;
+            }
+            if (!this.property.tagline || this.property.tagline === 'HOTEL ASTHA' || this.property.tagline === 'Hotel Astha' || this.property.tagline === 'Astha') {
               this.property.tagline = 'HOTEL NIVASA';
+              propNeedsSync = true;
+            }
+            if (!this.property.legalName || this.property.legalName === 'HOTEL ASTHA' || this.property.legalName === 'Hotel Astha' || this.property.legalName === 'Astha') {
               this.property.legalName = 'HOTEL NIVASA';
+              propNeedsSync = true;
+            }
+            if (!this.property.tradeName || this.property.tradeName === 'HOTEL ASTHA' || this.property.tradeName === 'Hotel Astha' || this.property.tradeName === 'Astha') {
               this.property.tradeName = 'HOTEL NIVASA';
+              propNeedsSync = true;
+            }
+            if (!this.property.initials || this.property.initials === 'HA' || this.property.initials === 'AI') {
               this.property.initials = 'HN';
+              propNeedsSync = true;
+            }
+            if (propNeedsSync) {
               this.syncDocToFirestore('', this.propertyId, this.property);
             }
             this.save();
@@ -1403,6 +1447,13 @@ class PMSStore {
               if (tm.role === 'Owner' || tm._pendingSync) {
                 if (!map.has(key)) map.set(key, tm);
               }
+            }
+          });
+          (initialTeamMembers || []).forEach((tm) => {
+            if (!tm || tm.id === 'usr_02' || tm.name === 'Shankar L') return;
+            const key = tm.id || tm.staffId || tm.email;
+            if (key && !deletedTm.has(String(tm.id))) {
+              if (!map.has(key)) map.set(key, tm);
             }
           });
           this.teamMembers = Array.from(map.values());
@@ -2169,7 +2220,7 @@ class PMSStore {
 
   // --- AUDIT TRAIL ---
 
-  logAudit(action, entity, entityId, details, actor = 'Astha India', meta = {}) {
+  logAudit(action, entity, entityId, details, actor = 'HOTEL NIVASA', meta = {}) {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
@@ -2182,8 +2233,8 @@ class PMSStore {
       id: `at_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       timestamp,
       createdAtMs: now.getTime(),
-      actor: actor || 'Astha India',
-      userName: actor || 'Astha India',
+      actor: actor || 'HOTEL NIVASA',
+      userName: actor || 'HOTEL NIVASA',
       action,
       entity,
       entityId,
@@ -2217,7 +2268,7 @@ class PMSStore {
   addAnnouncement(note) {
     if (!this.announcements) this.announcements = [];
     this.announcements.unshift(note);
-    this.logAudit('CREATE_ANNOUNCEMENT', 'ANNOUNCEMENT', note.id, `Created staff note: "${note.message.substring(0, 30)}..."`, note.author || 'Astha India');
+    this.logAudit('CREATE_ANNOUNCEMENT', 'ANNOUNCEMENT', note.id, `Created staff note: "${note.message.substring(0, 30)}..."`, note.author || 'HOTEL NIVASA');
     this.save();
     this.syncDocToFirestore('announcements', note.id, note);
   }
@@ -2225,7 +2276,7 @@ class PMSStore {
   deleteAnnouncement(noteId) {
     if (!this.announcements) this.announcements = [];
     this.announcements = this.announcements.filter((n) => n.id !== noteId);
-    this.logAudit('DELETE_ANNOUNCEMENT', 'ANNOUNCEMENT', noteId, 'Deleted staff note', 'Astha India');
+    this.logAudit('DELETE_ANNOUNCEMENT', 'ANNOUNCEMENT', noteId, 'Deleted staff note', 'HOTEL NIVASA');
     this.save();
     this.deleteDocFromFirestore('announcements', noteId);
   }
@@ -2333,13 +2384,17 @@ class PMSStore {
       paidAmount,
       balanceDue,
       status: (bookingData.status || 'confirmed').toLowerCase(),
-      bookingSource: bookingData.bookingSource || 'WALK_IN',
-      marketSegment: bookingData.marketSegment || 'WALK_IN',
+      billTo: bookingData.billTo || 'Guest',
+      company: bookingData.company || '',
+      guestGstin: bookingData.guestGstin || bookingData.primaryGuest?.gstin || '',
+      bookingSource: (bookingData.bookingSource || 'walk-in').toLowerCase(),
+      marketSegment: (bookingData.marketSegment || 'corporate').toLowerCase(),
       isVIP: !!bookingData.isVIP,
       isSingleLady: !!bookingData.isSingleLady,
       noPosting: !!bookingData.noPosting,
       isComplimentary: !!bookingData.isComplimentary,
-      notes: bookingData.notes || '',
+      specialRequests: bookingData.specialRequests || bookingData.notes || '',
+      notes: bookingData.specialRequests || bookingData.notes || '',
       createdAt: new Date().toISOString(),
       folioId
     };
@@ -2445,7 +2500,7 @@ class PMSStore {
       'RESERVATION',
       ref,
       `Created booking for ${newRes.primaryGuest.name} in Room ${roomNumber || 'Unassigned'} (${newRes.nights} Nights). Total: ₹${totalAmount}${paidAmount > 0 ? `, Advance Paid: ₹${paidAmount}` : ''}`,
-      'Astha India',
+      'HOTEL NIVASA',
       {
         actionType: 'RESERVATION_CREATED',
         reservationId: id,
@@ -2471,7 +2526,7 @@ class PMSStore {
         'RESERVATION',
         ref,
         `Room assigned: UNASSIGNED → ${roomNumber}`,
-        'Astha India',
+        'HOTEL NIVASA',
         {
           actionType: 'ROOM_ASSIGNED',
           reservationId: id,
@@ -2490,7 +2545,7 @@ class PMSStore {
         'RESERVATION',
         ref,
         `Guest ${newRes.primaryGuest.name} checked in to Room ${roomNumber || 'Assigned'}.`,
-        'Astha India',
+        'HOTEL NIVASA',
         {
           actionType: 'GUEST_CHECKED_IN',
           reservationId: id,
@@ -2512,7 +2567,7 @@ class PMSStore {
         'RESERVATION',
         ref,
         `Advance payment of ₹${Number(paidAmount).toFixed(2)} received via ${advMethod}. Ref: ${advRef}`,
-        'Astha India',
+        'HOTEL NIVASA',
         {
           actionType: 'PAYMENT_ADDED',
           reservationId: id,
@@ -2612,13 +2667,25 @@ class PMSStore {
         fieldsToApply.actualCheckInTime = fieldsToApply.checkInTime;
         fieldsToApply.arrivalTime = fieldsToApply.checkInTime;
       }
+      if (fieldsToApply.specialRequests !== undefined) {
+        fieldsToApply.notes = fieldsToApply.specialRequests;
+      } else if (fieldsToApply.notes !== undefined) {
+        fieldsToApply.specialRequests = fieldsToApply.notes;
+      }
+      if (fieldsToApply.guestGstin) {
+        fieldsToApply.primaryGuest = {
+          ...(this.reservations[idx].primaryGuest || {}),
+          ...(fieldsToApply.primaryGuest || {}),
+          gstin: fieldsToApply.guestGstin
+        };
+      }
       this.reservations[idx] = {
         ...this.reservations[idx],
         ...fieldsToApply,
         updatedAt: new Date().toISOString()
       };
       const updated = this.reservations[idx];
-      this.logAudit('UPDATE_RESERVATION', 'RESERVATION', updated.bookingReference || updated.id, `Updated reservation details for ${updated.primaryGuest?.name || updated.guestName || updated.id}`, 'Astha India');
+      this.logAudit('UPDATE_RESERVATION', 'RESERVATION', updated.bookingReference || updated.id, `Updated reservation details for ${updated.primaryGuest?.name || updated.guestName || updated.id}`, 'HOTEL NIVASA');
       this.save();
       this.syncDocToFirestore('reservations', updated.id, updated);
       this.notify();
@@ -2806,7 +2873,7 @@ class PMSStore {
       'RESERVATION',
       updatedRes.bookingReference || updatedRes.id,
       `Updated room charges for ${updatedRes.primaryGuest?.name || 'Guest'}: ${applyMode === 'selected_date' ? `Date ${selectedDate}` : 'Whole Stay'}, Rate ₹${newRate}, Pax ${newAdults}/${newChildren}. Total ₹${totalAmount}.`,
-      'Astha India',
+      'HOTEL NIVASA',
       {
         actionType: 'RATE_OVERRIDDEN',
         reservationId: updatedRes.id,
@@ -2956,7 +3023,7 @@ class PMSStore {
       'RESERVATION',
       updatedRes.bookingReference || updatedRes.id,
       `Amended stay for ${updatedRes.primaryGuest?.name || 'Guest'} to ${checkInDate} - ${checkOutDate} (${newNights} Nights). Room ${finalRoomNumber}, Total ₹${totalAmount}.`,
-      'Astha India',
+      'HOTEL NIVASA',
       {
         actionType: 'STAY_EXTENDED',
         reservationId: updatedRes.id,
@@ -3175,7 +3242,7 @@ class PMSStore {
       'RESERVATION',
       targetRef,
       `Guest ${guestName} checked in to Room ${roomNumber || 'Assigned'}.`,
-      'Astha India',
+      'HOTEL NIVASA',
       {
         actionType: 'GUEST_CHECKED_IN',
         reservationId: targetId,
@@ -3285,7 +3352,7 @@ class PMSStore {
       'RESERVATION',
       targetRef,
       `Guest ${guestName} checked out from Room ${res.roomNumber || 'Unassigned'}. Room auto-flagged DIRTY.`,
-      this.currentUser?.name || 'Astha India',
+      this.currentUser?.name || 'HOTEL NIVASA',
       {
         actionType: 'CHECK_OUT',
         reservationId: targetId,
@@ -3713,7 +3780,7 @@ class PMSStore {
       'RESERVATION',
       res.bookingReference || res.id,
       `Added charge [${newTx.category}]: ₹${amt} (Receipt: ${newTx.voucherNumber}) on ${effectiveDate}. Desc: ${newTx.desc}`,
-      'Astha India',
+      'HOTEL NIVASA',
       {
         actionType: 'CHARGE_ADDED',
         reservationId,
@@ -3797,7 +3864,7 @@ class PMSStore {
       'RESERVATION',
       res.bookingReference || res.id,
       `Processed ${newTx.paymentType} payment of ₹${amt} via ${newTx.paymentMethod}. Outstanding: ₹${this.reservations.find(r => r.id === reservationId)?.balanceDue.toFixed(2)}`,
-      'Astha India',
+      'HOTEL NIVASA',
       {
         actionType: 'PAYMENT_ADDED',
         reservationId,
@@ -3835,7 +3902,7 @@ class PMSStore {
     tx.isVoided = true;
     tx.voidReason = voidReason || 'Voided by front desk operator';
     tx.voidedAt = new Date().toISOString();
-    tx.voidedBy = 'Astha India';
+    tx.voidedBy = 'HOTEL NIVASA';
 
     this.recomputeFolioTotals(reservationId);
 
@@ -3844,7 +3911,7 @@ class PMSStore {
       'RESERVATION',
       res.bookingReference || res.id,
       `VOIDED payment of ₹${Math.abs(tx.amount)} (${tx.paymentMethod || 'Payment'}) on ${folio.folioNumber}. Reason: "${tx.voidReason}". Balance restored.`,
-      this.currentUser?.name || 'Astha India',
+      this.currentUser?.name || 'HOTEL NIVASA',
       {
         actionType: 'VOID_PAYMENT',
         reservationId: res.id,
@@ -3905,7 +3972,7 @@ class PMSStore {
     const actionType = isCredit ? 'PAYMENT_UPDATED' : 'CHARGE_UPDATED';
     const paymentMethod = tx.paymentMethod || (isCredit ? 'UPI' : '-');
     const affectedDates = Array.from(new Set([oldDate, newDate].filter(Boolean)));
-    const actorName = this.currentUser?.name || 'Astha India';
+    const actorName = this.currentUser?.name || 'HOTEL NIVASA';
 
     const changeParts = [];
     if (oldAmt !== finalNewAmt) {
@@ -4047,7 +4114,7 @@ class PMSStore {
       'FOLIO',
       res.folioId || res.id,
       `Folio ${res.folioId || res.id} settled (₹${settleAmt.toFixed(2)} via ${paymentMode}) and marked CLOSED.`,
-      this.currentUser?.name || 'Astha India',
+      this.currentUser?.name || 'HOTEL NIVASA',
       {
         actionType: 'SETTLE_FOLIO',
         reservationId: res.id,
@@ -4289,7 +4356,7 @@ class PMSStore {
         'RESERVATION',
         res.bookingReference || res.id,
         `Night Audit Processed: Room charge of ₹${res.baseRatePerNight} + ₹${taxCalc.totalTax} tax posted to folio for ${curDate}.`,
-        auditorName || 'Astha India',
+        auditorName || 'HOTEL NIVASA',
         {
           actionType: 'NIGHT_AUDIT_PROCESSED',
           reservationId: res.id,
@@ -4384,7 +4451,7 @@ class PMSStore {
 
   // --- MULTI-PROPERTY TEAM INVITATION & GRANULAR RBAC ENGINE ---
 
-  inviteTeamMembers({ emails = [], assignments = [], invitedBy = 'Astha India' }) {
+  inviteTeamMembers({ emails = [], assignments = [], invitedBy = 'HOTEL NIVASA' }) {
     if (!emails.length) return [];
 
     const newMembers = [];
@@ -4455,7 +4522,7 @@ class PMSStore {
     return this.inviteTeamMembers({
       emails: [memberData.email],
       assignments: [{ property: this.property.name, role: memberData.role || 'Front Desk / Receptionist' }],
-      invitedBy: 'Astha India'
+      invitedBy: 'HOTEL NIVASA'
     })[0];
   }
 
@@ -4594,10 +4661,10 @@ class PMSStore {
     if (userId === 'usr_owner' || userId === 'owner') {
       this.currentUser = {
         id: 'usr_owner',
-        name: 'Astha India',
+        name: 'HOTEL NIVASA',
         email: 'owner@hotelastha.com',
         role: 'Owner',
-        initials: 'AI',
+        initials: 'HN',
         status: 'ACTIVE'
       };
     } else {
@@ -4794,7 +4861,8 @@ class PMSStore {
         id: liveMember.id || cur.id,
         uid: liveMember.uid || liveMember.id || cur.uid || cur.id,
         staffId: liveMember.staffId || cur.staffId || '',
-        name: liveMember.name || cur.name,
+        name: (liveRole === 'Owner' || liveMember.name === 'Astha India') ? 'HOTEL NIVASA' : (liveMember.name || cur.name),
+        initials: (liveRole === 'Owner' || liveMember.initials === 'AI') ? 'HN' : (liveMember.initials || cur.initials || 'ST'),
         email: liveMember.email || liveMember.loginEmail || cur.email,
         loginEmail: liveMember.loginEmail || liveMember.email || cur.loginEmail,
         role: liveRole,
@@ -4880,7 +4948,7 @@ class PMSStore {
       id: merged.id || `usr_${Date.now()}`,
       uid: merged.uid || merged.id || `usr_${Date.now()}`,
       staffId: merged.staffId || '',
-      name: merged.name || (isExplicitOwner ? 'Astha India' : cleanEmail.split('@')[0] || 'Staff'),
+      name: merged.name || (isExplicitOwner ? 'HOTEL NIVASA' : cleanEmail.split('@')[0] || 'Staff'),
       email: merged.email || merged.loginEmail || '',
       loginEmail: merged.loginEmail || merged.email || '',
       role: userRole,

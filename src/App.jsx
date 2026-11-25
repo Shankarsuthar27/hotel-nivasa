@@ -803,7 +803,7 @@ export default function App() {
                 pmsStore.inviteTeamMembers({
                   emails,
                   assignments,
-                  invitedBy: state.currentUser?.name || 'Astha India'
+                  invitedBy: state.currentUser?.name || 'HOTEL NIVASA'
                 });
               }}
               onUpdateMember={(id, patch) => {

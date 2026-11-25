@@ -18,12 +18,12 @@ export const DEMO_STAFF_ACCOUNTS = [
   {
     id: 'usr_owner',
     staffId: 'OWN-0001',
-    name: 'Astha India',
+    name: 'HOTEL NIVASA',
     email: 'owner@hotelastha.com',
     role: 'Owner',
     avatar: '👑',
     password: 'Password@123',
-    initials: 'AI',
+    initials: 'HN',
     status: 'ACTIVE',
     description: 'Full administrative access across all hotel properties and financials.'
   },

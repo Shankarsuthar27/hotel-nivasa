@@ -23,8 +23,8 @@ import { pmsStore } from '../../services/pmsStore';
 import './login.css';
 
 export default function LoginView({ onLoginSuccess, teamMembers = [] }) {
-  const [email, setEmail] = useState('info@asthasoftindia.com');
-  const [password, setPassword] = useState('Password@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
@@ -152,7 +152,7 @@ export default function LoginView({ onLoginSuccess, teamMembers = [] }) {
   };
 
   // Modal form states
-  const [modalEmail, setModalEmail] = useState('info@asthasoftindia.com');
+  const [modalEmail, setModalEmail] = useState('');
   const [modalFeedback, setModalFeedback] = useState(null);
   const [modalLoading, setModalLoading] = useState(false);
 
@@ -276,7 +276,7 @@ export default function LoginView({ onLoginSuccess, teamMembers = [] }) {
               )}
 
               {/* Login Form */}
-              <form onSubmit={handleFormSubmit} className="asthastay-form" noValidate>
+              <form onSubmit={handleFormSubmit} className="asthastay-form" noValidate autoComplete="off">
                 {/* Staff ID or Email Address Input */}
                 <div>
                   <label htmlFor="email" className="asthastay-label">
@@ -293,8 +293,8 @@ export default function LoginView({ onLoginSuccess, teamMembers = [] }) {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="MGR-4821 or info@asthasoftindia.com"
-                      autoComplete="username"
+                      placeholder="Enter Staff ID or Email Address"
+                      autoComplete="off"
                       className="asthastay-input"
                     />
                   </div>
@@ -311,7 +311,7 @@ export default function LoginView({ onLoginSuccess, teamMembers = [] }) {
                       type="button"
                       onClick={() => {
                         setModalFeedback(null);
-                        setModalEmail(email || 'info@asthasoftindia.com');
+                        setModalEmail(email || '');
                         setActiveModal('forgot');
                       }}
                       className="asthastay-forgot-btn"
@@ -331,7 +331,7 @@ export default function LoginView({ onLoginSuccess, teamMembers = [] }) {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
-                      autoComplete="current-password"
+                      autoComplete="new-password"
                       className="asthastay-input asthastay-input-pass"
                     />
                     <button
