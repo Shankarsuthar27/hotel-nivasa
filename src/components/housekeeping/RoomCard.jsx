@@ -90,17 +90,6 @@ export default function RoomCard({
           {/* Header Row: Room number + Room Type badge + Occupied badge + UserCheck icon */}
           <div className="hk-card-header-row">
             <div className="hk-card-header-left">
-              <input
-                type="checkbox"
-                className="hk-card-checkbox"
-                checked={isSelected}
-                title={`Select room ${cleanRoomNumber}`}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  if (onToggleSelect) onToggleSelect(room?.id);
-                }}
-                onClick={(e) => e.stopPropagation()}
-              />
               <span className="hk-card-room-num">{cleanRoomNumber}</span>
               <span className="hk-card-room-type-badge">{displayRoomType}</span>
               <span className="hk-badge-pill hk-badge-occupied">Occupied</span>
