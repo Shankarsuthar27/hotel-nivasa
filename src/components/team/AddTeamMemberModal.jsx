@@ -86,8 +86,8 @@ function setNestedBool(obj, path, value) {
 export default function AddTeamMemberModal({
   isOpen,
   onClose,
-  propertiesList = ['HOTEL ASTHA'],
-  currentProperty = 'HOTEL ASTHA',
+  propertiesList = ['HOTEL NIVASA'],
+  currentProperty = 'HOTEL NIVASA',
   propertyId = 'hotel_astha_main',
   currentUserId = 'usr_owner',
   onStaffCreated

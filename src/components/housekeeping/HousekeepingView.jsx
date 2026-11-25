@@ -26,6 +26,7 @@ export default function HousekeepingView({
   // Filter selections
   const [selectedRoomType, setSelectedRoomType] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
+  const [groupBy, setGroupBy] = useState('floor'); // 'floor' | 'type'
 
   // Selected rooms for batch actions
   const [selectedRooms, setSelectedRooms] = useState(new Set());
@@ -154,27 +155,94 @@ export default function HousekeepingView({
     });
   }, [reservations]);
 
-  // Filtered rooms list
+  // Filtered and deduplicated rooms list
   const filteredRooms = useMemo(() => {
-    return rooms.filter((r) => {
+    const seenRooms = new Map();
+
+    rooms.forEach((r) => {
+      if (!r) return;
       // Room type filter
       if (selectedRoomType !== 'ALL' && r.roomTypeId !== selectedRoomType) {
-        return false;
+        return;
       }
       // Status filter
-      if (selectedStatus === 'ALL') return true;
-      const isOcc = reservations.some((res) => isResOccupyingRoom(res, r));
-      if (selectedStatus === 'occupied') return isOcc;
-      if (selectedStatus === 'clean') return !isOcc && (r.status === 'clean' || r.status === 'occupied' || !r.status);
-      return !isOcc && r.status === selectedStatus;
+      if (selectedStatus !== 'ALL') {
+        const isOcc = reservations.some((res) => isResOccupyingRoom(res, r));
+        if (selectedStatus === 'occupied' && !isOcc) return;
+        if (selectedStatus === 'clean' && (isOcc || (r.status !== 'clean' && r.status !== 'occupied' && !!r.status))) return;
+        if (selectedStatus !== 'occupied' && selectedStatus !== 'clean' && (isOcc || r.status !== selectedStatus)) return;
+      }
+
+      // Canonical numeric room key: "205" for "rm_205", "205", "room_205", etc.
+      const rawNum = String(r.roomNumber || r.id || '')
+        .replace(/^(rm_|room_|room)/i, '')
+        .trim();
+      const digitMatch = rawNum.match(/\d+/);
+      const canonicalKey = digitMatch ? digitMatch[0] : rawNum.toLowerCase();
+
+      if (!canonicalKey) return;
+
+      const existing = seenRooms.get(canonicalKey);
+      if (!existing) {
+        seenRooms.set(canonicalKey, r);
+      } else {
+        // In case of conflict (e.g. 205 Deluxe vs 205 SUPERIOR on Floor 2),
+        // prefer canonical id starting with rm_ and floor 2's SUPERIOR room type
+        const existingIsCanon = String(existing.id || '').startsWith('rm_');
+        const rIsCanon = String(r.id || '').startsWith('rm_');
+        const rIsSuperior = String(r.roomTypeName || r.roomType || '').toUpperCase().includes('SUPERIOR');
+        if ((rIsCanon && !existingIsCanon) || (canonicalKey.startsWith('2') && rIsSuperior)) {
+          seenRooms.set(canonicalKey, r);
+        }
+      }
     });
+
+    return Array.from(seenRooms.values());
   }, [rooms, reservations, selectedRoomType, selectedStatus]);
 
-  // Group rooms by room type
+  // Group rooms by Floor (default matching specification) or Room Type
   const groupedRooms = useMemo(() => {
+    if (groupBy === 'floor') {
+      const map = {};
+      filteredRooms.forEach((r) => {
+        const cleanNum = String(r.roomNumber || r.id || '').replace(/\D/g, '');
+        const floorVal = String(r.floor || (cleanNum ? cleanNum.charAt(0) : '1')).trim();
+        const floorKey = floorVal || '1';
+
+        if (!map[floorKey]) {
+          const num = parseInt(floorKey, 10);
+          let title = `${floorKey.toUpperCase()} FLOOR`;
+          if (!isNaN(num)) {
+            const suffix = num === 1 ? 'ST' : num === 2 ? 'ND' : num === 3 ? 'RD' : 'TH';
+            title = `${num}${suffix} FLOOR`;
+          }
+          map[floorKey] = {
+            id: `floor_${floorKey}`,
+            title,
+            floorNum: isNaN(num) ? 99 : num,
+            rooms: []
+          };
+        }
+        map[floorKey].rooms.push(r);
+      });
+
+      // Ensure room numbers are sorted numerically (101, 102, 201, 202)
+      Object.values(map).forEach((g) => {
+        g.rooms.sort((a, b) =>
+          (a.roomNumber || '').localeCompare(b.roomNumber || '', undefined, { numeric: true })
+        );
+      });
+
+      // Return floors sorted in ascending order (1st floor, 2nd floor, 3rd floor...)
+      return Object.values(map)
+        .filter((g) => g.rooms.length > 0)
+        .sort((a, b) => a.floorNum - b.floorNum);
+    }
+
+    // Default: Group rooms by room type
     const map = {};
     roomTypes.forEach((rt) => {
-      map[rt.id] = { type: rt, rooms: [] };
+      map[rt.id] = { id: rt.id, type: rt, title: rt.name, rooms: [] };
     });
     filteredRooms.forEach((r) => {
       let targetId = r.roomTypeId;
@@ -218,7 +286,7 @@ export default function HousekeepingView({
         if (orderA !== orderB) return orderA - orderB;
         return String(a.type?.name || '').localeCompare(String(b.type?.name || ''));
       });
-  }, [roomTypes, filteredRooms]);
+  }, [groupBy, roomTypes, filteredRooms]);
 
   // Selected room type label for button
   const selectedRoomTypeLabel = useMemo(() => {
@@ -441,6 +509,26 @@ export default function HousekeepingView({
               </div>
             )}
           </div>
+
+          {/* Group By Floors vs Room Types Toggle */}
+          <div className="hk-group-toggle-wrap">
+            <button
+              type="button"
+              className={`hk-group-toggle-btn ${groupBy === 'floor' ? 'active' : ''}`}
+              onClick={() => setGroupBy('floor')}
+              title="Group by Floors (1st Floor, 2nd Floor...)"
+            >
+              Floors
+            </button>
+            <button
+              type="button"
+              className={`hk-group-toggle-btn ${groupBy === 'type' ? 'active' : ''}`}
+              onClick={() => setGroupBy('type')}
+              title="Group by Room Types"
+            >
+              Room Types
+            </button>
+          </div>
         </div>
 
         {/* Right Controls: Status Legend */}
@@ -519,17 +607,19 @@ export default function HousekeepingView({
         </div>
       )}
 
-      {/* 3. Room Groups by Category */}
+      {/* 3. Room Groups by Category or Floor */}
       <div className="flex flex-col gap-8">
         {groupedRooms.map((group) => {
           const rt = group.type;
-          const unassignedCount = unassignedReservations.filter((r) => r.roomTypeId === rt.id).length;
+          const unassignedCount = rt
+            ? unassignedReservations.filter((r) => r.roomTypeId === rt.id).length
+            : 0;
 
           return (
-            <section key={rt.id} className="hk-category-section">
-              {/* Group Header: e.g. Ultra Premium 1 Rooms / Delux Room 2 Rooms */}
+            <section key={group.id} className="hk-category-section">
+              {/* Group Header: e.g. 1ST FLOOR 6 Rooms or DELUXE 6 Rooms */}
               <div className="hk-category-header">
-                <h3 className="hk-category-title">{rt.name}</h3>
+                <h3 className="hk-category-title">{group.title}</h3>
                 <span className="hk-category-count-badge">
                   {group.rooms.length} Rooms
                 </span>
@@ -556,6 +646,7 @@ export default function HousekeepingView({
                     <RoomCard
                       key={room.id}
                       room={room}
+                      roomTypes={roomTypes}
                       isSelected={selectedRooms.has(room.id)}
                       onToggleSelect={handleToggleSelect}
                       onUpdateStatus={onUpdateStatus}

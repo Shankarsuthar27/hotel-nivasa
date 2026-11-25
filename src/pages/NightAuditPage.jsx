@@ -354,12 +354,23 @@ export default function NightAuditPage({ onNavigate }) {
 
   // Filtered Audit History
   const filteredHistory = useMemo(() => {
-    if (!historySearch.trim()) return nightAudits;
+    const list = Array.isArray(nightAudits) ? [...nightAudits] : [];
+    // Sort descending by date/timestamp: newest audits always on top
+    list.sort((a, b) => {
+      const dateA = a.auditDate || a.rawDate || a.date;
+      const dateB = b.auditDate || b.rawDate || b.date;
+      const timeA = new Date(a.performedAt || a.completedTime || dateA || 0).getTime();
+      const timeB = new Date(b.performedAt || b.completedTime || dateB || 0).getTime();
+      return timeB - timeA;
+    });
+
+    if (!historySearch.trim()) return list;
     const term = historySearch.toLowerCase();
-    return nightAudits.filter(
+    return list.filter(
       (a) =>
         (a.date || '').toLowerCase().includes(term) ||
         (a.auditDate || '').toLowerCase().includes(term) ||
+        (a.newBusinessDate || '').toLowerCase().includes(term) ||
         (a.performedBy || '').toLowerCase().includes(term) ||
         (a.status || '').toLowerCase().includes(term)
     );
@@ -1449,18 +1460,35 @@ export default function NightAuditPage({ onNavigate }) {
               ) : (
                 filteredHistory.map((rec) => {
                   const dispDate = rec.date || formatDisplayDate(rec.auditDate);
-                  const newDate = rec.newBusinessDate || formatDisplayDate(rec.newBusinessDateIso) || '—';
-                  const chargesCount = rec.chargesPostedCount ?? (rec.roomCharges ? rec.roomCharges.length : 0);
+                  const newDate =
+                    rec.newBusinessDate ||
+                    formatDisplayDate(rec.newBusinessDateIso) ||
+                    (rec.auditDate ? formatDisplayDate(getNextDayIsoDate(rec.auditDate)) : '—');
+                  const completedTime =
+                    rec.completedTime ||
+                    rec.completedAt ||
+                    (rec.performedAt
+                      ? `${dispDate} ${new Date(rec.performedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
+                      : '—');
+                  const performer = rec.performedBy || rec.startedBy || rec.completedBy || 'System';
+                  const chargesCount =
+                    rec.chargesPostedCount ??
+                    (rec.roomCharges ? rec.roomCharges.length : (rec.roomChargesLog ? rec.roomChargesLog.length : 0));
                   const totalAmt = rec.amountPosted ?? rec.totalRevenue ?? 0;
-                  const occ = rec.occupancyPercent ?? (rec.kpis?.occupancyPercent) ?? 25;
+                  const occ =
+                    rec.occupancyPercent ??
+                    rec.kpis?.occupancyPercent ??
+                    (rec.occupiedRooms && rec.vacantRooms
+                      ? Math.round((rec.occupiedRooms / (rec.occupiedRooms + rec.vacantRooms)) * 100)
+                      : (rec.occupiedRooms ? 25 : 0));
 
                   return (
                     <tr key={rec.id}>
                       <td style={{ fontWeight: 700, color: '#0f172a' }}>{dispDate}</td>
                       <td>{newDate}</td>
-                      <td style={{ fontSize: '0.8rem', color: '#64748b' }}>{rec.completedTime || '—'}</td>
+                      <td style={{ fontSize: '0.8rem', color: '#64748b' }}>{completedTime}</td>
                       <td>
-                        <span style={{ fontWeight: 600 }}>{rec.performedBy || rec.startedBy || 'System'}</span>
+                        <span style={{ fontWeight: 600 }}>{performer}</span>
                       </td>
                       <td style={{ textAlign: 'center' }}>{chargesCount}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600, color: '#16a34a' }}>

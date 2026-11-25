@@ -734,6 +734,9 @@
 .pms-toast-notification {
   position: fixed;
   bottom: 24px;
+  top: auto !important;
+  height: auto !important;
+  max-width: 420px;
   right: 24px;
   background-color: #0f172a;
   color: #ffffff;

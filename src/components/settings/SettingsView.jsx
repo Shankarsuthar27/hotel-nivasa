@@ -30,7 +30,7 @@ export default function SettingsView({
   const [activeSubtab, setActiveSubtab] = useState('property'); // 'property' | 'nightaudit' | 'apikeys'
 
   // Organization Settings State
-  const [orgName, setOrgName] = useState(property?.name || 'HOTEL ASTHA');
+  const [orgName, setOrgName] = useState(property?.name || 'HOTEL NIVASA');
   const [orgIcon, setOrgIcon] = useState(property?.organizationIcon || property?.logo || null);
 
   // Property Overbooking State
@@ -342,7 +342,7 @@ export default function SettingsView({
                       className="settings-input"
                       value={orgName}
                       onChange={(e) => setOrgName(e.target.value)}
-                      placeholder="e.g. HOTEL ASTHA"
+                      placeholder="e.g. HOTEL NIVASA"
                       required
                     />
                     <div className="settings-helper-text">This name will be used across the system.</div>

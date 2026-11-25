@@ -213,26 +213,26 @@ export default function App() {
   // Update browser document title based on endpoint URL
   useEffect(() => {
     if (isCreatingReservation) {
-      document.title = 'Add Reservation | Hotel Astha PMS';
+      document.title = 'Add Reservation | HOTEL NIVASA PMS';
     } else if (editingReservation) {
-      document.title = `Edit Reservation ${editingReservation.bookingReference || ''} | Hotel Astha PMS`;
+      document.title = `Edit Reservation ${editingReservation.bookingReference || ''} | HOTEL NIVASA PMS`;
     } else {
       const titles = {
-        login: 'Staff Sign In | Hotel Astha PMS',
-        dashboard: 'Dashboard | Hotel Astha PMS',
-        reservations: 'Reservations Management | Hotel Astha PMS',
-        calendar: 'Calendar Tape Chart | Hotel Astha PMS',
-        rates: 'Rates & Inventory | Hotel Astha PMS',
-        housekeeping: 'Housekeeping & Rooms | Hotel Astha PMS',
-        nightaudit: 'Night Audit | Hotel Astha PMS',
-        reports: 'Reports | Hotel Astha PMS',
-        guests: 'Guests CRM | Hotel Astha PMS',
-        myteam: 'My Team | Hotel Astha PMS',
-        permissions: 'Team Permissions | Hotel Astha PMS',
-        properties: 'Property Settings | Hotel Astha PMS',
-        settings: 'Settings | Hotel Astha PMS'
+        login: 'Staff Sign In | HOTEL NIVASA PMS',
+        dashboard: 'Dashboard | HOTEL NIVASA PMS',
+        reservations: 'Reservations Management | HOTEL NIVASA PMS',
+        calendar: 'Calendar Tape Chart | HOTEL NIVASA PMS',
+        rates: 'Rates & Inventory | HOTEL NIVASA PMS',
+        housekeeping: 'Housekeeping & Rooms | HOTEL NIVASA PMS',
+        nightaudit: 'Night Audit | HOTEL NIVASA PMS',
+        reports: 'Reports | HOTEL NIVASA PMS',
+        guests: 'Guests CRM | HOTEL NIVASA PMS',
+        myteam: 'My Team | HOTEL NIVASA PMS',
+        permissions: 'Team Permissions | HOTEL NIVASA PMS',
+        properties: 'Property Settings | HOTEL NIVASA PMS',
+        settings: 'Settings | HOTEL NIVASA PMS'
       };
-      document.title = titles[activeTab] || 'Hotel Astha PMS';
+      document.title = titles[activeTab] || 'HOTEL NIVASA PMS';
     }
   }, [isCreatingReservation, editingReservation, activeTab]);
 
@@ -748,7 +748,14 @@ export default function App() {
               }}
               onSaveRates={(ratesMap, tier) => {
                 pmsStore.updateDailyRates(ratesMap, tier);
-                showToast(`✅ Rates updated and saved successfully.`);
+                const tierLabels = {
+                  base: 'Base Rates',
+                  extra_adult: 'Extra Adult Rates',
+                  extra_child: 'Extra Child Rates',
+                  min_nights: 'Minimum Nights'
+                };
+                const tierName = tierLabels[tier] || 'Rates';
+                showToast(`✅ ${tierName} updated and saved successfully.`);
               }}
               onFullSyncChannel={(channelId) => {
                 pmsStore.triggerOtaFullSync(channelId);
@@ -782,8 +789,8 @@ export default function App() {
           {activeTab === 'myteam' && (
             <MyTeamView
               teamMembers={state.teamMembers}
-              propertiesList={state.propertiesList || ['HOTEL ASTHA']}
-              currentProperty={state.property?.name || 'HOTEL ASTHA'}
+              propertiesList={state.propertiesList || ['HOTEL NIVASA']}
+              currentProperty={state.property?.name || 'HOTEL NIVASA'}
               propertyId={pmsStore.propertyId || 'hotel_astha_main'}
               currentUser={state.currentUser}
               onStaffCreated={(memberRecord) => {
@@ -816,8 +823,8 @@ export default function App() {
             <TeamPermissionsView
               teamMembers={state.teamMembers}
               currentUser={state.currentUser}
-              propertiesList={state.propertiesList || ['HOTEL ASTHA']}
-              currentProperty={state.property?.name || 'HOTEL ASTHA'}
+              propertiesList={state.propertiesList || ['HOTEL NIVASA']}
+              currentProperty={state.property?.name || 'HOTEL NIVASA'}
               initialMemberId={router.queryParams?.memberId}
               initialSubtab={router.queryParams?.subtab}
               onSaveGranularPermissions={(userId, perms, targetProps, copyIds) => {
@@ -832,7 +839,7 @@ export default function App() {
             <PropertiesView
               subtab={router.subtab || 'all'}
               property={state.property}
-              propertiesList={state.propertiesList || ['HOTEL ASTHA']}
+              propertiesList={state.propertiesList || ['HOTEL NIVASA']}
               mealPlans={state.mealPlans || []}
               roomTypes={state.roomTypes || []}
               rooms={state.rooms || []}

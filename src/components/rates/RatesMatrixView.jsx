@@ -503,20 +503,6 @@ export default function RatesMatrixView({
       delete copy[activeTierKey];
       return copy;
     });
-
-    const label =
-      activeTierKey === 'min_nights'
-        ? 'Minimum Nights'
-        : activeTierKey === 'base'
-        ? 'Base Rates'
-        : activeTierKey === 'extra_adult'
-        ? 'Extra Adult Rates'
-        : 'Extra Child Rates';
-    const toast = document.createElement('div');
-    toast.className = 'pms-toast-notification';
-    toast.innerHTML = `<span>✅ ${label} saved successfully!</span>`;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 2500);
   };
 
   // Bulk update apply handler

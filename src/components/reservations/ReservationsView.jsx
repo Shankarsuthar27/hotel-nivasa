@@ -293,7 +293,7 @@ export default function ReservationsView({
 
   // Export to Excel report
   const handleExport = () => {
-    exportReservationsToExcel(filteredReservations, property?.name || 'HOTEL ASTHA');
+    exportReservationsToExcel(filteredReservations, property?.name || 'HOTEL NIVASA');
   };
 
   const handleEditReservation = (r) => {

@@ -94,29 +94,44 @@ export default function RatePlansView({
     setActiveMenuId(null);
   };
 
-  // Deduplicate rate plans by code/id so duplicates never appear in table
+  // Deduplicate rate plans by both ID and code so duplicate rows and React key warnings can never occur
   const uniqueRatePlans = useMemo(() => {
-    const map = new Map();
+    const byId = new Map();
+    const byCode = new Map();
+    const obsoleteRatePlanKeys = new Set(['rp_test_plan', 'test plan', '132']);
+
     (ratePlans || []).forEach((rp) => {
-      const codeKey = (rp.code || '').trim().toUpperCase();
+      if (!rp) return;
       const idKey = (rp.id || '').trim();
-      const dedupeKey = codeKey || idKey;
-      if (dedupeKey) {
-        if (!map.has(dedupeKey)) {
-          map.set(dedupeKey, { ...rp, id: rp.id || dedupeKey });
-        } else {
-          const prev = map.get(dedupeKey);
-          const prevHasRates = prev.roomTypeRates && Object.values(prev.roomTypeRates).some(r => r && (r.active || r.basePrice > 0));
-          const curHasRates = rp.roomTypeRates && Object.values(rp.roomTypeRates).some(r => r && (r.active || r.basePrice > 0));
-          if (curHasRates && !prevHasRates) {
-            map.set(dedupeKey, { ...prev, ...rp, id: prev.id || rp.id || dedupeKey });
-          } else {
-            map.set(dedupeKey, { ...rp, ...prev, id: prev.id || rp.id || dedupeKey });
-          }
-        }
+      const codeKey = (rp.code || '').trim().toUpperCase();
+      const nameKey = (rp.name || '').trim().toLowerCase();
+      if (obsoleteRatePlanKeys.has(idKey.toLowerCase()) || obsoleteRatePlanKeys.has(codeKey.toLowerCase()) || obsoleteRatePlanKeys.has(nameKey)) {
+        return;
+      }
+      if (!idKey && !codeKey) return;
+
+      const existing = (idKey && byId.get(idKey)) || (codeKey && byCode.get(codeKey));
+      if (!existing) {
+        const item = { ...rp, id: idKey || `rp_${codeKey}`, code: codeKey || rp.code || '' };
+        if (idKey) byId.set(idKey, item);
+        if (codeKey) byCode.set(codeKey, item);
+      } else {
+        const prevHasRates = existing.roomTypeRates && Object.values(existing.roomTypeRates).some(r => r && (r.active || r.basePrice > 0));
+        const curHasRates = rp.roomTypeRates && Object.values(rp.roomTypeRates).some(r => r && (r.active || r.basePrice > 0));
+        const canonicalId = existing.id || idKey;
+        const canonicalCode = existing.code || codeKey;
+        const merged = (curHasRates && !prevHasRates)
+          ? { ...existing, ...rp, id: canonicalId, code: canonicalCode }
+          : { ...rp, ...existing, id: canonicalId, code: canonicalCode };
+
+        if (canonicalId) byId.set(canonicalId, merged);
+        if (canonicalCode) byCode.set(canonicalCode, merged);
+        if (idKey) byId.set(idKey, merged);
+        if (codeKey) byCode.set(codeKey, merged);
       }
     });
-    return Array.from(map.values());
+
+    return Array.from(new Set(byId.values()));
   }, [ratePlans]);
 
   const handleDelete = (plan) => {
@@ -201,7 +216,7 @@ export default function RatePlansView({
                       ? mealPlans.find((m) => m.id === rp.mealPlanId)?.name || '-'
                       : '-';
 
-                  const planKey = rp.id || rp.code;
+                  const planKey = rp.id || rp.code || `rp_${idx}`;
 
                   return (
                     <tr key={planKey} style={{ borderBottom: '1px solid #F1F5F9' }}>

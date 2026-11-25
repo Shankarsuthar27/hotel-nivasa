@@ -3361,6 +3361,9 @@ body.has-res-modal-open .tape-chart-container {
 .pms-toast-notification {
   position: fixed;
   top: 24px;
+  bottom: auto !important;
+  height: auto !important;
+  max-width: 460px;
   right: 24px;
   background: rgba(15, 23, 42, 0.94);
   color: #ffffff;

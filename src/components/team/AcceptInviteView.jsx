@@ -151,7 +151,7 @@ export default function AcceptInviteView({
   }
 
   const email = verification?.email || '';
-  const orgName = verification?.organizationName || 'HOTEL ASTHA';
+  const orgName = verification?.organizationName || 'HOTEL NIVASA';
   const propertiesText = verification?.properties?.join(', ') || orgName;
   const roleName = verification?.role || 'Team Member';
 

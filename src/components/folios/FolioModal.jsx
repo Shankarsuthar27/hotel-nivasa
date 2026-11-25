@@ -59,7 +59,15 @@ export default function FolioModal({
 
   // Filter audit trail for this reservation
   const resAudits = auditTrail.filter(
-    (a) => a.entityId === reservation.bookingReference || a.entityId === reservation.id
+    (a) =>
+      a && (
+        a.entityId === reservation.bookingReference ||
+        a.entityId === reservation.id ||
+        a.reservationId === reservation.id ||
+        a.meta?.reservationId === reservation.id ||
+        a.bookingReference === reservation.bookingReference ||
+        a.meta?.bookingReference === reservation.bookingReference
+      )
   );
 
   const handleAddChargeSubmit = (e) => {

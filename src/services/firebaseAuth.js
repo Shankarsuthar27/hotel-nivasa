@@ -182,7 +182,7 @@ export async function createStaffAccount({
   name,
   contactEmail = '',
   role = 'Hotel Manager / GM',
-  properties = ['HOTEL ASTHA'],
+  properties = ['HOTEL NIVASA'],
   permissions,
   propertyId = 'hotel_astha_main',
   createdBy = 'usr_owner'
@@ -259,7 +259,7 @@ export async function createStaffAccount({
     initials,
     status: 'ACTIVE',
     mustChangePassword: true,
-    properties: Array.isArray(properties) && properties.length > 0 ? properties : ['HOTEL ASTHA'],
+    properties: Array.isArray(properties) && properties.length > 0 ? properties : ['HOTEL NIVASA'],
     permissions: JSON.parse(JSON.stringify(permissions || {})),
     passwordSalt,
     passwordHash,

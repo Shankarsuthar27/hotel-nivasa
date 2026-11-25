@@ -5,7 +5,7 @@ export default function InviteEmailModal({
   isOpen,
   onClose,
   member,
-  organizationName = 'HOTEL ASTHA',
+  organizationName = 'HOTEL NIVASA',
   inviterName = 'Astha India',
   onNavigateToAccept
 }) {

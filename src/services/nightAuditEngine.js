@@ -680,7 +680,7 @@ export async function executeNightAuditAtomic({
   };
 
   // 5. Save to pmsStore memory and Firestore
-  pmsStore.nightAudits = [auditRecord, ...(pmsStore.nightAudits || [])];
+  pmsStore.nightAudits = pmsStore.standardizeAndSortNightAudits([auditRecord, ...(pmsStore.nightAudits || [])]);
   pmsStore.property = {
     ...(pmsStore.property || {}),
     businessDate: nextBusinessDate,
@@ -698,7 +698,7 @@ export async function executeNightAuditAtomic({
 
   pmsStore.save();
   pmsStore.syncDocToFirestore('nightAudits', auditRecord.id, auditRecord);
-  pmsStore.syncDocToFirestore('', pmsStore.propertyId, { businessDate: nextBusinessDate, lastAuditDate: curBusinessDate });
+  pmsStore.syncDocToFirestore('', pmsStore.propertyId, { businessDate: nextBusinessDate, lastAuditDate: curBusinessDate, lastAuditId: auditRecord.id });
   pmsStore.notify();
 
   return {

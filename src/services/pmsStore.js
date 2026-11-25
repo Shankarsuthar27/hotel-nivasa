@@ -63,6 +63,7 @@ class PMSStore {
     this.deletedRoomIds = new Set();
     this.deletedRoomTypeIds = new Set();
     this.deletedTeamMemberIds = new Set();
+    this.deletedRatePlanIds = new Set();
     this.inFlightDeletes = new Set();
 
     // Clean up any stale legacy deleted entities & tombstones from localStorage
@@ -118,10 +119,18 @@ class PMSStore {
         }
         (parsed.deletedReservationIds || []).forEach((id) => this.deletedReservationIds.add(String(id)));
         (parsed.deletedTeamMemberIds || []).forEach((id) => this.deletedTeamMemberIds.add(String(id)));
+        (parsed.deletedRatePlanIds || []).forEach((id) => this.deletedRatePlanIds.add(String(id)));
         this.deletedRoomIds = new Set();
         this.deletedRoomTypeIds = new Set();
         this.property = parsed.property || initialProperty;
         if (this.property) {
+          if (!this.property.name || this.property.name === 'HOTEL ASTHA' || this.property.name === 'Hotel Astha' || this.property.name === 'Astha') {
+            this.property.name = 'HOTEL NIVASA';
+            this.property.tagline = 'HOTEL NIVASA';
+            this.property.legalName = 'HOTEL NIVASA';
+            this.property.tradeName = 'HOTEL NIVASA';
+            this.property.initials = 'HN';
+          }
           const todayStr = getTodayIsoDate();
           if (!this.property.businessDate || this.property.businessDate < todayStr) {
             this.property.businessDate = todayStr;
@@ -278,10 +287,23 @@ class PMSStore {
         });
         this.announcements = parsed.announcements || initialStaffNotes || [];
         this.otaChannels = parsed.otaChannels || initialOtaChannels;
-        this.teamMembers = (parsed.teamMembers || initialTeamMembers).filter(
-          (m) => m && m.id !== 'usr_02' && m.name !== 'Shankar L'
-        );
-        this.nightAudits = (parsed.nightAudits && parsed.nightAudits.length >= 5) ? parsed.nightAudits : initialNightAudits;
+        this.teamMembers = (parsed.teamMembers || initialTeamMembers)
+          .filter((m) => m && m.id !== 'usr_02' && m.name !== 'Shankar L')
+          .map((m) => ({
+            ...m,
+            properties: (m.properties && m.properties.length > 0 ? m.properties : ['HOTEL NIVASA']).map((p) =>
+              p === 'HOTEL ASTHA' || p === 'Hotel Astha' ? 'HOTEL NIVASA' : p
+            )
+          }));
+        const localAudits = Array.isArray(parsed.nightAudits) ? parsed.nightAudits : [];
+        const auditMap = new Map();
+        (initialNightAudits || []).forEach((a) => {
+          if (a && a.id) auditMap.set(a.id, a);
+        });
+        localAudits.forEach((a) => {
+          if (a && a.id) auditMap.set(a.id, a);
+        });
+        this.nightAudits = this.standardizeAndSortNightAudits(Array.from(auditMap.values()));
         this.auditTrail = parsed.auditTrail || initialAuditTrail;
         if (this.auditTrail && Array.isArray(this.auditTrail)) {
           const seenKeys = new Set();
@@ -309,12 +331,12 @@ class PMSStore {
         if (this.dailyRates.base['rt_deluxe_2026-11-06'] === undefined) {
           this.dailyRates.base['rt_deluxe_2026-11-06'] = 1000;
         }
-        this.propertiesList = (parsed.propertiesList || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT');
-        if (this.propertiesList.length === 0) this.propertiesList = ['HOTEL ASTHA'];
+        this.propertiesList = (parsed.propertiesList || ['HOTEL NIVASA']).map(p => (p === 'HOTEL ASTHA' || p === 'Hotel Astha') ? 'HOTEL NIVASA' : p).filter(p => p !== 'HOTEL ASTHA RESORT');
+        if (this.propertiesList.length === 0) this.propertiesList = ['HOTEL NIVASA'];
         if (this.teamMembers && Array.isArray(this.teamMembers)) {
           this.teamMembers = this.teamMembers.map(tm => ({
             ...tm,
-            properties: (tm.properties || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT')
+            properties: (tm.properties || ['HOTEL NIVASA']).map(p => (p === 'HOTEL ASTHA' || p === 'Hotel Astha') ? 'HOTEL NIVASA' : p).filter(p => p !== 'HOTEL ASTHA RESORT')
           }));
         }
         this.currentUser = this.isAuthenticated
@@ -322,23 +344,20 @@ class PMSStore {
           : null;
         this.syncCurrentUserWithTeamMembers();
         this.invitationTokens = parsed.invitationTokens || [];
-        if (!parsed.ratePlans || parsed.ratePlans.length === 0 || !parsed.ratePlans.some(rp => rp.code === 'STR')) {
+        const obsoleteRatePlanKeys = new Set(['rp_test_plan', 'test plan', '132']);
+        if (!parsed.ratePlans || parsed.ratePlans.length === 0) {
           this.ratePlans = JSON.parse(JSON.stringify(initialRatePlans));
         } else {
-          // Deduplicate ratePlans by code/id so stored duplicates are cleanly merged
-          const dedupeMap = new Map();
-          parsed.ratePlans.forEach((rp) => {
-            const key = (rp.code || rp.id || '').trim().toUpperCase();
-            if (key) {
-              if (!dedupeMap.has(key)) {
-                dedupeMap.set(key, { ...rp, id: rp.id || key });
-              } else {
-                const prev = dedupeMap.get(key);
-                dedupeMap.set(key, { ...prev, ...rp, id: prev.id || rp.id || key });
-              }
-            }
+          const sanitized = parsed.ratePlans.filter(rp => {
+            if (!rp) return false;
+            const id = String(rp.id || '').trim().toLowerCase();
+            const code = String(rp.code || '').trim().toLowerCase();
+            const name = String(rp.name || '').trim().toLowerCase();
+            if (obsoleteRatePlanKeys.has(id) || obsoleteRatePlanKeys.has(code) || obsoleteRatePlanKeys.has(name)) return false;
+            if (this.deletedRatePlanIds && (this.deletedRatePlanIds.has(String(rp.id)) || this.deletedRatePlanIds.has(String(rp.code)))) return false;
+            return true;
           });
-          this.ratePlans = Array.from(dedupeMap.values());
+          this.ratePlans = this.dedupeRatePlans(sanitized.length > 0 ? sanitized : initialRatePlans);
         }
         if (this.property) {
           const now = new Date();
@@ -430,6 +449,10 @@ class PMSStore {
       return true;
     });
 
+    if ((!this.rooms || this.rooms.length === 0) && initialRooms && initialRooms.length > 0) {
+      this.rooms = initialRooms.map((rm) => ({ ...rm }));
+    }
+
     // Sanitize rooms while strictly respecting user edits (roomNumber, roomTypeId, roomTypeName, status)
     this.rooms = this.rooms.map((rm) => {
       const cleanNum = String(rm.roomNumber || rm.id || '').trim().replace(/^rm_/, '');
@@ -451,13 +474,13 @@ class PMSStore {
         // Fall back based on floor
         if (cleanNum.startsWith('2')) {
           finalTypeId = 'rt_supirior';
-          finalTypeName = 'SUPIRIOR';
+          finalTypeName = 'SUPERIOR';
         } else if (cleanNum.startsWith('3')) {
           finalTypeId = 'rt_double_single';
-          finalTypeName = 'DOUBLE SIGNLE';
+          finalTypeName = 'Double Single';
         } else {
           finalTypeId = 'rt_deluxe';
-          finalTypeName = 'Delux Room';
+          finalTypeName = 'Deluxe';
         }
       } else {
         // Active room type: look up exact name from this.roomTypes
@@ -542,6 +565,95 @@ class PMSStore {
     return this.rooms;
   }
 
+  standardizeAndSortNightAudits(audits = []) {
+    if (!Array.isArray(audits)) return [];
+    const map = new Map();
+
+    audits.forEach((a) => {
+      if (!a) return;
+      const id = String(a.id || `na_${Date.now()}`);
+
+      // Determine canonical audit date string
+      const rawIso = a.rawDate || normalizeDateStr(a.auditDate || a.date) || getTodayIsoDate();
+      const dispDate = a.date && a.date.length >= 10 && !a.date.startsWith('20')
+        ? a.date
+        : formatDisplayDate(rawIso);
+
+      // Determine next business date
+      let nextDateIso = a.newBusinessDateIso || normalizeDateStr(a.newBusinessDate);
+      if (!nextDateIso || nextDateIso === rawIso) {
+        nextDateIso = getNextDayIsoDate(rawIso);
+      }
+      const dispNextDate = a.newBusinessDate && a.newBusinessDate.length >= 10 && !a.newBusinessDate.startsWith('20')
+        ? a.newBusinessDate
+        : formatDisplayDate(nextDateIso);
+
+      // Determine completed time
+      let compTime = a.completedTime;
+      if (!compTime || compTime === '—') {
+        if (a.completedAt && a.completedAt !== '—') {
+          compTime = a.completedAt;
+        } else if (a.performedAt) {
+          try {
+            const dt = new Date(a.performedAt);
+            const tf = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+            compTime = `${dispDate} ${tf}`;
+          } catch (_) {
+            compTime = `${dispDate} 01:00 am`;
+          }
+        } else {
+          compTime = `${dispNextDate} 01:00 am`;
+        }
+      }
+
+      const chargesCount = Number(a.chargesPostedCount ?? (a.roomCharges ? a.roomCharges.length : (a.roomChargesLog ? a.roomChargesLog.length : 0))) || 0;
+      const totalRev = Number(a.totalRevenue ?? a.amountPosted ?? 0) || 0;
+      const occPercent = Number(a.occupancyPercent ?? a.kpis?.occupancyPercent ?? (a.occupiedRooms && a.vacantRooms ? Math.round((a.occupiedRooms / (a.occupiedRooms + a.vacantRooms)) * 100) : (a.occupiedRooms ? 25 : 0))) || 0;
+
+      const record = {
+        ...a,
+        id,
+        auditDate: rawIso,
+        date: dispDate,
+        newBusinessDate: dispNextDate,
+        newBusinessDateIso: nextDateIso,
+        completedTime: compTime,
+        completedAt: a.completedAt || compTime,
+        performedBy: a.performedBy || a.startedBy || a.completedBy || 'System',
+        status: 'COMPLETED',
+        statusText: 'Completed',
+        chargesPostedCount: chargesCount,
+        amountPosted: totalRev,
+        totalRevenue: totalRev,
+        occupancyPercent: occPercent,
+        isLocked: true
+      };
+
+      const dedupeKey = record.auditDate || record.date || id;
+      if (!map.has(dedupeKey)) {
+        map.set(dedupeKey, record);
+      } else {
+        const prev = map.get(dedupeKey);
+        map.set(dedupeKey, {
+          ...prev,
+          ...record,
+          roomCharges: record.roomCharges || prev.roomCharges || record.roomChargesLog || prev.roomChargesLog
+        });
+      }
+    });
+
+    const list = Array.from(map.values());
+    list.sort((a, b) => {
+      const dateA = a.auditDate || a.rawDate || a.date;
+      const dateB = b.auditDate || b.rawDate || b.date;
+      const timeA = new Date(a.performedAt || dateA || 0).getTime();
+      const timeB = new Date(b.performedAt || dateB || 0).getTime();
+      return timeB - timeA;
+    });
+
+    return list;
+  }
+
   dedupeRoomsByNumber(roomsList, pruneCloudDuplicates = false) {
     const byNum = new Map();
     const duplicateDocIdsToPrune = [];
@@ -555,17 +667,19 @@ class PMSStore {
     (roomsList || []).forEach((rm) => {
       if (!rm) return;
       const rawNum = String(rm.roomNumber || rm.id || '').trim();
-      const numKey = rawNum.toLowerCase().replace(/^rm_/, '');
-      if (!numKey) return;
+      const numKey = rawNum.toLowerCase().replace(/^(rm_|room_|room)/i, '').trim();
+      const digitMatch = numKey.match(/\d+/);
+      const canonicalNum = digitMatch ? digitMatch[0] : numKey;
+      if (!canonicalNum) return;
 
-      if (this.inFlightDeletes && (this.inFlightDeletes.has(String(rm.id)) || this.inFlightDeletes.has(`rm_${numKey}`))) {
+      if (this.inFlightDeletes && (this.inFlightDeletes.has(String(rm.id)) || this.inFlightDeletes.has(`rm_${canonicalNum}`) || this.inFlightDeletes.has(canonicalNum))) {
         return;
       }
 
-      const canonicalId = `rm_${numKey}`;
-      const existing = byNum.get(numKey);
+      const canonicalId = `rm_${canonicalNum}`;
+      const existing = byNum.get(canonicalNum);
       if (!existing) {
-        byNum.set(numKey, { ...rm, roomNumber: String(rm.roomNumber || numKey).trim() });
+        byNum.set(canonicalNum, { ...rm, id: rm.id || canonicalId, roomNumber: String(rm.roomNumber || canonicalNum).trim() });
         return;
       }
 
@@ -574,16 +688,23 @@ class PMSStore {
       const existingMs = getRoomUpdatedMs(existing);
       const incomingMs = getRoomUpdatedMs(rm);
 
+      // Floor 2 rooms (203, 204, 205, 206) are canonically SUPERIOR
+      const incomingIsSuperior = String(rm.roomTypeName || rm.roomType || '').toUpperCase().includes('SUPERIOR');
+      const existingIsSuperior = String(existing.roomTypeName || existing.roomType || '').toUpperCase().includes('SUPERIOR');
+      const floor2SuperiorTiebreaker = canonicalNum.startsWith('2') && (incomingIsSuperior !== existingIsSuperior)
+        ? (incomingIsSuperior ? rm : existing)
+        : null;
+
       // Keep canonical id if either has it, while taking the freshest operational/housekeeping fields
-      const winner = incomingIsCanonical
+      const winner = floor2SuperiorTiebreaker || (incomingIsCanonical
         ? rm
         : existingIsCanonical
         ? existing
         : incomingMs >= existingMs
         ? rm
-        : existing;
+        : existing);
       const loser = winner === rm ? existing : rm;
-      const winnerId = winner.id;
+      const winnerId = winner.id || canonicalId;
 
       const loserCloudDocId = loser._firestoreDocId || loser.id;
       const winnerCloudDocId = winner._firestoreDocId || winner.id;
@@ -592,11 +713,11 @@ class PMSStore {
       }
 
       const base = incomingMs > existingMs ? { ...existing, ...rm } : { ...rm, ...existing };
-      byNum.set(numKey, {
+      byNum.set(canonicalNum, {
         ...base,
         id: winnerId,
         _firestoreDocId: winnerCloudDocId,
-        roomNumber: String(base.roomNumber || numKey).trim()
+        roomNumber: String(base.roomNumber || canonicalNum).trim()
       });
     });
 
@@ -607,6 +728,40 @@ class PMSStore {
     }
 
     return Array.from(byNum.values());
+  }
+
+  dedupeRatePlans(plansList) {
+    const byId = new Map();
+    const byCode = new Map();
+
+    (plansList || []).forEach((rp) => {
+      if (!rp) return;
+      const idKey = (rp.id || '').trim();
+      const codeKey = (rp.code || '').trim().toUpperCase();
+      if (!idKey && !codeKey) return;
+
+      const existing = (idKey && byId.get(idKey)) || (codeKey && byCode.get(codeKey));
+      if (!existing) {
+        const item = { ...rp, id: idKey || `rp_${codeKey}`, code: codeKey || rp.code || '' };
+        if (idKey) byId.set(idKey, item);
+        if (codeKey) byCode.set(codeKey, item);
+      } else {
+        const prevHasRates = existing.roomTypeRates && Object.values(existing.roomTypeRates).some(r => r && (r.active || r.basePrice > 0));
+        const curHasRates = rp.roomTypeRates && Object.values(rp.roomTypeRates).some(r => r && (r.active || r.basePrice > 0));
+        const canonicalId = existing.id || idKey;
+        const canonicalCode = existing.code || codeKey;
+        const merged = (curHasRates && !prevHasRates)
+          ? { ...existing, ...rp, id: canonicalId, code: canonicalCode }
+          : { ...rp, ...existing, id: canonicalId, code: canonicalCode };
+
+        if (canonicalId) byId.set(canonicalId, merged);
+        if (canonicalCode) byCode.set(canonicalCode, merged);
+        if (idKey) byId.set(idKey, merged);
+        if (codeKey) byCode.set(codeKey, merged);
+      }
+    });
+
+    return Array.from(new Set(byId.values()));
   }
 
   sanitizeStaleOccupiedRooms(roomsList, reservationsList) {
@@ -705,12 +860,13 @@ class PMSStore {
       maintenanceBlocks: this.maintenanceBlocks,
       taxRules: this.taxRules,
       serviceCharges: this.serviceCharges,
-      propertiesList: (this.propertiesList || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT'),
+      propertiesList: (this.propertiesList || ['HOTEL NIVASA']).map(p => (p === 'HOTEL ASTHA' || p === 'Hotel Astha') ? 'HOTEL NIVASA' : p).filter(p => p !== 'HOTEL ASTHA RESORT'),
       currentUser: this.isAuthenticated ? this.currentUser : null,
       isAuthenticated: this.isAuthenticated === true && !!this.currentUser,
       invitationTokens: this.invitationTokens || [],
       deletedReservationIds: Array.from(this.deletedReservationIds || []),
       deletedTeamMemberIds: Array.from(this.deletedTeamMemberIds || []),
+      deletedRatePlanIds: Array.from(this.deletedRatePlanIds || []),
       deletedRoomIds: [],
       deletedRoomTypeIds: []
     };
@@ -780,7 +936,7 @@ class PMSStore {
       maintenanceBlocks: this.maintenanceBlocks,
       taxRules: Array.isArray(this.taxRules) ? this.taxRules : JSON.parse(JSON.stringify(initialTaxRules)),
       serviceCharges: this.serviceCharges || [],
-      propertiesList: (this.propertiesList || ['HOTEL ASTHA']).filter(p => p !== 'HOTEL ASTHA RESORT'),
+      propertiesList: (this.propertiesList || ['HOTEL NIVASA']).map(p => (p === 'HOTEL ASTHA' || p === 'Hotel Astha') ? 'HOTEL NIVASA' : p).filter(p => p !== 'HOTEL ASTHA RESORT'),
       currentUser: this.isAuthenticated ? this.currentUser : null,
       isAuthenticated: this.isAuthenticated === true && !!this.currentUser,
       invitationTokens: this.invitationTokens || [],
@@ -1200,6 +1356,14 @@ class PMSStore {
           if (snapshot.exists()) {
             const cloudProp = snapshot.data();
             this.property = { ...this.property, ...cloudProp };
+            if (!this.property.name || this.property.name === 'HOTEL ASTHA' || this.property.name === 'Hotel Astha' || this.property.name === 'Astha') {
+              this.property.name = 'HOTEL NIVASA';
+              this.property.tagline = 'HOTEL NIVASA';
+              this.property.legalName = 'HOTEL NIVASA';
+              this.property.tradeName = 'HOTEL NIVASA';
+              this.property.initials = 'HN';
+              this.syncDocToFirestore('', this.propertyId, this.property);
+            }
             this.save();
             this.notify();
           }
@@ -1216,7 +1380,13 @@ class PMSStore {
         tmCol,
         (snapshot) => {
           if (snapshot.empty) return;
-          const cloudTm = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const cloudTm = snapshot.docs.map((d) => {
+            const data = d.data() || {};
+            const props = (data.properties && data.properties.length > 0 ? data.properties : ['HOTEL NIVASA']).map((p) =>
+              p === 'HOTEL ASTHA' || p === 'Hotel Astha' ? 'HOTEL NIVASA' : p
+            );
+            return { id: d.id, ...data, properties: props };
+          });
           const deletedTm = this.deletedTeamMemberIds || new Set();
           const map = new Map();
           cloudTm.forEach((tm) => {
@@ -1243,6 +1413,36 @@ class PMSStore {
         () => {}
       );
       this.unsubscribers.push(unsubTm);
+
+      // 8. Real-time Listener: Night Audits (History & Immutable Snapshots)
+      const naCol = collection(db, 'properties', this.propertyId, 'nightAudits');
+      const unsubNa = onSnapshot(
+        naCol,
+        (snapshot) => {
+          if (snapshot.empty) return;
+          const cloudAudits = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const auditMap = new Map();
+          (initialNightAudits || []).forEach((a) => {
+            if (a && a.id) auditMap.set(a.id, a);
+          });
+          (this.nightAudits || []).forEach((a) => {
+            if (a && a.id) auditMap.set(a.id, a);
+          });
+          cloudAudits.forEach((a) => {
+            if (a && a.id) {
+              const existing = auditMap.get(a.id);
+              auditMap.set(a.id, existing ? { ...existing, ...a } : a);
+            }
+          });
+          this.nightAudits = this.standardizeAndSortNightAudits(Array.from(auditMap.values()));
+          this.save();
+          this.notify();
+        },
+        (err) => {
+          console.warn('[Firebase Firestore] Night audits listener note:', err?.message);
+        }
+      );
+      this.unsubscribers.push(unsubNa);
 
       // 8. Load Static Configuration Collections via one-shot cached read (no permanent listener overhead)
       await this.fetchStaticConfigs();
@@ -1426,12 +1626,13 @@ class PMSStore {
   async fetchStaticConfigs() {
     if (!db) return;
     try {
-      const [rtSnap, rpSnap, mpSnap, tmSnap, annSnap] = await Promise.all([
+      const [rtSnap, rpSnap, mpSnap, tmSnap, annSnap, naSnap] = await Promise.all([
         getDocs(collection(db, 'properties', this.propertyId, 'roomTypes')).catch(() => null),
         getDocs(collection(db, 'properties', this.propertyId, 'ratePlans')).catch(() => null),
         getDocs(collection(db, 'properties', this.propertyId, 'mealPlans')).catch(() => null),
         getDocs(collection(db, 'properties', this.propertyId, 'teamMembers')).catch(() => null),
-        getDocs(collection(db, 'properties', this.propertyId, 'announcements')).catch(() => null)
+        getDocs(collection(db, 'properties', this.propertyId, 'announcements')).catch(() => null),
+        getDocs(collection(db, 'properties', this.propertyId, 'nightAudits')).catch(() => null)
       ]);
 
       let hasChanges = false;
@@ -1467,29 +1668,21 @@ class PMSStore {
 
       // 2. Rate Plans
       if (rpSnap && !rpSnap.empty) {
-        const cloudRp = rpSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const map = new Map();
-        cloudRp.forEach((rp) => {
-          const codeKey = (rp.code || '').trim().toUpperCase();
-          const idKey = (rp.id || '').trim();
-          const dedupeKey = codeKey || idKey;
-          if (dedupeKey) {
-            if (!map.has(dedupeKey)) {
-              map.set(dedupeKey, { ...rp, id: rp.id || dedupeKey });
-            } else {
-              const prev = map.get(dedupeKey);
-              const prevHasRates = prev.roomTypeRates && Object.values(prev.roomTypeRates).some(r => r && (r.active || r.basePrice > 0));
-              const curHasRates = rp.roomTypeRates && Object.values(rp.roomTypeRates).some(r => r && (r.active || r.basePrice > 0));
-              if (curHasRates && !prevHasRates) {
-                map.set(dedupeKey, { ...prev, ...rp, id: prev.id || rp.id || dedupeKey });
-              } else {
-                map.set(dedupeKey, { ...rp, ...prev, id: prev.id || rp.id || dedupeKey });
-              }
-            }
-          }
-        });
-        if (map.size > 0) {
-          this.ratePlans = Array.from(map.values());
+        const obsoleteRatePlanKeys = new Set(['rp_test_plan', 'test plan', '132']);
+        const cloudRp = rpSnap.docs
+          .map((d) => ({ ...d.data(), id: d.id || d.data()?.id }))
+          .filter((rp) => {
+            if (!rp) return false;
+            const id = String(rp.id || '').trim().toLowerCase();
+            const code = String(rp.code || '').trim().toLowerCase();
+            const name = String(rp.name || '').trim().toLowerCase();
+            if (obsoleteRatePlanKeys.has(id) || obsoleteRatePlanKeys.has(code) || obsoleteRatePlanKeys.has(name)) return false;
+            if (this.deletedRatePlanIds && (this.deletedRatePlanIds.has(String(rp.id)) || this.deletedRatePlanIds.has(String(rp.code)))) return false;
+            return true;
+          });
+        const deduped = this.dedupeRatePlans(cloudRp);
+        if (deduped.length > 0) {
+          this.ratePlans = deduped;
           hasChanges = true;
         }
       }
@@ -1508,7 +1701,13 @@ class PMSStore {
 
       // 4. Team Members
       if (tmSnap && !tmSnap.empty) {
-        const cloudTm = tmSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const cloudTm = tmSnap.docs.map((d) => {
+          const data = d.data() || {};
+          const props = (data.properties && data.properties.length > 0 ? data.properties : ['HOTEL NIVASA']).map((p) =>
+            p === 'HOTEL ASTHA' || p === 'Hotel Astha' ? 'HOTEL NIVASA' : p
+          );
+          return { id: d.id, ...data, properties: props };
+        });
         const deletedTm = this.deletedTeamMemberIds || new Set();
         const map = new Map();
         cloudTm.forEach((tm) => {
@@ -1545,6 +1744,26 @@ class PMSStore {
           this.announcements = cloudAnn;
           hasChanges = true;
         }
+      }
+
+      // 6. Night Audits (History & Immutable Snapshots)
+      if (naSnap && !naSnap.empty) {
+        const cloudAudits = naSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const auditMap = new Map();
+        (initialNightAudits || []).forEach((a) => {
+          if (a && a.id) auditMap.set(a.id, a);
+        });
+        (this.nightAudits || []).forEach((a) => {
+          if (a && a.id) auditMap.set(a.id, a);
+        });
+        cloudAudits.forEach((a) => {
+          if (a && a.id) {
+            const existing = auditMap.get(a.id);
+            auditMap.set(a.id, existing ? { ...existing, ...a } : a);
+          }
+        });
+        this.nightAudits = this.standardizeAndSortNightAudits(Array.from(auditMap.values()));
+        hasChanges = true;
       }
 
       if (hasChanges) {
@@ -1657,8 +1876,8 @@ class PMSStore {
       const nestedRef = doc(db, 'properties', this.propertyId, collectionName, String(docId));
       await setDoc(nestedRef, payload, { merge: true });
 
-      // 2. Also keep root collection mirror updated with exact info for rooms, roomTypes, and reservations
-      if (['rooms', 'roomTypes', 'reservations'].includes(collectionName)) {
+      // 2. Also keep root collection mirror updated with exact info for rooms, roomTypes, reservations, and nightAudits
+      if (['rooms', 'roomTypes', 'reservations', 'nightAudits'].includes(collectionName)) {
         try {
           const rootRef = doc(db, collectionName, String(docId));
           await setDoc(rootRef, payload, { merge: true });
@@ -1694,12 +1913,22 @@ class PMSStore {
         purgeCount += 2;
       });
 
-      // 2. Obsolete room documents to delete (such as 501, rm_501)
-      const obsoleteRoomIds = ['501', 'rm_501'];
+      // 2. Obsolete room documents to delete (such as 501, rm_501, and non-canonical duplicate 205 documents)
+      const obsoleteRoomIds = ['501', 'rm_501', '205', 'room_205', 'rm_205_deluxe', 'rm_205_dx'];
       obsoleteRoomIds.forEach((id) => {
         const nestedRef = doc(db, 'properties', this.propertyId, 'rooms', id);
         batch.delete(nestedRef);
         const rootRef = doc(db, 'rooms', id);
+        batch.delete(rootRef);
+        purgeCount += 2;
+      });
+
+      // 3. Obsolete dummy rate plans to delete (such as test plan / 132)
+      const obsoleteRatePlanIds = ['132', 'rp_test_plan'];
+      obsoleteRatePlanIds.forEach((id) => {
+        const nestedRef = doc(db, 'properties', this.propertyId, 'ratePlans', id);
+        batch.delete(nestedRef);
+        const rootRef = doc(db, 'ratePlans', id);
         batch.delete(rootRef);
         purgeCount += 2;
       });
@@ -2051,7 +2280,7 @@ class PMSStore {
       bookingData.totalAmount !== undefined
         ? Number(bookingData.totalAmount)
         : Math.round((totalRoomCharges + taxAmount) * 100) / 100;
-    const paidAmount = Number(bookingData.advanceAmount) || 0;
+    const paidAmount = Number(bookingData.advanceAmount !== undefined ? bookingData.advanceAmount : bookingData.paidAmount) || 0;
     const balanceDue = Math.max(0, Math.round((totalAmount - paidAmount) * 100) / 100);
 
     const checkInIso = normalizeDateStr(bookingData.checkInDate) ||
@@ -2215,7 +2444,7 @@ class PMSStore {
       'CREATE_RESERVATION',
       'RESERVATION',
       ref,
-      `Created booking for ${newRes.primaryGuest.name} in Room ${roomNumber || 'Unassigned'} (${newRes.nights} Nights). Total: ₹${totalAmount}`,
+      `Created booking for ${newRes.primaryGuest.name} in Room ${roomNumber || 'Unassigned'} (${newRes.nights} Nights). Total: ₹${totalAmount}${paidAmount > 0 ? `, Advance Paid: ₹${paidAmount}` : ''}`,
       'Astha India',
       {
         actionType: 'RESERVATION_CREATED',
@@ -2226,6 +2455,9 @@ class PMSStore {
         nights: newRes.nights,
         rooms: newRes.roomsCount,
         totalAmount: totalAmount,
+        advanceAmount: paidAmount,
+        advancePaid: paidAmount,
+        paidAmount: paidAmount,
         bookingSource: newRes.bookingSource,
         status: newRes.status.toUpperCase(),
         affectedDates: [newRes.checkInDate]
@@ -2267,6 +2499,31 @@ class PMSStore {
           newStatus: 'CHECKED_IN',
           roomNumber: roomNumber,
           affectedDates: [newRes.checkInDate]
+        }
+      );
+    }
+
+    // 4. Log Advance Payment if advance was paid
+    if (paidAmount > 0) {
+      const advMethod = bookingData.paymentMethod || 'UPI';
+      const advRef = bookingData.paymentReference || 'Direct';
+      this.logAudit(
+        'ADD_PAYMENT',
+        'RESERVATION',
+        ref,
+        `Advance payment of ₹${Number(paidAmount).toFixed(2)} received via ${advMethod}. Ref: ${advRef}`,
+        'Astha India',
+        {
+          actionType: 'PAYMENT_ADDED',
+          reservationId: id,
+          bookingReference: ref,
+          isAdvance: true,
+          paymentMethod: advMethod,
+          paymentType: 'Advance Payment',
+          amount: Number(paidAmount),
+          voucherNumber: advRef,
+          date: newRes.checkInDate || getTodayIsoDate(),
+          affectedDates: [newRes.checkInDate || getTodayIsoDate()]
         }
       );
     }
@@ -4073,21 +4330,27 @@ class PMSStore {
       completedTime: `${curDateFormatted} ${timeFormatted}`,
       completedDate: curDateFormatted,
       completedHour: timeFormatted,
+      completedAt: now.toISOString(),
       performedAt: now.toISOString(),
       performedBy: auditorName,
       totalRevenue: totalRev,
+      amountPosted: totalRev,
       totalTax: totalTax,
       occupiedRooms: inHouse.length,
       vacantRooms: Math.max(0, this.rooms.length - inHouse.length),
       adr: inHouse.length > 0 ? Math.round(totalRev / inHouse.length) : 0,
       revPar: this.rooms.length > 0 ? Math.round(totalRev / this.rooms.length) : 0,
+      occupancyPercent: this.rooms.length > 0 ? Math.round((inHouse.length / this.rooms.length) * 100) : 0,
       status: 'COMPLETED',
+      statusText: 'Completed',
+      isLocked: true,
       checkedOutCount: this.reservations.filter(r => r.status === 'checked_out' && r.checkOutDate === curDate).length,
       chargesPostedCount: inHouse.length,
+      roomCharges: roomChargesLog,
       roomChargesLog
     };
 
-    this.nightAudits = [auditRecord, ...this.nightAudits];
+    this.nightAudits = this.standardizeAndSortNightAudits([auditRecord, ...this.nightAudits]);
 
     this.logAudit(
       'NIGHT_AUDIT',
@@ -4101,7 +4364,7 @@ class PMSStore {
 
     // Async Cloud Firestore Writes
     this.syncDocToFirestore('nightAudits', auditRecord.id, auditRecord);
-    this.syncDocToFirestore('', this.propertyId, { businessDate: nextDate });
+    this.syncDocToFirestore('', this.propertyId, { businessDate: nextDate, lastAuditDate: curDate, lastAuditId: auditRecord.id });
 
     return auditRecord;
   }
@@ -4536,7 +4799,7 @@ class PMSStore {
         loginEmail: liveMember.loginEmail || liveMember.email || cur.loginEmail,
         role: liveRole,
         status: 'ACTIVE',
-        properties: liveMember.properties || cur.properties || ['HOTEL ASTHA'],
+        properties: liveMember.properties || cur.properties || ['HOTEL NIVASA'],
         permissions: liveMember.permissions
           ? JSON.parse(JSON.stringify(liveMember.permissions))
           : JSON.parse(JSON.stringify(cur.permissions || defaultPerms))
@@ -4633,7 +4896,7 @@ class PMSStore {
           : 'ST'),
       avatar: merged.avatar || (userRole === 'Owner' ? '👑' : '👤'),
       status: 'ACTIVE',
-      properties: merged.properties || ['HOTEL ASTHA'],
+      properties: merged.properties || ['HOTEL NIVASA'],
       permissions: merged.permissions
         ? JSON.parse(JSON.stringify(merged.permissions))
         : JSON.parse(JSON.stringify(defaultPerms))
@@ -4852,6 +5115,11 @@ class PMSStore {
   deleteRatePlan(planId) {
     const plan = this.ratePlans?.find(p => p.id === planId || p.code === planId);
     this.ratePlans = (this.ratePlans || []).filter(p => p.id !== planId && p.code !== planId);
+    if (!this.deletedRatePlanIds) this.deletedRatePlanIds = new Set();
+    this.deletedRatePlanIds.add(String(planId));
+    if (plan?.code) this.deletedRatePlanIds.add(String(plan.code));
+    if (plan?.id) this.deletedRatePlanIds.add(String(plan.id));
+
     if (plan) {
       this.logAudit('DELETE_RATE_PLAN', 'PROPERTIES', plan.code, `Removed rate plan ${plan.name}`);
       this.deleteDocFromFirestore('ratePlans', plan.id);

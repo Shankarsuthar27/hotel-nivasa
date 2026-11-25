@@ -27,8 +27,8 @@ import './my-team.css';
 
 export default function MyTeamView({
   teamMembers = [],
-  propertiesList = ['HOTEL ASTHA'],
-  currentProperty = 'HOTEL ASTHA',
+  propertiesList = ['HOTEL NIVASA'],
+  currentProperty = 'HOTEL NIVASA',
   propertyId = 'hotel_astha_main',
   currentUser,
   onInviteMembers,
@@ -102,12 +102,19 @@ export default function MyTeamView({
   );
 
   const filteredMembers = eligibleMembers.filter((m) => {
-    // Property filter
+    // Property filter: match current property, canonicalizing 'HOTEL ASTHA' and 'HOTEL NIVASA'
+    const memberProps = (m.properties || []).map((p) =>
+      p === 'HOTEL ASTHA' || p === 'Hotel Astha' ? 'HOTEL NIVASA' : p
+    );
+    const targetProp =
+      selectedProperty === 'HOTEL ASTHA' || selectedProperty === 'Hotel Astha'
+        ? 'HOTEL NIVASA'
+        : selectedProperty;
+
     const matchesProp =
-      !m.properties ||
-      m.properties.length === 0 ||
-      m.properties.includes(selectedProperty) ||
-      selectedProperty === 'ALL';
+      memberProps.length === 0 ||
+      memberProps.includes(targetProp) ||
+      targetProp === 'ALL';
 
     // Search filter
     const q = searchQuery.toLowerCase().trim();

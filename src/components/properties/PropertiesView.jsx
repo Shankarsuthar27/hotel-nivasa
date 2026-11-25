@@ -11,7 +11,7 @@ import './properties.css';
 export default function PropertiesView({
   subtab = 'all',
   property,
-  propertiesList = ['HOTEL ASTHA'],
+  propertiesList = ['HOTEL NIVASA'],
   mealPlans = [],
   roomTypes = [],
   rooms = [],

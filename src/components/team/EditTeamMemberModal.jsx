@@ -6,7 +6,7 @@ export default function EditTeamMemberModal({
   isOpen,
   onClose,
   member,
-  propertiesList = ['HOTEL ASTHA'],
+  propertiesList = ['HOTEL NIVASA'],
   onUpdateMember,
   showToast
 }) {
@@ -24,7 +24,7 @@ export default function EditTeamMemberModal({
       const initialProps =
         member.properties && member.properties.length > 0
           ? [...member.properties]
-          : [propertiesList[0] || 'HOTEL ASTHA'];
+          : [propertiesList[0] || 'HOTEL NIVASA'];
       setSelectedProperties(initialProps);
 
       // Pre-fill role for each property

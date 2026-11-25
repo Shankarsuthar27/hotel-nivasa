@@ -43,9 +43,9 @@ export default function Sidebar({
     }
   }, [activeTab]);
 
-  const propertyName = property?.name || 'HOTEL ASTHA';
-  const propertyTagline = property?.tagline || 'HOTEL ASTHA';
-  const propertyInitials = property?.initials || 'HA';
+  const propertyName = property?.name || 'HOTEL NIVASA';
+  const propertyTagline = property?.tagline || 'HOTEL NIVASA';
+  const propertyInitials = property?.initials || 'HN';
 
   const activeUser = currentUser || property?.userProfile || {
     name: 'Astha India',
@@ -163,8 +163,6 @@ export default function Sidebar({
               { id: 'meal-plans', label: 'Meal Plans' },
               { id: 'rooms', label: 'Rooms' },
               { id: 'rate-plans', label: 'Rate Plans' },
-              { id: 'business-account', label: 'Business Account' },
-              { id: 'market-segment', label: 'Market Segment' },
               { id: 'tax-services', label: 'Tax & Services' }
             ];
 

@@ -96,8 +96,8 @@ const OtalCheckItem = ({ checked, onChange, label, disabled = false }) => (
 export default function TeamPermissionsView({
   teamMembers = [],
   currentUser = {},
-  propertiesList = ['HOTEL ASTHA'],
-  currentProperty = 'HOTEL ASTHA',
+  propertiesList = ['HOTEL NIVASA'],
+  currentProperty = 'HOTEL NIVASA',
   initialMemberId,
   initialSubtab,
   onSaveGranularPermissions,

@@ -155,7 +155,7 @@ export default function NightAuditDetailModal({
       >
         {/* Printable Letterhead (visible in @media print) */}
         <div className="na-print-header" style={{ display: 'none' }}>
-          <h2 style={{ margin: '0 0 4px', fontSize: '18pt' }}>{property.name || 'Hotel Astha India'}</h2>
+          <h2 style={{ margin: '0 0 4px', fontSize: '18pt' }}>{property.name || 'HOTEL NIVASA'}</h2>
           <p style={{ margin: '0 0 6px', fontSize: '10pt', color: '#555' }}>
             Daily Manager's Night Audit Closing Report • Business Date: {displayDate}
           </p>

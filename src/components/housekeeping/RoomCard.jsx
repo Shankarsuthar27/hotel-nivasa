@@ -1,5 +1,5 @@
 import React from 'react';
-import { UserCheck, Calendar, Wrench, PlusCircle } from 'lucide-react';
+import { UserCheck, Calendar, Wrench, PlusCircle, Key } from 'lucide-react';
 import './room-card.css';
 
 // Helper to format checkout date into: "Checkout: Fri 13, Nov 2026"
@@ -14,6 +14,7 @@ const formatCheckoutDate = (dateStr) => {
 
 export default function RoomCard({
   room,
+  roomTypes = [],
   isSelected = false,
   onToggleSelect,
   onUpdateStatus,
@@ -23,7 +24,38 @@ export default function RoomCard({
   onClick,
   activeReservation
 }) {
-  const roomNumber = room?.roomNumber || '101';
+  const cleanRoomNumber = String(room?.roomNumber || room?.id || '101')
+    .replace(/^rm_/, '')
+    .trim();
+
+  // Helper to format room type name matching user's reference specification
+  const formatRoomTypeName = (rawName, typeId, allTypes = []) => {
+    let name = rawName;
+    if (!name && typeId && Array.isArray(allTypes)) {
+      const matched = allTypes.find((rt) => rt.id === typeId || rt.code === typeId);
+      if (matched) name = matched.name;
+    }
+    if (!name) {
+      if (cleanRoomNumber.startsWith('2')) name = 'SUPERIOR';
+      else if (cleanRoomNumber.startsWith('3')) name = 'DOUBLE SINGLE';
+      else name = 'DELUXE';
+    }
+
+    const upper = String(name).trim().toUpperCase();
+    if (upper === 'SUPIRIOR' || upper === 'SUPERIOR') return 'SUPERIOR';
+    if (upper === 'SEMI DELUXE' || upper === 'SEMI-DELUXE') return 'Semi Deluxe';
+    if (upper === 'DELUXE' || upper === 'DELUX ROOM' || upper === 'DELUXE ROOM') return 'Deluxe';
+    if (upper === 'DOUBLE SINGLE' || upper === 'DOUBLE SIGNLE' || upper === 'DOUBLE-SINGLE') return 'Double Single';
+
+    return name;
+  };
+
+  const displayRoomType = formatRoomTypeName(
+    room?.roomTypeName || room?.roomType,
+    room?.roomTypeId,
+    roomTypes
+  );
+
   const activeResStatus = String(activeReservation?.status || '')
     .toLowerCase()
     .replace(/[\s-]+/g, '_');
@@ -35,7 +67,7 @@ export default function RoomCard({
   const isAvailable = !isOccupied && !isDirty && !isMaintenance;
 
   // --------------------------------------------------------------------------
-  // 1. OCCUPIED ROOM CARD (Matching Room 102 in reference image)
+  // 1. OCCUPIED ROOM CARD
   // --------------------------------------------------------------------------
   if (isOccupied) {
     const guestName =
@@ -49,20 +81,32 @@ export default function RoomCard({
       <div
         className="hk-room-card hk-card-occupied"
         onClick={onClick}
-        title={`Room ${roomNumber} - Occupied by ${guestName}`}
+        title={`Room ${cleanRoomNumber} - Occupied by ${guestName}`}
       >
         {/* Navy solid top bar */}
         <div className="hk-card-accent-bar" />
 
         <div className="hk-card-inner">
-          {/* Header Row: Room number + Occupied badge + UserCheck icon */}
+          {/* Header Row: Room number + Room Type badge + Occupied badge + UserCheck icon */}
           <div className="hk-card-header-row">
             <div className="hk-card-header-left">
-              <span className="hk-card-room-num">{roomNumber}</span>
+              <input
+                type="checkbox"
+                className="hk-card-checkbox"
+                checked={isSelected}
+                title={`Select room ${cleanRoomNumber}`}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  if (onToggleSelect) onToggleSelect(room?.id);
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <span className="hk-card-room-num">{cleanRoomNumber}</span>
+              <span className="hk-card-room-type-badge">{displayRoomType}</span>
               <span className="hk-badge-pill hk-badge-occupied">Occupied</span>
             </div>
             <div className="hk-card-actions">
-              <UserCheck size={19} className="text-blue-950" strokeWidth={2.2} />
+              <UserCheck size={18} className="text-blue-950" strokeWidth={2.2} />
             </div>
           </div>
 
@@ -99,7 +143,7 @@ export default function RoomCard({
     cardClass = 'hk-card-dirty';
     badgeClass = 'hk-badge-dirty';
     badgeLabel = 'Dirty';
-    defaultSubtext = room?.notes || 'Ready for check-in';
+    defaultSubtext = room?.notes || 'Needs cleaning';
   } else if (isMaintenance) {
     cardClass = 'hk-card-maintenance';
     badgeClass = 'hk-badge-maintenance';
@@ -107,11 +151,7 @@ export default function RoomCard({
     defaultSubtext = room?.notes || 'Out of order';
   } else {
     // Available
-    if (roomNumber === '101') {
-      defaultSubtext = room?.notes || 'Turnaround required post check-out';
-    } else {
-      defaultSubtext = room?.notes || 'Ready for check-in';
-    }
+    defaultSubtext = room?.notes || 'Ready for check-in';
   }
 
   // Handlers
@@ -151,21 +191,22 @@ export default function RoomCard({
       <div className="hk-card-accent-bar" />
 
       <div className="hk-card-inner">
-        {/* Header Row: Checkbox + Room number + 3 Action Icons */}
+        {/* Header Row: Checkbox + Room number + Room Type badge + 3 Action Icons */}
         <div className="hk-card-header-row">
           <div className="hk-card-header-left">
             <input
               type="checkbox"
               className="hk-card-checkbox"
               checked={isSelected}
-              title={`Select room ${roomNumber}`}
+              title={`Select room ${cleanRoomNumber}`}
               onChange={(e) => {
                 e.stopPropagation();
                 if (onToggleSelect) onToggleSelect(room?.id);
               }}
               onClick={(e) => e.stopPropagation()}
             />
-            <span className="hk-card-room-num">{roomNumber}</span>
+            <span className="hk-card-room-num">{cleanRoomNumber}</span>
+            <span className="hk-card-room-type-badge">{displayRoomType}</span>
           </div>
 
           <div className="hk-card-actions">
@@ -177,8 +218,8 @@ export default function RoomCard({
               onClick={handleToggleDirty}
             >
               <svg
-                width="16"
-                height="16"
+                width="15"
+                height="15"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -192,14 +233,14 @@ export default function RoomCard({
               </svg>
             </button>
 
-            {/* 2. Tool / Wrench Icon (Maintenance) */}
+            {/* 2. Wrench Icon (Maintenance / Block Room) */}
             <button
               type="button"
-              className="hk-card-action-btn"
+              className={`hk-card-action-btn ${isMaintenance ? 'active' : ''}`}
               title="Maintenance / Block Room"
               onClick={handleMaintenanceClick}
             >
-              <Wrench size={15} strokeWidth={2} />
+              <Wrench size={14} strokeWidth={2} />
             </button>
 
             {/* 3. Plus Circle Icon (Create Reservation) */}
@@ -209,7 +250,7 @@ export default function RoomCard({
               title="Create Reservation for Room"
               onClick={handleReservationClick}
             >
-              <PlusCircle size={16} strokeWidth={2} />
+              <PlusCircle size={15} strokeWidth={2} />
             </button>
           </div>
         </div>

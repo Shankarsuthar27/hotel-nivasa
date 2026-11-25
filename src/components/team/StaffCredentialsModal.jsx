@@ -40,7 +40,7 @@ export default function StaffCredentialsModal({ isOpen, onClose, credentials }) 
 
   const handleCopyAll = () => {
     const summary = [
-      `Hotel Astha PMS — Staff Login Credentials`,
+      `HOTEL NIVASA PMS — Staff Login Credentials`,
       `Name: ${member?.name || ''}`,
       `Role: ${member?.role || ''}`,
       `Staff Login ID: ${staffId}`,

@@ -114,7 +114,7 @@ export function exportManagerReportExcel(
       fileName, isoDate,
       mtdStartIso, ytdStartIso
     } = parseManagerDateInfo(asOnDateStr);
-    const propertyName = property?.name || 'HOTEL ASTHA';
+    const propertyName = property?.name || 'HOTEL NIVASA';
 
     // Decode template container
     const templateBytes = base64ToUint8Array(MANAGER_REPORT_TEMPLATE_BASE64);
@@ -520,7 +520,7 @@ export function exportGuestDetailsExcel(
 
     const startInfo = parseReportDateInfo(startDateStr, new Date(2026, 8, 5));
     const endInfo = parseReportDateInfo(endDateStr, new Date(2026, 10, 6));
-    const propertyName = property?.name || 'HOTEL ASTHA';
+    const propertyName = property?.name || 'HOTEL NIVASA';
     const dateRangeStr = `${startInfo.display} to ${endInfo.display}`;
     const fileName = `guest-details_${startInfo.iso}_to_${endInfo.iso}.xlsx`;
 
@@ -762,7 +762,7 @@ export function exportFolioListExcel(
 
     const startInfo = parseReportDateInfo(startDateStr, new Date(2026, 10, 1));
     const endInfo = parseReportDateInfo(endDateStr, new Date(2026, 10, 6));
-    const propertyName = actualProperty?.name || 'HOTEL ASTHA';
+    const propertyName = actualProperty?.name || 'HOTEL NIVASA';
 
     // Date range display in format DD/MM/YYYY - DD/MM/YYYY
     const startFormatted = `${String(startInfo.day).padStart(2, '0')}/${String(startInfo.month).padStart(2, '0')}/${startInfo.year}`;
@@ -1002,7 +1002,7 @@ export function exportNightAuditExcel(
     const dateInfo = parseReportDateInfo(auditDateStr, new Date(2026, 10, 5));
     const isoDate = dateInfo.iso; // YYYY-MM-DD
     const auditDateFormatted = `${String(dateInfo.day).padStart(2, '0')}/${String(dateInfo.month).padStart(2, '0')}/${dateInfo.year}`;
-    const propertyName = property?.name || 'HOTEL ASTHA';
+    const propertyName = property?.name || 'HOTEL NIVASA';
     const fileName = `night-audit-report_${isoDate}.xlsx`;
 
     // 1. Matched Night Audit record if any
@@ -1418,7 +1418,7 @@ export function generateManagerReportData(property = {}, rooms = [], reservation
   const occupancyRate = rooms.length > 0 ? Math.round((inHouseCount / rooms.length) * 100) : 0;
 
   return [
-    { 'Metric': 'Property Name', 'Value': property.name || 'HOTEL ASTHA' },
+    { 'Metric': 'Property Name', 'Value': property.name || 'HOTEL NIVASA' },
     { 'Metric': 'Business Date', 'Value': property.businessDate || '27 Oct 2026' },
     { 'Metric': 'Total Physical Rooms', 'Value': rooms.length || 4 },
     { 'Metric': 'Occupied Rooms (In-House)', 'Value': inHouseCount || 1 },
@@ -1780,7 +1780,7 @@ export function generateOtaCommissionExport() {
   ];
 }
 
-export function exportReservationsToExcel(reservations, hotelName = 'HOTEL ASTHA') {
+export function exportReservationsToExcel(reservations, hotelName = 'HOTEL NIVASA') {
   const data = generateReservationsExport(reservations);
   return exportToExcel(data, `${hotelName.replace(/\s+/g, '_')}_Reservations_${Date.now()}.xlsx`, 'Reservations');
 }
@@ -2030,7 +2030,7 @@ export function exportReservationReportExcel(
     const endInfo = parseReportDateInfo(endDateStr, new Date(2026, 10, 6));
     const startIso = startInfo.iso;
     const endIso = endInfo.iso;
-    const propertyName = property?.name || 'HOTEL ASTHA';
+    const propertyName = property?.name || 'HOTEL NIVASA';
     const dateRangeStr = `${String(startInfo.day).padStart(2, '0')}/${String(startInfo.month).padStart(2, '0')}/${startInfo.year} - ${String(endInfo.day).padStart(2, '0')}/${String(endInfo.month).padStart(2, '0')}/${endInfo.year}`;
 
     const decoder = new TextDecoder('utf-8');

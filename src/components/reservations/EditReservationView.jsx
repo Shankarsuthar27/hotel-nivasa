@@ -1063,6 +1063,7 @@ export default function EditReservationView({
       }
 
       if (act === 'RESERVATION_CREATED' || a.action === 'CREATE_RESERVATION') {
+        const advVal = meta.advancePaid !== undefined ? meta.advancePaid : (meta.advanceAmount !== undefined ? meta.advanceAmount : meta.paidAmount);
         return {
           id: a.id || `created_${idx}`,
           type: 'RESERVATION_CREATED',
@@ -1079,23 +1080,26 @@ export default function EditReservationView({
           nights: meta.nights || currentRes.nights || 1,
           rooms: meta.rooms || currentRes.roomsCount || 1,
           totalAmount: meta.totalAmount || currentRes.totalAmount || '0.00',
+          advancePaid: advVal !== undefined ? advVal : (currentRes.paidAmount || 0),
           bookingSource: (meta.bookingSource || currentRes.bookingSource || 'walk-in').toLowerCase(),
           status: (meta.status || currentRes.status || 'RESERVED').toUpperCase(),
           affectedDates: meta.affectedDates || [currentRes.checkInDate || dateStr]
         };
       }
 
-      if (act === 'PAYMENT_ADDED' || a.action === 'ADD_PAYMENT') {
+      if (act === 'PAYMENT_ADDED' || a.action === 'ADD_PAYMENT' || act === 'ADD_PAYMENT') {
+        const isAdvance = meta.isAdvance || meta.paymentType === 'Advance Payment' || meta.paymentType === 'Advance' || String(a.details || '').toLowerCase().includes('advance');
         return {
           id: a.id || `pay_${idx}`,
           type: 'PAYMENT_ADDED',
           nodeColor: '#10b981',
           icon: <CreditCard size={16} color="#10b981" />,
-          title: 'Payment Added',
+          title: isAdvance ? 'Advance Payment Received' : 'Payment Added',
           time: timeStr,
           date: dateStr,
           author,
           affectsRoom: false,
+          isAdvance,
           method: meta.paymentMethod || 'UPI',
           amount: Math.abs(Number(meta.amount || 0)),
           voucherNumber: meta.voucherNumber || 'PAY-01',
@@ -1360,6 +1364,51 @@ export default function EditReservationView({
             ? (currentRes.checkOutTime.length === 5 ? `${currentRes.checkOutTime}:00` : currentRes.checkOutTime)
             : '11:00:00 AM');
 
+    // Check for advance payment / payments in folio transactions or currentRes
+    const folioPaymentTxs = (currentFolio?.transactions || []).filter(tx =>
+      tx && (tx.type === 'PAYMENT' || tx.direction === 'CREDIT' || Number(tx.amount) < 0)
+    );
+
+    const paymentBaselineEvents = folioPaymentTxs.length > 0
+      ? folioPaymentTxs.map((tx, idx) => {
+          const isAdv = String(tx.desc || '').toLowerCase().includes('advance') ||
+                        String(tx.paymentType || '').toLowerCase().includes('advance') ||
+                        String(tx.particulars || '').toLowerCase().includes('advance') ||
+                        true;
+          return {
+            id: `aud_base_pay_${tx.id || idx}`,
+            type: 'PAYMENT_ADDED',
+            nodeColor: '#10b981',
+            icon: <CreditCard size={16} color="#10b981" />,
+            title: isAdv ? 'Advance Payment Received' : 'Payment Added',
+            time: createdTimeStr,
+            date: tx.date || createdDateStr,
+            author: 'Astha India',
+            affectsRoom: false,
+            isAdvance: isAdv,
+            method: tx.paymentMethod || 'UPI',
+            amount: Math.abs(Number(tx.amount || 0)),
+            voucherNumber: tx.voucherNumber || tx.paymentReference || 'Direct',
+            affectedDates: [tx.date || resDate]
+          };
+        })
+      : (Number(currentRes.paidAmount) > 0 ? [{
+          id: `aud_base_pay_adv_${currentRes.id}`,
+          type: 'PAYMENT_ADDED',
+          nodeColor: '#10b981',
+          icon: <CreditCard size={16} color="#10b981" />,
+          title: 'Advance Payment Received',
+          time: createdTimeStr,
+          date: createdDateStr,
+          author: 'Astha India',
+          affectsRoom: false,
+          isAdvance: true,
+          method: currentRes.paymentMethod || 'UPI',
+          amount: Number(currentRes.paidAmount),
+          voucherNumber: currentRes.paymentReference || 'Direct',
+          affectedDates: [resDate]
+        }] : []);
+
     return [
       ...(isCheckedOut ? [{
         id: `aud_base_co_${currentRes.id}`,
@@ -1404,6 +1453,7 @@ export default function EditReservationView({
         newRoom: roomNum,
         affectedDates: [resDate]
       }] : []),
+      ...paymentBaselineEvents,
       {
         id: `aud_base_cr_${currentRes.id}`,
         type: 'RESERVATION_CREATED',
@@ -1420,12 +1470,13 @@ export default function EditReservationView({
         nights: nightsCount || 1,
         rooms: 1,
         totalAmount: totalCharges || '1120.00',
+        advancePaid: Number(currentRes.paidAmount || 0),
         bookingSource: (bookingForm.bookingSource || currentRes.bookingSource || 'walk-in').toLowerCase(),
         status: (currentRes.status || 'RESERVED').toUpperCase(),
         affectedDates: [resDate]
       }
     ];
-  }, [currentRes, roomNum, guestForm, nightsCount, totalCharges, bookingForm, property?.businessDate]);
+  }, [currentRes, roomNum, guestForm, nightsCount, totalCharges, bookingForm, property?.businessDate, currentFolio]);
 
   const allTimelineEvents = useMemo(() => {
     if (isRes14) {
@@ -1443,6 +1494,7 @@ export default function EditReservationView({
       if (b.type === 'GUEST_CHECKED_IN' && storeEventTypes.has('GUEST_CHECKED_IN')) return false;
       if (b.type === 'ROOM_REASSIGNED' && storeEventTypes.has('ROOM_REASSIGNED')) return false;
       if (b.type === 'RESERVATION_CREATED' && storeEventTypes.has('RESERVATION_CREATED')) return false;
+      if (b.type === 'PAYMENT_ADDED' && storeEventTypes.has('PAYMENT_ADDED')) return false;
       return true;
     });
 
@@ -3703,6 +3755,9 @@ export default function EditReservationView({
                           <div><span style={{ color: '#64748b' }}>Nights:</span> <strong>{item.nights}</strong></div>
                           <div><span style={{ color: '#64748b' }}>Rooms:</span> <strong>{item.rooms || 1}</strong></div>
                           <div><span style={{ color: '#64748b' }}>Total Amount:</span> <strong>{item.totalAmount} INR</strong></div>
+                          {item.advancePaid !== undefined && Number(item.advancePaid) > 0 && (
+                            <div><span style={{ color: '#64748b' }}>Advance Paid:</span> <strong style={{ color: '#16a34a' }}>{Number(item.advancePaid).toFixed(2)} INR</strong></div>
+                          )}
                           <div><span style={{ color: '#64748b' }}>Booking Source:</span> <strong>{item.bookingSource}</strong></div>
                           <div><span style={{ color: '#64748b' }}>Status:</span> <strong>{item.status}</strong></div>
                           {item.affectedDates && item.affectedDates.length > 0 && (
@@ -3742,11 +3797,13 @@ export default function EditReservationView({
                       )}
 
                       {item.type === 'PAYMENT_ADDED' && (
-                        <>
-                          <div style={{ fontWeight: 600, color: '#475569', fontSize: '0.78rem' }}>Payment:</div>
-                          <div className="audit-pill-green">
-                            Method: {item.method || 'CASH'} &nbsp; amount: ₹{Number(item.amount || 0).toFixed(2)} &nbsp; Ref: {item.voucherNumber || 'PAY'}
-                          </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          <div><span style={{ color: '#64748b' }}>Payment Type:</span> <strong>{item.isAdvance ? 'Advance Payment' : 'Payment'}</strong></div>
+                          <div><span style={{ color: '#64748b' }}>Amount Paid:</span> <strong style={{ color: '#16a34a' }}>{Number(item.amount || 0).toFixed(2)} INR</strong></div>
+                          <div><span style={{ color: '#64748b' }}>Payment Method:</span> <strong>{item.method || 'UPI'}</strong></div>
+                          {item.voucherNumber && item.voucherNumber !== '-' && (
+                            <div><span style={{ color: '#64748b' }}>Reference / Voucher:</span> <strong>{item.voucherNumber}</strong></div>
+                          )}
                           {item.affectedDates && item.affectedDates.length > 0 && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginTop: '0.35rem' }}>
                               <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 500 }}>Affected dates:</span>
@@ -3755,7 +3812,7 @@ export default function EditReservationView({
                               ))}
                             </div>
                           )}
-                        </>
+                        </div>
                       )}
 
                       {item.type === 'TRANSACTION_UPDATED' && (

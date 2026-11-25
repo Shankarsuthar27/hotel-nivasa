@@ -29,7 +29,7 @@ export default function AllPropertiesView({
   const menuRef = useRef(null);
 
   // Form state initialized from current property
-  const [name, setName] = useState(property?.name || 'HOTEL ASTHA');
+  const [name, setName] = useState(property?.name || 'HOTEL NIVASA');
   const [email, setEmail] = useState(property?.email || 'info@asthasoftindia.com');
   const [phoneCode, setPhoneCode] = useState(property?.phoneCode || '+91');
   const [phone, setPhone] = useState(property?.phone || '7023318111');
@@ -49,8 +49,8 @@ export default function AllPropertiesView({
   const [checkOutTime, setCheckOutTime] = useState(property?.checkOutTime || '11:00');
 
   const [gstin, setGstin] = useState(property?.gstin || '');
-  const [legalName, setLegalName] = useState(property?.legalName || 'HOTEL ASTHA');
-  const [tradeName, setTradeName] = useState(property?.tradeName || 'HOTEL ASTHA');
+  const [legalName, setLegalName] = useState(property?.legalName || 'HOTEL NIVASA');
+  const [tradeName, setTradeName] = useState(property?.tradeName || 'HOTEL NIVASA');
 
   const [terms, setTerms] = useState(
     Array.isArray(property?.terms) ? property.terms : []
@@ -59,7 +59,7 @@ export default function AllPropertiesView({
   // Sync state if property prop changes
   useEffect(() => {
     if (property) {
-      setName(property.name || 'HOTEL ASTHA');
+      setName(property.name || 'HOTEL NIVASA');
       setEmail(property.email || 'info@asthasoftindia.com');
       setPhoneCode(property.phoneCode || '+91');
       setPhone(property.phone || '7023318111');
@@ -76,8 +76,8 @@ export default function AllPropertiesView({
       setCheckInTime(property.checkInTime || '14:00');
       setCheckOutTime(property.checkOutTime || '11:00');
       setGstin(property.gstin || '');
-      setLegalName(property.legalName || 'HOTEL ASTHA');
-      setTradeName(property.tradeName || 'HOTEL ASTHA');
+      setLegalName(property.legalName || 'HOTEL NIVASA');
+      setTradeName(property.tradeName || 'HOTEL NIVASA');
       setTerms(Array.isArray(property.terms) ? property.terms : []);
     }
   }, [property]);
@@ -161,7 +161,7 @@ export default function AllPropertiesView({
   const handleFormSubmit = (e) => {
     e.preventDefault();
     const patch = {
-      name: name.trim() || 'HOTEL ASTHA',
+      name: name.trim() || 'HOTEL NIVASA',
       email: email.trim(),
       phone: phone.trim(),
       phoneCode,
@@ -324,7 +324,7 @@ export default function AllPropertiesView({
                 {/* 1. Property Name */}
                 <td style={{ padding: '16px 24px', verticalAlign: 'middle' }}>
                   <strong style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
-                    {property?.name || 'HOTEL ASTHA'}
+                    {property?.name || 'HOTEL NIVASA'}
                   </strong>
                 </td>
 
