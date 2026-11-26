@@ -1145,35 +1145,6 @@ export default function AddReservationView({
                 </div>
               </div>
 
-              {/* No Posting */}
-              <div
-                className={`toggle-pill-card nopost ${noPosting ? 'active' : ''}`}
-                onClick={() => setNoPosting(!noPosting)}
-              >
-                <div className="toggle-pill-left">
-                  <span className="material-symbols-outlined select-none" style={{ fontSize: '16px' }}>
-                    block
-                  </span>
-                  <span>No Posting</span>
-                </div>
-                <div className={`toggle-switch-track ${noPosting ? 'on-rose' : ''}`}>
-                  <div className="toggle-switch-thumb" />
-                </div>
-              </div>
-
-              {/* Complimentary */}
-              <div
-                className={`toggle-pill-card comp ${isComplimentary ? 'active' : ''}`}
-                onClick={() => setIsComplimentary(!isComplimentary)}
-              >
-                <div className="toggle-pill-left">
-                  <Tag size={16} color="#16a34a" />
-                  <span>Complimentary</span>
-                </div>
-                <div className={`toggle-switch-track ${isComplimentary ? 'on-emerald' : ''}`}>
-                  <div className="toggle-switch-thumb" />
-                </div>
-              </div>
             </div>
 
             {/* Special Requests */}
