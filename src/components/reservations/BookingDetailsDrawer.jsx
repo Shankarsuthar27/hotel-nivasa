@@ -17,7 +17,8 @@ import {
   Ban,
   Building2,
   Briefcase,
-  LogOut
+  LogOut,
+  BedDouble
 } from 'lucide-react';
 import CustomTimePickerModal from '../common/CustomTimePickerModal';
 import GuestCheckOutModal from './GuestCheckOutModal';
@@ -138,7 +139,8 @@ export default function BookingDetailsDrawer({
 
   const displayCheckInTime = localCheckInTime || getAccurateArrivalTime(reservation);
   const displayCheckOutTime = localCheckOutTime || reservation.checkOutTime || '11:00';
-  const isLocked = isCancelled || isNoShow;
+  // After checkout: all editing is locked. Only "Edit Reservation" button remains (kept as-is per spec).
+  const isLocked = isCancelled || isNoShow || isCheckedOut;
 
   const sourceLabel = (reservation.bookingSource === 'WALK_IN' ? 'walk-in' : (reservation.bookingSource || 'walk-in')).toLowerCase();
   const ratePlanLabel = (reservation.ratePlanName || reservation.ratePlanCode || 'BAR_CP').toLowerCase().replace(/_/g, ' ');
@@ -147,6 +149,13 @@ export default function BookingDetailsDrawer({
     ? (reservation.company === 'tcs' ? 'Tata Consultancy Services' : reservation.company === 'infosys' ? 'Infosys Limited' : reservation.company)
     : (reservation.billTo === 'Company' ? 'Company' : 'Guest');
   const gstinLabel = reservation.guestGstin || reservation.primaryGuest?.gstin || '';
+
+  // Room info: room type name + room number
+  const roomTypeName = reservation.roomTypeName || reservation.roomType || '';
+  const roomNumber = reservation.roomNumber ? `Room ${reservation.roomNumber}` : '';
+  const roomLabel = roomTypeName && roomNumber
+    ? `${roomTypeName} · ${roomNumber}`
+    : roomTypeName || roomNumber || '—';
   const hasCustomNotes = Boolean(
     reservation.specialRequests &&
     reservation.specialRequests.trim() !== '' &&
@@ -343,7 +352,18 @@ export default function BookingDetailsDrawer({
                   </div>
                 </div>
 
-                {/* Tile 3: Arrival Date */}
+                {/* Tile 3: Room */}
+                <div className="booking-info-tile">
+                  <div className="booking-info-tile-content">
+                    <span className="booking-info-tile-label">Room</span>
+                    <span className="booking-info-tile-val font-bold">{roomLabel}</span>
+                  </div>
+                  <div className="booking-info-tile-icon-box">
+                    <BedDouble size={18} />
+                  </div>
+                </div>
+
+                {/* Tile 5: Arrival Date */}
                 <div className="booking-info-tile" style={{ position: 'relative' }}>
                   <div className="booking-info-tile-content">
                     <span className="booking-info-tile-label">Arrival Date</span>
@@ -392,7 +412,7 @@ export default function BookingDetailsDrawer({
                   </div>
                 </div>
 
-                {/* Tile 4: Departure Date */}
+                {/* Tile 6: Departure Date */}
                 <div className="booking-info-tile" style={{ position: 'relative' }}>
                   <div className="booking-info-tile-content">
                     <span className="booking-info-tile-label">Departure Date</span>
