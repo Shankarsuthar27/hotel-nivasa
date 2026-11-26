@@ -2,9 +2,9 @@
 /* Matching media_1793703049870_7244c6d5.jpg */
 
 .reports-page-container {
-  padding: 16px 28px 160px 28px;
+  padding: 6px 0 80px 0;
   background-color: #f8fafc;
-  min-height: calc(100vh - 70px);
+  min-height: calc(100vh - 54px);
   box-sizing: border-box;
 }
 
@@ -14,7 +14,7 @@
   align-items: center;
   gap: 28px;
   border-bottom: 1px solid #e2e8f0;
-  margin-bottom: 22px;
+  margin-bottom: 14px;
 }
 
 .reports-tab-btn {
