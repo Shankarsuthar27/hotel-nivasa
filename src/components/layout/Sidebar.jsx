@@ -15,7 +15,8 @@ import {
   Settings,
   ShieldCheck,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  History
 } from 'lucide-react';
 import { canAccessRoute } from '../../utils/permissions';
 
@@ -81,6 +82,11 @@ export default function Sidebar({
       icon: LayoutGrid,
       badge: counts?.dirtyRooms > 0 ? counts.dirtyRooms : null,
       badgeDanger: true
+    },
+    {
+      id: 'cleaninghistory',
+      label: 'Cleaning History',
+      icon: History
     },
     {
       id: 'nightaudit',

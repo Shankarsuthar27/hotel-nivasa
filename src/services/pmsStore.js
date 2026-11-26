@@ -334,6 +334,7 @@ class PMSStore {
         });
         this.nightAudits = this.standardizeAndSortNightAudits(Array.from(auditMap.values()));
         this.auditTrail = parsed.auditTrail || initialAuditTrail;
+        this.cleaningHistory = Array.isArray(parsed.cleaningHistory) ? parsed.cleaningHistory : [];
         if (this.auditTrail && Array.isArray(this.auditTrail)) {
           const seenKeys = new Set();
           this.auditTrail = this.auditTrail.filter(entry => {
@@ -887,6 +888,7 @@ class PMSStore {
       teamMembers: this.teamMembers,
       nightAudits: this.nightAudits,
       auditTrail: this.auditTrail,
+      cleaningHistory: this.cleaningHistory || [],
       stopouts: this.stopouts,
       dailyRates: this.dailyRates,
       restrictions: this.restrictions,
@@ -964,6 +966,7 @@ class PMSStore {
       teamMembers: this.teamMembers,
       nightAudits: this.nightAudits,
       auditTrail: this.auditTrail,
+      cleaningHistory: this.cleaningHistory || [],
       stopouts: this.stopouts,
       dailyRates: this.dailyRates,
       restrictions: this.restrictions,
@@ -1268,11 +1271,21 @@ class PMSStore {
             })
             .filter(Boolean);
 
-          // Robust Two-Way Merge: Only preserve local rooms that are actively pending cloud sync
+          // Robust Two-Way Merge: Keep freshest room doc per room number and preserve newer/pending local updates
+          const getRoomTs = (r) => {
+            const ts = r?.statusUpdatedAt || r?.updatedAt || r?.lastSyncedAt || '';
+            const ms = ts ? Date.parse(ts) : 0;
+            return isNaN(ms) ? 0 : ms;
+          };
+
           const roomMap = new Map();
           cloudRooms.forEach((cr) => {
             const numKey = String(cr.roomNumber || cr.id || '').trim().toLowerCase().replace(/^rm_/, '');
-            if (numKey) roomMap.set(numKey, cr);
+            if (!numKey) return;
+            const prev = roomMap.get(numKey);
+            if (!prev || getRoomTs(cr) >= getRoomTs(prev)) {
+              roomMap.set(numKey, cr);
+            }
           });
 
           (this.rooms || []).forEach((localRm) => {
@@ -1289,8 +1302,10 @@ class PMSStore {
                 roomMap.set(numKey, localRm);
               }
             } else {
-              // If local room has pending changes, merge them
-              if (localRm._pendingSync) {
+              // Preserve local room changes if pending sync OR if local update is strictly newer than cloud
+              const localMs = getRoomTs(localRm);
+              const cloudMs = getRoomTs(existingCloud);
+              if (localRm._pendingSync || (localMs > 0 && localMs > cloudMs)) {
                 roomMap.set(numKey, { ...existingCloud, ...localRm });
               }
             }
@@ -1583,6 +1598,32 @@ class PMSStore {
       );
       this.unsubscribers.push(unsubAudit);
 
+      // 9. Real-time Listener: Cleaning History
+      const cleanCol = collection(db, 'properties', this.propertyId, 'cleaningHistory');
+      const cleanQuery = query(cleanCol, orderBy('createdAtMs', 'desc'), limit(200));
+      const unsubClean = onSnapshot(
+        cleanQuery,
+        (snapshot) => {
+          const cloudRecords = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const mergedMap = new Map();
+          (this.cleaningHistory || []).forEach((item) => {
+            if (item && item.id) mergedMap.set(item.id, item);
+          });
+          cloudRecords.forEach((item) => {
+            if (item && item.id) mergedMap.set(item.id, item);
+          });
+          this.cleaningHistory = Array.from(mergedMap.values())
+            .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0))
+            .slice(0, 500);
+          this.save();
+          this.notify();
+        },
+        (err) => {
+          console.warn('[Firebase Firestore] Cleaning History listener note:', err?.message);
+        }
+      );
+      this.unsubscribers.push(unsubClean);
+
       // Keep main database (both subcollection and root mirror) 100% updated with exact room types, room numbers, and summaries
       await this.purgeObsoleteRoomsAndTypesFromCloud();
 
@@ -1702,8 +1743,23 @@ class PMSStore {
           .filter(Boolean);
 
         if (cloudRooms.length > 0) {
-          const deduped = this.dedupeRoomsByNumber(cloudRooms, false);
-          this.rooms = this.sanitizeStaleOccupiedRooms(deduped, this.reservations);
+          const getRoomTs = (r) => {
+            const ts = r?.statusUpdatedAt || r?.updatedAt || r?.lastSyncedAt || '';
+            const ms = ts ? Date.parse(ts) : 0;
+            return isNaN(ms) ? 0 : ms;
+          };
+          const dedupedCloud = this.dedupeRoomsByNumber(cloudRooms, false);
+          const mergedWithLocal = dedupedCloud.map((cr) => {
+            const numKey = String(cr.roomNumber || cr.id || '').trim().toLowerCase().replace(/^rm_/, '');
+            const localMatch = (this.rooms || []).find((lr) =>
+              lr && String(lr.roomNumber || lr.id || '').trim().toLowerCase().replace(/^rm_/, '') === numKey
+            );
+            if (localMatch && (localMatch._pendingSync || getRoomTs(localMatch) > getRoomTs(cr))) {
+              return { ...cr, ...localMatch };
+            }
+            return cr;
+          });
+          this.rooms = this.sanitizeStaleOccupiedRooms(mergedWithLocal, this.reservations);
         }
       }
 
@@ -3606,16 +3662,99 @@ class PMSStore {
 
   // --- HOUSEKEEPING & MAINTENANCE ---
 
-  updateRoomStatus(roomId, newStatus) {
-    this.rooms = this.rooms.map(rm =>
-      rm.id === roomId ? { ...rm, status: newStatus } : rm
-    );
-    const room = this.rooms.find(r => r.id === roomId);
-    this.logAudit('HOUSEKEEPING_UPDATE', 'ROOM', room ? room.roomNumber : roomId, `Status set to ${newStatus.toUpperCase()}`);
+  updateRoomStatus(roomId, newStatus, meta = {}) {
+    const nowIso = new Date().toISOString();
+    const targetNum = String(roomId || '').trim().replace(/^rm_/, '');
+    const isTargetRoom = (rm) =>
+      rm.id === roomId ||
+      String(rm.roomNumber || '').trim() === String(roomId || '').trim() ||
+      (targetNum && String(rm.roomNumber || '').trim() === targetNum);
+
+    this.rooms = this.rooms.map(rm => {
+      if (!isTargetRoom(rm)) return rm;
+      if (newStatus === 'clean') {
+        const cleanedBy = meta?.cleanedBy || '';
+        const cleanedTimeFormatted = meta?.cleanedTimeFormatted || meta?.cleanedTime || '';
+        const cleanNote = cleanedBy
+          ? `Cleaned by ${cleanedBy}${cleanedTimeFormatted ? ` at ${cleanedTimeFormatted}` : ''}`
+          : (meta?.notes || 'Ready for check-in');
+        return {
+          ...rm,
+          status: newStatus,
+          lastCleanedBy: cleanedBy || rm.lastCleanedBy || '',
+          lastCleanedDate: meta?.cleanedDate || rm.lastCleanedDate || '',
+          lastCleanedTime: cleanedTimeFormatted || rm.lastCleanedTime || '',
+          lastCleanedAt: cleanedBy ? nowIso : (rm.lastCleanedAt || ''),
+          notes: cleanNote,
+          updatedAt: nowIso,
+          statusUpdatedAt: nowIso,
+          _pendingSync: true
+        };
+      }
+      if (newStatus === 'dirty') {
+        return {
+          ...rm,
+          status: newStatus,
+          notes: meta?.notes || 'Needs cleaning',
+          updatedAt: nowIso,
+          statusUpdatedAt: nowIso,
+          _pendingSync: true
+        };
+      }
+      return {
+        ...rm,
+        status: newStatus,
+        ...(meta?.notes !== undefined ? { notes: meta.notes } : {}),
+        updatedAt: nowIso,
+        statusUpdatedAt: nowIso,
+        _pendingSync: true
+      };
+    });
+    const room = this.rooms.find(isTargetRoom);
+    const auditDetail = newStatus === 'clean' && meta?.cleanedBy
+      ? `Marked CLEAN by ${meta.cleanedBy}${meta.cleanedTimeFormatted ? ` at ${meta.cleanedTimeFormatted}` : ''}`
+      : `Status set to ${newStatus.toUpperCase()}`;
+    this.logAudit('HOUSEKEEPING_UPDATE', 'ROOM', room ? room.roomNumber : roomId, auditDetail);
+
+    if (newStatus === 'clean' && meta?.cleanedBy && room) {
+      const rtObj = (this.roomTypes || []).find(rt => rt.id === room.roomTypeId);
+      const cleaningRecord = {
+        id: `clean_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        roomId: room.id,
+        roomNumber: room.roomNumber || String(room.id).replace(/^rm_/, ''),
+        roomTypeId: room.roomTypeId || '',
+        roomTypeName: rtObj?.name || room.roomTypeName || room.roomType || 'Room',
+        cleanedBy: meta.cleanedBy,
+        cleanedDate: meta.cleanedDate || getTodayIsoDate(),
+        cleanedTime: meta.cleanedTime || getCurrentTimeString(),
+        cleanedTimeFormatted: meta.cleanedTimeFormatted || meta.cleanedTime || '',
+        notes: meta.notes || '',
+        markedBy: this.currentUser?.name || this.property?.userProfile?.name || 'Front Desk',
+        createdAt: nowIso,
+        createdAtMs: Date.now()
+      };
+      if (!Array.isArray(this.cleaningHistory)) this.cleaningHistory = [];
+      this.cleaningHistory = [cleaningRecord, ...this.cleaningHistory.slice(0, 499)];
+      this.syncDocToFirestore('cleaningHistory', cleaningRecord.id, cleaningRecord);
+    }
+
     this.save();
 
     if (room) {
-      this.syncDocToFirestore('rooms', roomId, room);
+      const cleanPayload = { ...room };
+      delete cleanPayload._pendingSync;
+      const syncPromises = [this.syncDocToFirestore('rooms', room.id || roomId, cleanPayload)];
+      if (room._firestoreDocId && room._firestoreDocId !== (room.id || roomId)) {
+        syncPromises.push(this.syncDocToFirestore('rooms', room._firestoreDocId, cleanPayload));
+      }
+      Promise.all(syncPromises).then(() => {
+        this.rooms = this.rooms.map((rm) =>
+          rm.id === room.id && rm.statusUpdatedAt === nowIso
+            ? { ...rm, _pendingSync: false }
+            : rm
+        );
+        this.save();
+      });
     }
     this.notify();
   }

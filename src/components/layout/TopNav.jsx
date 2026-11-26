@@ -16,6 +16,7 @@ export default function TopNav({
       case 'calendar': return 'Calendar Tape Chart';
       case 'reservations': return 'Reservations Management';
       case 'housekeeping': return 'Housekeeping Room View';
+      case 'cleaninghistory': return 'Room Cleaning History';
       case 'rates': return 'Rates, Inventory & Channel Manager';
       case 'nightaudit': return 'Night Audit & Financial Close';
       case 'reports': return 'Financial & Manager Reports';

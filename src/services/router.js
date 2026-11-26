@@ -11,6 +11,7 @@ export const ROUTES = {
   CALENDAR: '/calendar',
   RATES: '/rates',
   HOUSEKEEPING: '/housekeeping',
+  CLEANING_HISTORY: '/cleaning-history',
   NIGHT_AUDIT: '/nightaudit',
   REPORTS: '/reports',
   GUESTS: '/guests',
@@ -121,6 +122,18 @@ export function parseRoute(pathname = window.location.pathname, search = window.
     return {
       type: 'HOUSEKEEPING',
       tab: 'housekeeping',
+      pathname: cleanPath,
+      search,
+      queryParams,
+      params: {}
+    };
+  }
+
+  // 6b. Cleaning History: /cleaning-history or /cleaninghistory
+  if (cleanPath === '/cleaning-history' || cleanPath === '/cleaninghistory') {
+    return {
+      type: 'CLEANING_HISTORY',
+      tab: 'cleaninghistory',
       pathname: cleanPath,
       search,
       queryParams,

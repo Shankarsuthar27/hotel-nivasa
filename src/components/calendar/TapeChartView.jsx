@@ -11,6 +11,7 @@ import {
   User
 } from 'lucide-react';
 import BlockRoomDrawer from '../housekeeping/BlockRoomDrawer.jsx';
+import SweepingBroomIcon from '../housekeeping/SweepingBroomIcon.jsx';
 import BookingDetailsDrawer from '../reservations/BookingDetailsDrawer.jsx';
 import { CustomCalendar } from '../common/CustomDatePicker';
 import ScheduleCalendarAvailabilityCell from './ScheduleCalendarAvailabilityCell';
@@ -262,23 +263,7 @@ const RoomRow = memo(function RoomRow({
                 onToggleRoomStatus(room);
               }}
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#10b981"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 3v9" />
-                <path d="M5 15h14l-1.5 6h-11L5 15Z" />
-                <path d="M7 15c0-2 1.5-3 5-3s5 1 5 3" />
-                <path d="M9 21v-3" />
-                <path d="M12 21v-3" />
-                <path d="M15 21v-3" />
-              </svg>
+              <SweepingBroomIcon size={16} color={room.status === 'dirty' ? '#ef4444' : '#10b981'} />
             </button>
 
             {/* Wrench Maintenance Block Icon */}
@@ -592,10 +577,12 @@ export default function TapeChartView({
     return () => window.removeEventListener('resize', updateWidth);
   }, []);
 
-  // High-performance continuous buffer: 35 days past + 65 days future = 100 continuous days (~3.5 months)
+  // High-performance continuous buffer: 35 days past + 65 days future, dynamically extends infinitely on right scroll
   const BUFFER_PAST_DAYS = 35;
   const BUFFER_FUTURE_DAYS = 65;
-  const TOTAL_DAYS = BUFFER_PAST_DAYS + BUFFER_FUTURE_DAYS;
+  const [extraFutureDays, setExtraFutureDays] = useState(0);
+  const TOTAL_DAYS = BUFFER_PAST_DAYS + BUFFER_FUTURE_DAYS + extraFutureDays;
+  const isExtendingRightRef = useRef(false);
 
   const cozyCellWidth = Math.max(66, Math.floor(timelineViewportWidth / 14));
   const wideCellWidth = Math.max(132, Math.floor(timelineViewportWidth / 7));
@@ -657,7 +644,7 @@ export default function TapeChartView({
       });
     }
     return list;
-  }, [bufferStartDate, todayIso]);
+  }, [bufferStartDate, todayIso, TOTAL_DAYS]);
 
   // Filter rooms
   const filteredRooms = useMemo(() => {
@@ -937,6 +924,16 @@ export default function TapeChartView({
         setSelectedSlot(null);
       }
 
+      // Infinite right scroll: append 30 more future days when approaching right edge (no scrollLeft jump)
+      const remainingRight = scrollEl.scrollWidth - scrollEl.clientWidth - scrollEl.scrollLeft;
+      if (remainingRight < 10 * cellWidth && !isExtendingRightRef.current) {
+        isExtendingRightRef.current = true;
+        setExtraFutureDays((prev) => prev + 30);
+        requestAnimationFrame(() => {
+          isExtendingRightRef.current = false;
+        });
+      }
+
       if (scrollDebounceTimer.current) {
         clearTimeout(scrollDebounceTimer.current);
       }
@@ -1097,28 +1094,22 @@ export default function TapeChartView({
   }, [cellWidth]);
 
   const handleNext = useCallback(() => {
-    if (!scrollContainerRef.current) return;
+    const scrollEl = scrollContainerRef.current;
+    if (!scrollEl) return;
     setSelectedSlot(null);
-    const scrollLeft = scrollContainerRef.current.scrollLeft;
-    const maxScroll = (dateList.length - 14) * cellWidth;
-    if (scrollLeft > maxScroll) {
-      setBaseDate((prev) => {
-        const next = new Date(prev);
-        next.setDate(next.getDate() + 30);
-        return next;
-      });
-      requestAnimationFrame(() => {
-        if (scrollContainerRef.current) {
-          scrollContainerRef.current.scrollLeft -= 23 * cellWidth;
-        }
-      });
-      return;
+    const remainingRight = scrollEl.scrollWidth - scrollEl.clientWidth - scrollEl.scrollLeft;
+    if (remainingRight < 14 * cellWidth) {
+      setExtraFutureDays((prev) => prev + 30);
     }
-    scrollContainerRef.current.scrollBy({
-      left: 7 * cellWidth,
-      behavior: 'smooth'
+    requestAnimationFrame(() => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollBy({
+          left: 7 * cellWidth,
+          behavior: 'smooth'
+        });
+      }
     });
-  }, [cellWidth, dateList.length]);
+  }, [cellWidth]);
 
   // DatePicker selection: smooth scrolls to target date
   const handleDatePickerSelect = useCallback((isoStr) => {

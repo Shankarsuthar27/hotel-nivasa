@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Wrench, PlusCircle, User, Clock, Moon, Calendar, X, AlertCircle, Ban, ChevronDown, CheckCircle2 } from 'lucide-react';
 import RoomCard from './RoomCard';
 import BlockRoomDrawer from './BlockRoomDrawer.jsx';
+import MarkCleanDrawer from './MarkCleanDrawer.jsx';
 import BookingDetailsDrawer from '../reservations/BookingDetailsDrawer';
 import { pmsStore } from '../../services/pmsStore';
 import { navigate } from '../../services/router';
@@ -30,6 +31,9 @@ export default function HousekeepingView({
 
   // Selected rooms for batch actions
   const [selectedRooms, setSelectedRooms] = useState(new Set());
+
+  // Mark Clean Drawer State (opens when marking dirty room(s) clean to capture cleaner name & time)
+  const [cleanDrawerRooms, setCleanDrawerRooms] = useState([]);
 
   // Maintenance / Block Room Drawer State (Matching OTAL PMS Specification)
   const [maintenanceRoom, setMaintenanceRoom] = useState(null);
@@ -321,6 +325,13 @@ export default function HousekeepingView({
 
   // Batch status update
   const handleBatchStatus = (newStatus) => {
+    if (newStatus === 'clean') {
+      const targetRooms = rooms.filter((r) => selectedRooms.has(r.id));
+      if (targetRooms.length > 0) {
+        setCleanDrawerRooms(targetRooms);
+        return;
+      }
+    }
     if (onUpdateStatus) {
       selectedRooms.forEach((roomId) => {
         onUpdateStatus(roomId, newStatus);
@@ -650,6 +661,7 @@ export default function HousekeepingView({
                       isSelected={selectedRooms.has(room.id)}
                       onToggleSelect={handleToggleSelect}
                       onUpdateStatus={onUpdateStatus}
+                      onRequestMarkClean={(rm) => setCleanDrawerRooms([rm])}
                       onOpenMaintenance={(r) => handleOpenMaintenance(r)}
                       onOpenReservation={(r) => {
                         if (onNewReservation) {
@@ -942,6 +954,29 @@ export default function HousekeepingView({
           setSelectedDrawerReservation(null);
           const targetId = res?.id || (res?.bookingReference ? res.bookingReference.replace('#', '').toLowerCase() : 'res_1');
           navigate(`/reservations/${targetId}/edit`);
+        }}
+      />
+
+      {/* 7. Mark Room Clean Slide-over Drawer (captures cleaner name & cleaning time) */}
+      <MarkCleanDrawer
+        isOpen={cleanDrawerRooms.length > 0}
+        onClose={() => setCleanDrawerRooms([])}
+        rooms={cleanDrawerRooms}
+        roomTypes={roomTypes}
+        onConfirmClean={({ rooms: targetRooms, cleanedBy, cleanedDate, cleanedTime, cleanedTimeFormatted, notes }) => {
+          if (onUpdateStatus) {
+            targetRooms.forEach((rm) => {
+              onUpdateStatus(rm.id, 'clean', {
+                cleanedBy,
+                cleanedDate,
+                cleanedTime,
+                cleanedTimeFormatted,
+                notes
+              });
+            });
+          }
+          setSelectedRooms(new Set());
+          setCleanDrawerRooms([]);
         }}
       />
     </div>

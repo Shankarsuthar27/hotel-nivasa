@@ -4,6 +4,7 @@ import TopNav from './components/layout/TopNav';
 import TapeChartView from './components/calendar/TapeChartView';
 import ReservationsView from './components/reservations/ReservationsView';
 import HousekeepingView from './components/housekeeping/HousekeepingView';
+import CleaningHistoryView from './components/housekeeping/CleaningHistoryView';
 import RatesMatrixView from './components/rates/RatesMatrixView';
 import NightAuditPage from './pages/NightAuditPage';
 import ReportsView from './components/reports/ReportsView';
@@ -224,6 +225,7 @@ export default function App() {
         calendar: 'Calendar Tape Chart | HOTEL NIVASA PMS',
         rates: 'Rates & Inventory | HOTEL NIVASA PMS',
         housekeeping: 'Housekeeping & Rooms | HOTEL NIVASA PMS',
+        cleaninghistory: 'Cleaning History | HOTEL NIVASA PMS',
         nightaudit: 'Night Audit | HOTEL NIVASA PMS',
         reports: 'Reports | HOTEL NIVASA PMS',
         guests: 'Guests CRM | HOTEL NIVASA PMS',
@@ -301,10 +303,13 @@ export default function App() {
     navigate('/reservations');
   };
 
-  const handleUpdateRoomStatus = (roomId, newStatus) => {
-    pmsStore.updateRoomStatus(roomId, newStatus);
+  const handleUpdateRoomStatus = (roomId, newStatus, meta = {}) => {
+    pmsStore.updateRoomStatus(roomId, newStatus, meta);
     const room = state.rooms.find((r) => r.id === roomId);
-    showToast(`🧹 Room ${room ? room.roomNumber : ''} hygiene status updated to ${newStatus.toUpperCase()}`);
+    const cleanerInfo = newStatus === 'clean' && meta?.cleanedBy
+      ? ` (Cleaned by ${meta.cleanedBy}${meta.cleanedTimeFormatted ? ` at ${meta.cleanedTimeFormatted}` : ''})`
+      : '';
+    showToast(`🧹 Room ${room ? room.roomNumber : ''} hygiene status updated to ${newStatus.toUpperCase()}${cleanerInfo}`);
   };
 
   const handleAddFolioTransaction = (resId, tx) => {
@@ -555,7 +560,7 @@ export default function App() {
             )}
 
         {/* Dynamic Viewport with Page Transitions */}
-        <main className={`content-viewport ${activeTab === 'reservations' || activeTab === 'dashboard' || activeTab === 'rates' || activeTab === 'guests' || activeTab === 'myteam' || activeTab === 'permissions' || activeTab === 'properties' || activeTab === 'calendar' || activeTab === 'nightaudit' || activeTab === 'housekeeping' ? 'no-pad-viewport' : ''} ${activeTab === 'calendar' ? 'calendar-viewport' : ''} ${activeTab === 'rates' ? 'rates-viewport' : ''} ${activeTab === 'reservations' ? 'reservations-viewport' : ''}`}>
+        <main className={`content-viewport ${activeTab === 'reservations' || activeTab === 'dashboard' || activeTab === 'rates' || activeTab === 'guests' || activeTab === 'myteam' || activeTab === 'permissions' || activeTab === 'properties' || activeTab === 'calendar' || activeTab === 'nightaudit' || activeTab === 'housekeeping' || activeTab === 'cleaninghistory' ? 'no-pad-viewport' : ''} ${activeTab === 'calendar' ? 'calendar-viewport' : ''} ${activeTab === 'rates' ? 'rates-viewport' : ''} ${activeTab === 'reservations' ? 'reservations-viewport' : ''}`}>
           <div key={activeTab} className="pms-page-view">
             {!canAccessRoute(state.currentUser, activeTab) ? (
               <AccessDeniedView
@@ -729,6 +734,15 @@ export default function App() {
               onSelectReservation={(res) => {
                 setSelectedReservation(res);
               }}
+            />
+          )}
+
+          {activeTab === 'cleaninghistory' && (
+            <CleaningHistoryView
+              cleaningHistory={state.cleaningHistory || []}
+              rooms={state.rooms}
+              roomTypes={state.roomTypes}
+              auditTrail={state.auditTrail || []}
             />
           )}
 

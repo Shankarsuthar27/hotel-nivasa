@@ -1,33 +1,7 @@
 import React from 'react';
 import { UserCheck, Calendar, Wrench, PlusCircle, Key } from 'lucide-react';
+import SweepingBroomIcon from './SweepingBroomIcon';
 import './room-card.css';
-
-// Exact OTAL PMS Broom / Cleaning Icon matching user's specification
-const BroomIcon = ({ size = 18, color = '#4ccaa0', className = '' }) => (
-  <svg
-    width={Math.round((size * 25) / 35)}
-    height={size}
-    viewBox="0 0 25 35"
-    fill="none"
-    stroke={color}
-    strokeWidth="2.1"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    style={{ display: 'inline-block', verticalAlign: 'middle' }}
-  >
-    {/* Handle */}
-    <line x1="12.5" y1="5.5" x2="12.5" y2="14" />
-    {/* Top dome collar */}
-    <path d="M9.5 14.5a3 3 0 0 1 6 0" />
-    {/* Broom Head Base */}
-    <path d="M5.5 17h14l-1.8 8.5h-10.4L5.5 17z" />
-    {/* Bristle vertical slots */}
-    <line x1="9" y1="20" x2="9" y2="25.5" />
-    <line x1="12.5" y1="20" x2="12.5" y2="25.5" />
-    <line x1="16" y1="20" x2="16" y2="25.5" />
-  </svg>
-);
 
 // Helper to format checkout date into: "Checkout: Fri 13, Nov 2026"
 const formatCheckoutDate = (dateStr) => {
@@ -45,6 +19,7 @@ export default function RoomCard({
   isSelected = false,
   onToggleSelect,
   onUpdateStatus,
+  onRequestMarkClean,
   onOpenMaintenance,
   onOpenReservation,
   onNewReservation,
@@ -173,6 +148,10 @@ export default function RoomCard({
   // Handlers
   const handleToggleDirty = (e) => {
     e.stopPropagation();
+    if (isDirty && onRequestMarkClean) {
+      onRequestMarkClean(room);
+      return;
+    }
     if (onUpdateStatus) {
       onUpdateStatus(room.id, isDirty ? 'clean' : 'dirty');
     }
@@ -233,7 +212,7 @@ export default function RoomCard({
               title={isDirty ? 'Mark Available / Clean' : 'Mark Dirty'}
               onClick={handleToggleDirty}
             >
-              <BroomIcon size={18} color={isDirty ? '#ef4444' : '#4ccaa0'} />
+              <SweepingBroomIcon size={17} color={isDirty ? '#ef4444' : '#4ccaa0'} />
             </button>
 
             {/* 2. Wrench Icon (Maintenance / Block Room) */}
