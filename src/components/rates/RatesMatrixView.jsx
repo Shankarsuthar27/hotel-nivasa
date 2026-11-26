@@ -446,7 +446,7 @@ export default function RatesMatrixView({
 
     if (tierKey === 'min_nights') {
       const resKey = `${room.id}_${dateStr}`;
-      return restrictions?.[resKey]?.minStay ?? 1;
+      return restrictions?.[resKey]?.minStay ?? restrictions?.[`min_${resKey}`] ?? 1;
     }
 
     if (tierKey === 'base') {
@@ -461,7 +461,9 @@ export default function RatesMatrixView({
   };
 
   const activeTierKey = activeMatrixTab === 'min_nights' ? 'min_nights' : rateTier;
-  const hasUnsavedEdits = Object.keys(localRateEdits[activeTierKey] || {}).length > 0;
+  const hasUnsavedEdits = Object.values(localRateEdits).some(
+    (tierMap) => tierMap && Object.keys(tierMap).length > 0
+  );
 
   const handleCellEdit = (cellKey, val) => {
     setLocalRateEdits((prev) => ({
@@ -473,36 +475,32 @@ export default function RatesMatrixView({
     }));
   };
 
-  // Save handler: commits edited cells to store & persists
+  // Save handler: commits all edited cells (only modified overrides + any active edits) to store & Firestore
   const handleSaveRates = () => {
-    const currentEdits = localRateEdits[activeTierKey] || {};
-    const payloadRates = {};
+    const dirtyTiers = Object.keys(localRateEdits).filter(
+      (t) => localRateEdits[t] && Object.keys(localRateEdits[t]).length > 0
+    );
 
-    visibleRooms.forEach((room) => {
-      room.plans.forEach((plan, pIdx) => {
-        dateColumns.forEach((col) => {
-          const key = getCellKey(room.id, plan, pIdx, col.isoStr);
-          if (currentEdits[key] !== undefined || pIdx === 0) {
-            const val = getCellValue(room, plan, pIdx, col.isoStr, activeTierKey);
-            payloadRates[key] = Number(val);
-          }
-        });
+    const tiersToSave = dirtyTiers.length > 0 ? dirtyTiers : [activeTierKey];
+
+    tiersToSave.forEach((tierKey) => {
+      const rawEdits = localRateEdits[tierKey] || {};
+      const payloadRates = {};
+      Object.entries(rawEdits).forEach(([key, val]) => {
+        if (val !== '' && val !== null && val !== undefined) {
+          const num = Number(val);
+          if (!isNaN(num)) payloadRates[key] = num;
+        }
       });
+
+      if (onSaveRates) {
+        onSaveRates(payloadRates, tierKey);
+      } else if (onBulkUpdate) {
+        onBulkUpdate({ rates: payloadRates, tier: tierKey });
+      }
     });
 
-    Object.assign(payloadRates, currentEdits);
-
-    if (onSaveRates) {
-      onSaveRates(payloadRates, activeTierKey);
-    } else if (onBulkUpdate) {
-      onBulkUpdate({ rates: payloadRates, tier: activeTierKey });
-    }
-
-    setLocalRateEdits((prev) => {
-      const copy = { ...prev };
-      delete copy[activeTierKey];
-      return copy;
-    });
+    setLocalRateEdits({});
   };
 
   // Bulk update apply handler
@@ -549,7 +547,7 @@ export default function RatesMatrixView({
         <SlidingTabBar
           tabs={MATRIX_TABS}
           activeTab={activeMatrixTab}
-          onTabChange={setActiveMatrixTab}
+          onChange={setActiveMatrixTab}
         />
       </div>
 

@@ -27,6 +27,7 @@ import {
   setDoc,
   deleteDoc,
   collection,
+  getDoc,
   getDocs,
   onSnapshot,
   query,
@@ -353,6 +354,10 @@ class PMSStore {
           extra_child: {}
         };
         if (!this.dailyRates.base) this.dailyRates.base = {};
+        if (!this.dailyRates.extra_adult) this.dailyRates.extra_adult = {};
+        if (!this.dailyRates.extra_child) this.dailyRates.extra_child = {};
+        if (!this.dailyRates.min_nights) this.dailyRates.min_nights = {};
+        this.rateMatrixUpdatedAt = parsed.rateMatrixUpdatedAt || null;
         if (this.dailyRates.base['rt_deluxe_2026-11-05'] === undefined) {
           this.dailyRates.base['rt_deluxe_2026-11-05'] = 1000;
         }
@@ -885,6 +890,7 @@ class PMSStore {
       stopouts: this.stopouts,
       dailyRates: this.dailyRates,
       restrictions: this.restrictions,
+      rateMatrixUpdatedAt: this.rateMatrixUpdatedAt || null,
       maintenanceBlocks: this.maintenanceBlocks,
       taxRules: this.taxRules,
       serviceCharges: this.serviceCharges,
@@ -961,6 +967,7 @@ class PMSStore {
       stopouts: this.stopouts,
       dailyRates: this.dailyRates,
       restrictions: this.restrictions,
+      rateMatrixUpdatedAt: this.rateMatrixUpdatedAt || null,
       maintenanceBlocks: this.maintenanceBlocks,
       taxRules: Array.isArray(this.taxRules) ? this.taxRules : JSON.parse(JSON.stringify(initialTaxRules)),
       serviceCharges: this.serviceCharges || [],
@@ -1418,6 +1425,40 @@ class PMSStore {
       );
       this.unsubscribers.push(unsubProp);
 
+      // 6B. Real-time Listener: Rates, Inventory, Stop-Sell & Restrictions Matrix
+      const ariRef = doc(db, 'properties', this.propertyId, 'rateMatrix', 'ari_config');
+      const unsubAri = onSnapshot(
+        ariRef,
+        (snapshot) => {
+          if (!snapshot.exists()) return;
+          const ariData = snapshot.data() || {};
+          const cloudTs = new Date(ariData.updatedAt || ariData.lastSyncedAt || 0).getTime();
+          const localTs = new Date(this.rateMatrixUpdatedAt || 0).getTime();
+          if (cloudTs > localTs || (!localTs && cloudTs > 0)) {
+            const cloudRates = ariData.dailyRates || {};
+            const localRates = this.dailyRates || { base: {}, extra_adult: {}, extra_child: {}, min_nights: {} };
+            this.dailyRates = {
+              base: { ...(localRates.base || {}), ...(cloudRates.base || {}) },
+              extra_adult: { ...(localRates.extra_adult || {}), ...(cloudRates.extra_adult || {}) },
+              extra_child: { ...(localRates.extra_child || {}), ...(cloudRates.extra_child || {}) },
+              min_nights: { ...(localRates.min_nights || {}), ...(cloudRates.min_nights || {}) }
+            };
+            if (ariData.stopouts) {
+              this.stopouts = { ...(this.stopouts || {}), ...ariData.stopouts };
+            }
+            if (ariData.restrictions) {
+              this.restrictions = { ...(this.restrictions || {}), ...ariData.restrictions };
+            }
+            this.rateMatrixUpdatedAt = ariData.updatedAt || ariData.lastSyncedAt || new Date().toISOString();
+            this.save();
+          }
+        },
+        (err) => {
+          console.warn('[Firebase Firestore] Rate Matrix listener note:', err.message);
+        }
+      );
+      this.unsubscribers.push(unsubAri);
+
       // 7. Real-time Listener: Team Members
       const tmCol = collection(db, 'properties', this.propertyId, 'teamMembers');
       const unsubTm = onSnapshot(
@@ -1677,13 +1718,14 @@ class PMSStore {
   async fetchStaticConfigs() {
     if (!db) return;
     try {
-      const [rtSnap, rpSnap, mpSnap, tmSnap, annSnap, naSnap] = await Promise.all([
+      const [rtSnap, rpSnap, mpSnap, tmSnap, annSnap, naSnap, ariSnap] = await Promise.all([
         getDocs(collection(db, 'properties', this.propertyId, 'roomTypes')).catch(() => null),
         getDocs(collection(db, 'properties', this.propertyId, 'ratePlans')).catch(() => null),
         getDocs(collection(db, 'properties', this.propertyId, 'mealPlans')).catch(() => null),
         getDocs(collection(db, 'properties', this.propertyId, 'teamMembers')).catch(() => null),
         getDocs(collection(db, 'properties', this.propertyId, 'announcements')).catch(() => null),
-        getDocs(collection(db, 'properties', this.propertyId, 'nightAudits')).catch(() => null)
+        getDocs(collection(db, 'properties', this.propertyId, 'nightAudits')).catch(() => null),
+        getDoc(doc(db, 'properties', this.propertyId, 'rateMatrix', 'ari_config')).catch(() => null)
       ]);
 
       let hasChanges = false;
@@ -1815,6 +1857,56 @@ class PMSStore {
         });
         this.nightAudits = this.standardizeAndSortNightAudits(Array.from(auditMap.values()));
         hasChanges = true;
+      }
+
+      // 7. Rates, Inventory, Stop-Sell & Restrictions Matrix
+      if (ariSnap && ariSnap.exists()) {
+        const ariData = ariSnap.data() || {};
+        const cloudTs = new Date(ariData.updatedAt || ariData.lastSyncedAt || 0).getTime();
+        const localTs = new Date(this.rateMatrixUpdatedAt || 0).getTime();
+        if (cloudTs >= localTs || (!localTs && cloudTs > 0)) {
+          const cloudRates = ariData.dailyRates || {};
+          const localRates = this.dailyRates || { base: {}, extra_adult: {}, extra_child: {}, min_nights: {} };
+          this.dailyRates = {
+            base: { ...(localRates.base || {}), ...(cloudRates.base || {}) },
+            extra_adult: { ...(localRates.extra_adult || {}), ...(cloudRates.extra_adult || {}) },
+            extra_child: { ...(localRates.extra_child || {}), ...(cloudRates.extra_child || {}) },
+            min_nights: { ...(localRates.min_nights || {}), ...(cloudRates.min_nights || {}) }
+          };
+          if (ariData.stopouts) {
+            this.stopouts = { ...(this.stopouts || {}), ...ariData.stopouts };
+          }
+          if (ariData.restrictions) {
+            this.restrictions = { ...(this.restrictions || {}), ...ariData.restrictions };
+          }
+          this.rateMatrixUpdatedAt = ariData.updatedAt || ariData.lastSyncedAt || this.rateMatrixUpdatedAt;
+          hasChanges = true;
+        }
+      }
+
+      // 7. Rates, Inventory, Stop-Sell & Restrictions Matrix
+      if (ariSnap && ariSnap.exists()) {
+        const ariData = ariSnap.data() || {};
+        const cloudTs = new Date(ariData.updatedAt || ariData.lastSyncedAt || 0).getTime();
+        const localTs = new Date(this.rateMatrixUpdatedAt || 0).getTime();
+        if (cloudTs >= localTs) {
+          const cloudRates = ariData.dailyRates || {};
+          const localRates = this.dailyRates || { base: {}, extra_adult: {}, extra_child: {}, min_nights: {} };
+          this.dailyRates = {
+            base: { ...(localRates.base || {}), ...(cloudRates.base || {}) },
+            extra_adult: { ...(localRates.extra_adult || {}), ...(cloudRates.extra_adult || {}) },
+            extra_child: { ...(localRates.extra_child || {}), ...(cloudRates.extra_child || {}) },
+            min_nights: { ...(localRates.min_nights || {}), ...(cloudRates.min_nights || {}) }
+          };
+          if (ariData.stopouts) {
+            this.stopouts = { ...(this.stopouts || {}), ...ariData.stopouts };
+          }
+          if (ariData.restrictions) {
+            this.restrictions = { ...(this.restrictions || {}), ...ariData.restrictions };
+          }
+          this.rateMatrixUpdatedAt = ariData.updatedAt || ariData.lastSyncedAt || this.rateMatrixUpdatedAt;
+          hasChanges = true;
+        }
       }
 
       if (hasChanges) {
@@ -4127,6 +4219,18 @@ class PMSStore {
 
   // --- RATES, STOPOUTS & RESTRICTIONS ---
 
+  syncRateMatrixToFirestore() {
+    const nowIso = new Date().toISOString();
+    this.rateMatrixUpdatedAt = nowIso;
+    this.save();
+    this.syncDocToFirestore('rateMatrix', 'ari_config', {
+      dailyRates: this.dailyRates || { base: {}, extra_adult: {}, extra_child: {}, min_nights: {} },
+      stopouts: this.stopouts || {},
+      restrictions: this.restrictions || {},
+      updatedAt: nowIso
+    });
+  }
+
   toggleStopout(roomTypeId, dateStr) {
     const key = `${roomTypeId}_${dateStr}`;
     const next = !this.stopouts[key];
@@ -4136,52 +4240,72 @@ class PMSStore {
     };
     const rt = this.roomTypes.find(r => r.id === roomTypeId);
     this.logAudit('STOPOUT_TOGGLE', 'RATE_MATRIX', key, `${rt ? rt.name : roomTypeId} stop-sell set to ${next ? 'CLOSED' : 'OPEN'} on ${dateStr}`);
-    this.save();
+    this.syncRateMatrixToFirestore();
   }
 
   updateDailyRates(ratesMap, tier = 'base') {
     if (!ratesMap || typeof ratesMap !== 'object') return;
-    if (!this.dailyRates) this.dailyRates = { base: {}, extra_adult: {}, extra_child: {} };
-    if (!this.dailyRates[tier]) this.dailyRates[tier] = {};
+    const prevRates = this.dailyRates || { base: {}, extra_adult: {}, extra_child: {}, min_nights: {} };
+    const nextTierMap = { ...(prevRates[tier] || {}) };
+    const nextRestrictions = { ...(this.restrictions || {}) };
 
     Object.entries(ratesMap).forEach(([key, val]) => {
       const num = Number(val);
-      if (!isNaN(num) && num > 0) {
-        this.dailyRates[tier][key] = num;
+      const isValid = tier === 'min_nights' ? (!isNaN(num) && num >= 1) : (!isNaN(num) && num >= 0);
+      if (isValid) {
+        nextTierMap[key] = num;
+        if (tier === 'min_nights') {
+          nextRestrictions[key] = { ...(nextRestrictions[key] || {}), minStay: num };
+          nextRestrictions[`min_${key}`] = num;
+        }
       }
     });
 
-    // Update roomTypes default basePrice if tier is base
-    if (tier === 'base') {
-      this.roomTypes = this.roomTypes.map(rt => {
-        const matchingKey = Object.keys(ratesMap).find(k => k.startsWith(rt.id + '_'));
-        if (matchingKey) {
-          const v = Number(ratesMap[matchingKey]);
-          if (!isNaN(v) && v > 0) return { ...rt, basePrice: v };
-        }
-        return rt;
-      });
-    }
+    this.dailyRates = {
+      base: prevRates.base || {},
+      extra_adult: prevRates.extra_adult || {},
+      extra_child: prevRates.extra_child || {},
+      min_nights: prevRates.min_nights || {},
+      [tier]: nextTierMap
+    };
+    this.restrictions = nextRestrictions;
 
-    this.logAudit('RATES_UPDATE', 'RATE_MATRIX', tier, `Updated ${Object.keys(ratesMap).length} daily rates for tier: ${tier}`);
-    this.save();
+    const count = Object.keys(ratesMap).length;
+    if (count > 0) {
+      this.logAudit('RATES_UPDATE', 'RATE_MATRIX', tier, `Updated ${count} daily rates for tier: ${tier}`);
+    }
+    this.syncRateMatrixToFirestore();
   }
 
   updateSingleRate(roomTypeId, dateStr, rate, tier = 'base') {
-    if (!this.dailyRates) this.dailyRates = { base: {}, extra_adult: {}, extra_child: {} };
-    if (!this.dailyRates[tier]) this.dailyRates[tier] = {};
+    const prevRates = this.dailyRates || { base: {}, extra_adult: {}, extra_child: {}, min_nights: {} };
     const num = Number(rate);
-    if (!isNaN(num) && num > 0) {
-      this.dailyRates[tier][`${roomTypeId}_${dateStr}`] = num;
-      this.save();
+    const isValid = tier === 'min_nights' ? (!isNaN(num) && num >= 1) : (!isNaN(num) && num >= 0);
+    if (isValid) {
+      const key = `${roomTypeId}_${dateStr}`;
+      this.dailyRates = {
+        ...prevRates,
+        [tier]: {
+          ...(prevRates[tier] || {}),
+          [key]: num
+        }
+      };
+      this.syncRateMatrixToFirestore();
     }
   }
 
   bulkUpdateRates(payload) {
     if (!payload) return;
 
-    if (!this.dailyRates) this.dailyRates = { base: {}, extra_adult: {}, extra_child: {} };
-    if (!this.restrictions) this.restrictions = {};
+    const prevRates = this.dailyRates || { base: {}, extra_adult: {}, extra_child: {}, min_nights: {} };
+    const nextDailyRates = {
+      base: { ...(prevRates.base || {}) },
+      extra_adult: { ...(prevRates.extra_adult || {}) },
+      extra_child: { ...(prevRates.extra_child || {}) },
+      min_nights: { ...(prevRates.min_nights || {}) }
+    };
+    const nextStopouts = { ...(this.stopouts || {}) };
+    const nextRestrictions = { ...(this.restrictions || {}) };
 
     // 1. Direct inline rate matrix save
     if (payload.rates && typeof payload.rates === 'object') {
@@ -4203,76 +4327,89 @@ class PMSStore {
     while (cur <= end) {
       const dayName = dayMap[cur.getDay()];
       if (!payload.daysOfWeek || payload.daysOfWeek.length === 0 || payload.daysOfWeek.includes(dayName)) {
-        const iso = cur.toISOString().split('T')[0];
+        const y = cur.getFullYear();
+        const m = String(cur.getMonth() + 1).padStart(2, '0');
+        const d = String(cur.getDate()).padStart(2, '0');
+        const iso = `${y}-${m}-${d}`;
         targetRoomTypeIds.forEach(rtId => {
           const cellKey = `${rtId}_${iso}`;
 
           // Rate override
           if (payload.baseRate !== undefined && payload.baseRate !== null && payload.baseRate !== '') {
             const rateNum = Number(payload.baseRate);
-            if (!isNaN(rateNum) && rateNum > 0) {
-              if (!this.dailyRates.base) this.dailyRates.base = {};
-              this.dailyRates.base[cellKey] = rateNum;
+            if (!isNaN(rateNum) && rateNum >= 0) {
+              nextDailyRates.base[cellKey] = rateNum;
             }
           }
 
           // Extra adult
           if (payload.extraAdultRate !== undefined && payload.extraAdultRate !== null && payload.extraAdultRate !== '') {
             const eaNum = Number(payload.extraAdultRate);
-            if (!isNaN(eaNum) && eaNum > 0) {
-              if (!this.dailyRates.extra_adult) this.dailyRates.extra_adult = {};
-              this.dailyRates.extra_adult[cellKey] = eaNum;
+            if (!isNaN(eaNum) && eaNum >= 0) {
+              nextDailyRates.extra_adult[cellKey] = eaNum;
             }
           }
 
           // Extra child
           if (payload.extraChildRate !== undefined && payload.extraChildRate !== null && payload.extraChildRate !== '') {
             const ecNum = Number(payload.extraChildRate);
-            if (!isNaN(ecNum) && ecNum > 0) {
-              if (!this.dailyRates.extra_child) this.dailyRates.extra_child = {};
-              this.dailyRates.extra_child[cellKey] = ecNum;
+            if (!isNaN(ecNum) && ecNum >= 0) {
+              nextDailyRates.extra_child[cellKey] = ecNum;
             }
           }
 
           // Stop sell
           if (payload.stopSell !== undefined) {
-            this.stopouts[cellKey] = !!payload.stopSell;
+            nextStopouts[cellKey] = !!payload.stopSell;
           }
 
           // Min nights
-          if (payload.minNights !== undefined) {
-            this.restrictions[`min_${cellKey}`] = Number(payload.minNights);
+          if (payload.minNights !== undefined && payload.minNights !== '') {
+            const minNum = Number(payload.minNights);
+            if (!isNaN(minNum) && minNum >= 1) {
+              nextDailyRates.min_nights[cellKey] = minNum;
+              nextRestrictions[cellKey] = { ...(nextRestrictions[cellKey] || {}), minStay: minNum };
+              nextRestrictions[`min_${cellKey}`] = minNum;
+            }
           }
 
           // Max nights
           if (payload.maxNights !== undefined) {
-            this.restrictions[`max_${cellKey}`] = Number(payload.maxNights);
+            nextRestrictions[`max_${cellKey}`] = Number(payload.maxNights);
           }
 
           // CTA (Closed to arrival)
           if (payload.cta !== undefined) {
-            this.restrictions[`cta_${cellKey}`] = !!payload.cta;
+            nextRestrictions[`cta_${cellKey}`] = !!payload.cta;
           }
 
           // CTD (Closed to departure)
           if (payload.ctd !== undefined) {
-            this.restrictions[`ctd_${cellKey}`] = !!payload.ctd;
+            nextRestrictions[`ctd_${cellKey}`] = !!payload.ctd;
           }
         });
       }
       cur.setDate(cur.getDate() + 1);
     }
 
-    // Update roomTypes default basePrice if provided
-    if (payload.baseRate) {
+    this.dailyRates = nextDailyRates;
+    this.stopouts = nextStopouts;
+    this.restrictions = nextRestrictions;
+
+    // Update roomTypes default basePrice if provided and sync updated roomTypes to Firestore
+    if (payload.baseRate !== undefined && payload.baseRate !== null && payload.baseRate !== '') {
       const bNum = Number(payload.baseRate);
       if (!isNaN(bNum) && bNum > 0) {
+        const updatedTypes = [];
         this.roomTypes = this.roomTypes.map(rt => {
           if (targetRoomTypeIds.includes(rt.id)) {
-            return { ...rt, basePrice: bNum };
+            const upRt = { ...rt, basePrice: bNum, updatedAt: new Date().toISOString() };
+            updatedTypes.push(upRt);
+            return upRt;
           }
           return rt;
         });
+        updatedTypes.forEach((rt) => this.syncDocToFirestore('roomTypes', rt.id, rt));
       }
     }
 
@@ -4283,7 +4420,7 @@ class PMSStore {
       `Bulk updated for [${rtNames}]. Base Rate: ₹${payload.baseRate || 'Unchanged'}, StopSell: ${payload.stopSell !== undefined ? (payload.stopSell ? 'YES' : 'NO') : 'Unchanged'}`
     );
 
-    this.save();
+    this.syncRateMatrixToFirestore();
   }
 
   updateOtaChannel(channelId, patch) {
