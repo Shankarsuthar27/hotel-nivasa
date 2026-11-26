@@ -1,17 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, X, CheckCircle2, Calendar } from 'lucide-react';
 import CustomDatePicker from '../common/CustomDatePicker';
+import { getTodayIsoDate } from '../../services/dateUtils';
 
 export default function BulkUpdateModal({
   isOpen,
   onClose,
   roomTypes = [],
   ratePlans,
-  onBulkUpdate
+  onBulkUpdate,
+  onApply,
+  todayIsoStr
 }) {
+  const today = todayIsoStr || getTodayIsoDate();
   const [selectedRoomTypeIds, setSelectedRoomTypeIds] = useState(() => (roomTypes || []).map(rt => rt.id));
-  const [startDate, setStartDate] = useState('2026-10-24');
-  const [endDate, setEndDate] = useState('2026-11-07');
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${da}`;
+  });
   const [daysOfWeek, setDaysOfWeek] = useState(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
 
   // Targets
@@ -57,17 +68,20 @@ export default function BulkUpdateModal({
       return;
     }
 
-    onBulkUpdate({
-      roomTypeIds: selectedRoomTypeIds,
-      startDate,
-      endDate,
-      daysOfWeek,
-      baseRate: updateRates && baseRate ? Number(baseRate) : undefined,
-      extraAdultRate: updateExtraAdult && extraAdultRate ? Number(extraAdultRate) : undefined,
-      extraChildRate: updateExtraChild && extraChildRate ? Number(extraChildRate) : undefined,
-      stopSell: updateStopSell ? stopSellValue : undefined,
-      minNights: updateMinNights && minNights ? Number(minNights) : undefined
-    });
+    const applyFn = onBulkUpdate || onApply;
+    if (applyFn) {
+      applyFn({
+        roomTypeIds: selectedRoomTypeIds,
+        startDate,
+        endDate,
+        daysOfWeek,
+        baseRate: updateRates && baseRate ? Number(baseRate) : undefined,
+        extraAdultRate: updateExtraAdult && extraAdultRate ? Number(extraAdultRate) : undefined,
+        extraChildRate: updateExtraChild && extraChildRate ? Number(extraChildRate) : undefined,
+        stopSell: updateStopSell ? stopSellValue : undefined,
+        minNights: updateMinNights && minNights ? Number(minNights) : undefined
+      });
+    }
 
     onClose();
   };
@@ -136,6 +150,7 @@ export default function BulkUpdateModal({
                 <label className="form-label">From Date</label>
                 <CustomDatePicker
                   value={startDate}
+                  minDate={today}
                   onChange={(val) => setStartDate(val)}
                   outputFormat="iso"
                   displayFormat="dmy"
@@ -145,8 +160,8 @@ export default function BulkUpdateModal({
                 <label className="form-label">To Date</label>
                 <CustomDatePicker
                   value={endDate}
-                  minDate={startDate}
-                  highlightDate={startDate}
+                  minDate={startDate || today}
+                  highlightDate={startDate || today}
                   onChange={(val) => setEndDate(val)}
                   outputFormat="iso"
                   displayFormat="dmy"

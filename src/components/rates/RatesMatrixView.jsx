@@ -15,9 +15,9 @@ import { getTodayIsoDate, normalizeDateStr } from '../../services/dateUtils';
 import './rates-inventory.css';
 
 const COL_WIDTH = 78;
-const BUFFER_PAST_DAYS = 7;
-const BUFFER_FUTURE_DAYS = 45;
-const TOTAL_DAYS = BUFFER_PAST_DAYS + BUFFER_FUTURE_DAYS;
+const BUFFER_PAST_DAYS = 0;
+const BUFFER_FUTURE_DAYS = 60;
+const TOTAL_DAYS = BUFFER_FUTURE_DAYS;
 const ARROW_SCROLL_DAYS = 5;
 
 const MATRIX_TABS = [
@@ -89,12 +89,13 @@ export default function RatesMatrixView({
     hasScrollBelow: false
   });
 
-  // Compute start date of the 52-day horizontal timeline buffer
+  // Compute start date of the horizontal timeline buffer (strictly today onwards)
   const bufferStartDate = useMemo(() => {
+    const today = parseIsoToLocalDate(todayIsoStr);
     const d = new Date(baseDate);
-    d.setDate(d.getDate() - BUFFER_PAST_DAYS);
+    if (d < today) return today;
     return d;
-  }, [baseDate]);
+  }, [baseDate, todayIsoStr]);
 
   // Generate continuous date columns for smooth multi-week horizontal scrolling
   const dateColumns = useMemo(() => {
@@ -170,16 +171,23 @@ export default function RatesMatrixView({
     }, 60);
   }, [dateColumns]);
 
-  // Initial scroll alignment: align baseDate to the left edge of the scrollable timeline
+  // Initial scroll alignment: start directly at 0 (Today is the very first column)
   useEffect(() => {
     const el = scrollViewportRef.current;
     if (!el) return;
     if (!isInitialScrollDone.current) {
-      el.scrollLeft = BUFFER_PAST_DAYS * COL_WIDTH;
+      el.scrollLeft = 0;
       isInitialScrollDone.current = true;
     }
     updateScrollState();
   }, [updateScrollState]);
+
+  // Whether user is at the leftmost boundary (today's date)
+  const isAtStart = useMemo(() => {
+    const today = parseIsoToLocalDate(todayIsoStr);
+    const isBaseAtToday = bufferStartDate.getTime() <= today.getTime();
+    return isBaseAtToday && !scrollEdges.scrolledX;
+  }, [bufferStartDate, todayIsoStr, scrollEdges.scrolledX]);
 
   // Attach passive scroll + ResizeObserver listeners for dynamic depth cues
   useEffect(() => {
@@ -218,30 +226,42 @@ export default function RatesMatrixView({
     return () => headerEl.removeEventListener('wheel', onWheel);
   }, []);
 
-  // Arrow Pagination (< / >): Smooth scrollBy by 5 days; seamlessly extends buffer near edges
+  // Arrow Pagination (< / >): Smooth scrollBy by 5 days; never scrolls prior to today
   const handleScrollPrev = useCallback(() => {
     const el = scrollViewportRef.current;
     if (!el) return;
     const stepPx = ARROW_SCROLL_DAYS * COL_WIDTH;
 
+    const today = parseIsoToLocalDate(todayIsoStr);
+    const isBaseAtToday = bufferStartDate.getTime() <= today.getTime();
+
+    if (isBaseAtToday && el.scrollLeft <= 0) {
+      return; // Already at today; cannot scroll to past dates
+    }
+
     if (el.scrollLeft < stepPx) {
-      const shiftDays = 14;
-      setBaseDate((prev) => {
-        const next = new Date(prev);
-        next.setDate(next.getDate() - shiftDays);
-        return next;
-      });
-      requestAnimationFrame(() => {
-        if (scrollViewportRef.current) {
-          scrollViewportRef.current.scrollLeft += shiftDays * COL_WIDTH;
-          scrollViewportRef.current.scrollBy({ left: -stepPx, behavior: 'smooth' });
-        }
-      });
-      return;
+      if (!isBaseAtToday) {
+        const shiftDays = 14;
+        setBaseDate((prev) => {
+          const next = new Date(prev);
+          next.setDate(next.getDate() - shiftDays);
+          return next < today ? today : next;
+        });
+        requestAnimationFrame(() => {
+          if (scrollViewportRef.current) {
+            scrollViewportRef.current.scrollLeft += shiftDays * COL_WIDTH;
+            scrollViewportRef.current.scrollBy({ left: -stepPx, behavior: 'smooth' });
+          }
+        });
+        return;
+      } else {
+        el.scrollTo({ left: 0, behavior: 'smooth' });
+        return;
+      }
     }
 
     el.scrollBy({ left: -stepPx, behavior: 'smooth' });
-  }, []);
+  }, [todayIsoStr, bufferStartDate]);
 
   const handleScrollNext = useCallback(() => {
     const el = scrollViewportRef.current;
@@ -284,10 +304,15 @@ export default function RatesMatrixView({
   };
 
   const handleSelectDate = (isoStr) => {
-    const picked = parseIsoToLocalDate(isoStr);
+    // Prevent selecting back dates before today
+    let effectiveIso = isoStr;
+    if (isoStr < todayIsoStr) {
+      effectiveIso = todayIsoStr;
+    }
+    const picked = parseIsoToLocalDate(effectiveIso);
     setIsDatePickerOpen(false);
 
-    const targetIdx = dateColumns.findIndex((c) => c.isoStr === isoStr);
+    const targetIdx = dateColumns.findIndex((c) => c.isoStr === effectiveIso);
     if (targetIdx >= 0 && scrollViewportRef.current) {
       scrollViewportRef.current.scrollTo({
         left: targetIdx * COL_WIDTH,
@@ -299,7 +324,7 @@ export default function RatesMatrixView({
       setVisibleDate(picked);
       requestAnimationFrame(() => {
         if (scrollViewportRef.current) {
-          scrollViewportRef.current.scrollLeft = BUFFER_PAST_DAYS * COL_WIDTH;
+          scrollViewportRef.current.scrollLeft = 0;
         }
       });
     }
@@ -674,8 +699,9 @@ export default function RatesMatrixView({
               <button
                 type="button"
                 onClick={handleScrollPrev}
-                title={`Scroll back ${ARROW_SCROLL_DAYS} days`}
-                className="rates-nav-circle-btn"
+                disabled={isAtStart}
+                title={isAtStart ? 'Cannot scroll prior to today' : `Scroll back ${ARROW_SCROLL_DAYS} days`}
+                className={`rates-nav-circle-btn ${isAtStart ? 'disabled' : ''}`}
               >
                 <ChevronLeft size={16} strokeWidth={2.2} />
               </button>
@@ -963,6 +989,7 @@ export default function RatesMatrixView({
             <CustomCalendar
               value={visibleDate || baseDate}
               highlightDate={todayIsoStr}
+              minDate={todayIsoStr}
               outputFormat="iso"
               ignoreRef={datePickerTriggerRef}
               onChange={handleSelectDate}
@@ -980,8 +1007,10 @@ export default function RatesMatrixView({
           isOpen={isBulkOpen}
           onClose={() => setIsBulkOpen(false)}
           onApply={handleApplyBulk}
+          onBulkUpdate={handleApplyBulk}
           roomTypes={roomTypes}
           currentRateTier={rateTier}
+          todayIsoStr={todayIsoStr}
         />
       )}
     </div>
