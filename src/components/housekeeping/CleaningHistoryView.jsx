@@ -7,7 +7,10 @@ import {
   BedDouble,
   CheckCircle2,
   Filter,
-  RotateCcw
+  RotateCcw,
+  Trash2,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import SweepingBroomIcon from './SweepingBroomIcon';
 import { getTodayIsoDate, formatDisplayDate } from '../../services/dateUtils';
@@ -16,11 +19,13 @@ export default function CleaningHistoryView({
   cleaningHistory = [],
   rooms = [],
   roomTypes = [],
-  auditTrail = []
+  auditTrail = [],
+  onDeleteRecord
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [roomTypeFilter, setRoomTypeFilter] = useState('ALL');
   const [dateFilter, setDateFilter] = useState('');
+  const [pendingDeleteRecord, setPendingDeleteRecord] = useState(null);
 
   const todayIso = getTodayIsoDate();
 
@@ -459,6 +464,9 @@ export default function CleaningHistoryView({
                   <th style={{ padding: '13px 20px', fontSize: '12.5px', fontWeight: 600, color: '#475569' }}>
                     Marked By
                   </th>
+                  <th style={{ padding: '13px 20px', fontSize: '12.5px', fontWeight: 600, color: '#475569', textAlign: 'center' }}>
+                    Action
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -559,6 +567,31 @@ export default function CleaningHistoryView({
                     <td style={{ padding: '14px 20px', fontSize: '13px', color: '#475569', fontWeight: 500 }}>
                       {rec.markedBy || 'Front Desk'}
                     </td>
+
+                    <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDeleteRecord(rec)}
+                        title={`Delete cleaning log for Room ${rec.roomNumber}`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '5px 11px',
+                          borderRadius: '7px',
+                          border: '1px solid #fecaca',
+                          backgroundColor: '#fef2f2',
+                          color: '#dc2626',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <Trash2 size={13} />
+                        <span>Delete</span>
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -566,6 +599,126 @@ export default function CleaningHistoryView({
           </div>
         )}
       </div>
+
+      {/* 4. Delete Confirmation Modal */}
+      {pendingDeleteRecord && (
+        <div
+          onClick={() => setPendingDeleteRecord(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.45)',
+            backdropFilter: 'blur(1.5px)',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '420px',
+              backgroundColor: '#ffffff',
+              borderRadius: '14px',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 20px 45px -10px rgba(15, 23, 42, 0.25)',
+              padding: '22px 24px',
+              boxSizing: 'border-box'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '9px',
+                    backgroundColor: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    color: '#dc2626',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <AlertTriangle size={18} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>
+                  Delete Cleaning Record?
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPendingDeleteRecord(null)}
+                aria-label="Close"
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  borderRadius: '6px',
+                  display: 'flex'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ margin: '0 0 20px 0', fontSize: '13.5px', color: '#475569', lineHeight: 1.55 }}>
+              Are you sure you want to delete the cleaning log for{' '}
+              <strong style={{ color: '#0f172a' }}>Room {pendingDeleteRecord.roomNumber}</strong>{' '}
+              cleaned by <strong style={{ color: '#0f172a' }}>{pendingDeleteRecord.cleanedBy}</strong>?
+              This action cannot be undone.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setPendingDeleteRecord(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  backgroundColor: '#ffffff',
+                  color: '#334155',
+                  fontSize: '13.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetId = pendingDeleteRecord.id;
+                  setPendingDeleteRecord(null);
+                  if (onDeleteRecord) {
+                    onDeleteRecord(targetId);
+                  }
+                }}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: '#dc2626',
+                  color: '#ffffff',
+                  fontSize: '13.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3759,6 +3759,17 @@ class PMSStore {
     this.notify();
   }
 
+  deleteCleaningHistory(recordId) {
+    if (!recordId) return;
+    const idStr = String(recordId);
+    this.cleaningHistory = (this.cleaningHistory || []).filter((rec) => String(rec.id) !== idStr);
+    this.auditTrail = (this.auditTrail || []).filter((entry) => String(entry.id) !== idStr);
+    this.save();
+    this.deleteDocFromFirestore('cleaningHistory', idStr);
+    this.deleteDocFromFirestore('auditTrail', idStr);
+    this.notify();
+  }
+
   addMaintenanceBlock(blockData) {
     const room = this.rooms.find(r => r.id === blockData.roomId);
     const newBlock = {

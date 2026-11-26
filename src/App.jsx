@@ -743,6 +743,10 @@ export default function App() {
               rooms={state.rooms}
               roomTypes={state.roomTypes}
               auditTrail={state.auditTrail || []}
+              onDeleteRecord={(recordId) => {
+                pmsStore.deleteCleaningHistory(recordId);
+                showToast('🗑️ Cleaning history record deleted');
+              }}
             />
           )}
 
