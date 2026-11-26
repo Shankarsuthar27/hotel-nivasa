@@ -511,51 +511,37 @@ body.has-res-modal-open .edit-res-page,
   }
 }
 
-/* 4. Body 2-Column Split: Sidebar + Main Area */
+/* 4. Body 2-Column Split: Connected Sidebar + Main Area */
 .edit-res-body-layout {
   display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 1.25rem;
-  align-items: start;
+  grid-template-columns: 250px 1fr;
+  gap: 0;
+  align-items: stretch;
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 4px;
-  padding-bottom: 1.5rem;
-}
-
-.edit-res-body-layout::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.edit-res-body-layout::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.edit-res-body-layout::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
-  border-radius: 4px;
-}
-
-.edit-res-body-layout::-webkit-scrollbar-thumb:hover {
-  background-color: #94a3b8;
+  overflow: hidden;
+  margin: 0 -24px;
+  border-top: 1px solid #e2e8f0;
 }
 
 @media (max-width: 1024px) {
   .edit-res-body-layout {
     grid-template-columns: 1fr;
+    overflow-y: auto;
   }
 }
 
-/* Left Sub-Sidebar */
+/* Left Sub-Sidebar (Connected full-height white panel with vertical divider) */
 .edit-res-sub-sidebar {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  position: sticky;
-  top: 0;
+  background-color: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  padding: 16px 14px;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
   z-index: 5;
 }
 
@@ -761,16 +747,24 @@ body.has-res-modal-open .edit-res-page,
 .edit-res-main-content {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 0;
+  background-color: #ffffff;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-/* Card Sections */
+/* Card Sections (Flush edge-to-edge without extra outer margin) */
 .edit-res-section-card {
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
+  border-radius: 0;
+  padding: 20px 24px;
+  box-shadow: none;
 }
 
 .edit-res-section-title {
@@ -1051,16 +1045,19 @@ body.has-res-modal-open .edit-res-page,
   color: #0f172a;
 }
 
-/* Save Bar */
+/* Save Bar (Connected flush to left sub-sidebar divider and bottom edge) */
 .edit-res-bottom-save-bar {
+  position: sticky;
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1.5rem;
   background-color: #ffffff;
   border-top: 1px solid #e2e8f0;
-  margin: 0 -1.5rem;
-  box-shadow: 0 -2px 10px rgba(15, 23, 42, 0.05);
+  border-radius: 0;
+  margin: auto 0 0 0;
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06);
   flex-shrink: 0;
   z-index: 30;
 }
@@ -1069,9 +1066,9 @@ body.has-res-modal-open .edit-res-page,
   background: #2563eb;
   color: #ffffff;
   border: none;
-  border-radius: 8px;
-  padding: 0.65rem 2rem;
-  font-size: 0.88rem;
+  border-radius: 6px;
+  padding: 0.55rem 1.4rem;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);

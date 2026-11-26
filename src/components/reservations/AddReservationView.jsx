@@ -127,8 +127,7 @@ function CustomTimePicker({ value, onChange, label = 'Time', required = true, pl
             }}
             title="Set to Current Time"
           >
-            <Clock size={11} color="#2563eb" />
-            <span>Set Current Time</span>
+            
           </button>
         )}
       </div>
@@ -253,8 +252,34 @@ export default function AddReservationView({
   const [checkOutDate, setCheckOutDate] = useState(initialCheckOut);
   const [checkOutTime, setCheckOutTime] = useState('11:00');
   const [reservationType, setReservationType] = useState('CONFIRMED');
-  const [marketSegment, setMarketSegment] = useState('corporate');
+  const [marketSegment, setMarketSegment] = useState('walk-in');
+  const [isMarketSegmentOpen, setIsMarketSegmentOpen] = useState(false);
+  const marketSegmentRef = useRef(null);
+
+  useEffect(() => {
+    if (!isMarketSegmentOpen) return;
+    const handleOutside = (e) => {
+      if (marketSegmentRef.current && !marketSegmentRef.current.contains(e.target)) {
+        setIsMarketSegmentOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [isMarketSegmentOpen]);
   const [bookingSource, setBookingSource] = useState('walk-in');
+  const [isBookingSourceOpen, setIsBookingSourceOpen] = useState(false);
+  const bookingSourceRef = useRef(null);
+
+  useEffect(() => {
+    if (!isBookingSourceOpen) return;
+    const handleOutside = (e) => {
+      if (bookingSourceRef.current && !bookingSourceRef.current.contains(e.target)) {
+        setIsBookingSourceOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [isBookingSourceOpen]);
   const [sendConfirmationMail, setSendConfirmationMail] = useState(true);
   const [createdReservation, setCreatedReservation] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1029,7 +1054,7 @@ export default function AddReservationView({
               />
 
               <CustomTimePicker
-                label="Check-in Time"
+                label="Time"
                 required={true}
                 value={checkInTime}
                 onChange={(t) => setCheckInTime(t)}
@@ -1080,43 +1105,208 @@ export default function AddReservationView({
                 </select>
               </div>
 
-              <div className="add-res-field-group">
+              <div className="add-res-field-group" ref={marketSegmentRef} style={{ position: 'relative' }}>
                 <label className="add-res-field-label">
                   Market Segment <span className="add-res-required">*</span>
                 </label>
-                <select
-                  className="add-res-select"
-                  value={marketSegment}
-                  onChange={(e) => setMarketSegment(e.target.value)}
-                >
-                  <option value="corporate">corporate</option>
-                  <option value="fit">fit</option>
-                  <option value="group">group</option>
-                  <option value="marriage/social">marriage/social</option>
-                  <option value="mice">mice</option>
-                  <option value="ota">ota</option>
-                </select>
+                {(() => {
+                  const marketSegmentOptions = [
+                    { value: 'corporate', label: 'corporate' },
+                    { value: 'fit', label: 'fit' },
+                    { value: 'group', label: 'group' },
+                    { value: 'marriage/social', label: 'marriage /social' },
+                    { value: 'mice', label: 'mice' },
+                    { value: 'ota', label: 'ota(online travel agent)' },
+                    { value: 'walk-in', label: 'walk-in' }
+                  ];
+                  const selectedOpt = marketSegmentOptions.find(
+                    (o) => o.value === marketSegment || o.label === marketSegment
+                  );
+                  return (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setIsMarketSegmentOpen((prev) => !prev)}
+                        style={{
+                          width: '100%',
+                          height: '42px',
+                          padding: '0 14px',
+                          borderRadius: '8px',
+                          border: `1px solid ${isMarketSegmentOpen ? '#cbd5e1' : '#e2e8f0'}`,
+                          backgroundColor: '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          fontSize: '0.92rem',
+                          fontWeight: 500,
+                          color: '#0f172a',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          boxSizing: 'border-box'
+                        }}
+                      >
+                        <span>{selectedOpt ? selectedOpt.label : (marketSegment || 'walk-in')}</span>
+                        {isMarketSegmentOpen ? (
+                          <ChevronUp size={16} color="#64748b" />
+                        ) : (
+                          <ChevronDown size={16} color="#64748b" />
+                        )}
+                      </button>
+
+                      {isMarketSegmentOpen && (
+                        <div
+                          onMouseDown={(e) => e.stopPropagation()}
+                          style={{
+                            position: 'absolute',
+                            top: 'calc(100% + 6px)',
+                            left: 0,
+                            right: 0,
+                            backgroundColor: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '12px',
+                            boxShadow: '0 12px 30px -6px rgba(15, 23, 42, 0.14), 0 4px 10px -4px rgba(15, 23, 42, 0.06)',
+                            zIndex: 9999,
+                            maxHeight: '260px',
+                            overflowY: 'auto',
+                            padding: '8px 0'
+                          }}
+                        >
+                          {marketSegmentOptions.map((opt) => {
+                            const isSelected = marketSegment === opt.value;
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => {
+                                  setMarketSegment(opt.value);
+                                  setIsMarketSegmentOpen(false);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '10px 16px',
+                                  border: 'none',
+                                  backgroundColor: isSelected ? '#f8fafc' : 'transparent',
+                                  color: '#0f172a',
+                                  fontSize: '0.92rem',
+                                  fontWeight: isSelected ? 700 : 600,
+                                  textAlign: 'left',
+                                  cursor: 'pointer',
+                                  display: 'block'
+                                }}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
             {/* Booking Source */}
-            <div className="add-res-field-group" style={{ marginBottom: '1.25rem' }}>
+            <div className="add-res-field-group" ref={bookingSourceRef} style={{ marginBottom: '1.25rem', position: 'relative' }}>
               <label className="add-res-field-label">
                 Booking Source <span className="add-res-required">*</span>
               </label>
-              <select
-                className="add-res-select"
-                value={bookingSource}
-                onChange={(e) => setBookingSource(e.target.value)}
-              >
-                <option value="walk-in">walk-in</option>
-                <option value="Direct Phone">Direct Phone</option>
-                <option value="Website">Website</option>
-                <option value="Booking.com">Booking.com</option>
-                <option value="MakeMyTrip">MakeMyTrip</option>
-                <option value="Agoda">Agoda</option>
-                <option value="Airbnb">Airbnb</option>
-              </select>
+              {(() => {
+                const bookingSourceOptions = [
+                  { value: 'walk-in', label: 'walk-in' },
+                  { value: 'website', label: 'website' },
+                  { value: 'ota', label: 'ota' },
+                  { value: 'travel agent', label: 'travel agent' },
+                  { value: 'corporate', label: 'corporate' },
+                  { value: 'phone', label: 'phone' }
+                ];
+                const selectedOpt = bookingSourceOptions.find(
+                  (o) => o.value === bookingSource || o.label === bookingSource
+                );
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setIsBookingSourceOpen((prev) => !prev)}
+                      style={{
+                        width: '100%',
+                        height: '42px',
+                        padding: '0 14px',
+                        borderRadius: '8px',
+                        border: `1px solid ${isBookingSourceOpen ? '#cbd5e1' : '#e2e8f0'}`,
+                        backgroundColor: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: '0.92rem',
+                        fontWeight: 500,
+                        color: '#0f172a',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <span>{selectedOpt ? selectedOpt.label : (bookingSource || 'walk-in')}</span>
+                      {isBookingSourceOpen ? (
+                        <ChevronUp size={16} color="#64748b" />
+                      ) : (
+                        <ChevronDown size={16} color="#64748b" />
+                      )}
+                    </button>
+
+                    {isBookingSourceOpen && (
+                      <div
+                        onMouseDown={(e) => e.stopPropagation()}
+                        style={{
+                          position: 'absolute',
+                          top: 'calc(100% + 6px)',
+                          left: 0,
+                          right: 0,
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '12px',
+                          boxShadow: '0 12px 30px -6px rgba(15, 23, 42, 0.14), 0 4px 10px -4px rgba(15, 23, 42, 0.06)',
+                          zIndex: 9999,
+                          maxHeight: '260px',
+                          overflowY: 'auto',
+                          padding: '8px 0'
+                        }}
+                      >
+                        {bookingSourceOptions.map((opt) => {
+                          const isSelected = bookingSource === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                setBookingSource(opt.value);
+                                setIsBookingSourceOpen(false);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '10px 16px',
+                                border: 'none',
+                                backgroundColor: isSelected ? '#f8fafc' : 'transparent',
+                                color: '#0f172a',
+                                fontSize: '0.92rem',
+                                fontWeight: isSelected ? 700 : 600,
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between'
+                              }}
+                            >
+                              <span>{opt.label}</span>
+                              {isSelected && <Check size={15} color="#2563eb" strokeWidth={2.4} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             {/* 4 Colored Toggle Badges */}
@@ -1339,7 +1529,7 @@ export default function AddReservationView({
                             </button>
 
                             {activeDropdown === `${rm.id}-roomNo` && (
-                              <div className="room-config-popover" style={{ bottom: 'calc(100% + 4px)', left: 0, minWidth: '150px' }}>
+                              <div className="room-config-popover" style={{ top: 'calc(100% + 4px)', left: 0, minWidth: '150px', maxHeight: '220px', overflowY: 'auto' }}>
                                 {/* Available Rooms of Selected Room Type */}
                                 {matchingRooms.length > 0 ? (
                                   matchingRooms.map((r) => {

@@ -3358,9 +3358,13 @@ export default function EditReservationView({
                       onChange={(e) => setBookingForm({ ...bookingForm, marketSegment: e.target.value })}
                     >
                       <option value="corporate">corporate</option>
-                      <option value="fit">FIT</option>
+                      <option value="fit">fit</option>
+                      <option value="group">group</option>
+                      <option value="marriage/social">marriage /social</option>
+                      <option value="mice">mice</option>
+                      <option value="ota">ota(online travel agent)</option>
+                      <option value="walk-in">walk-in</option>
                       <option value="leisure">Leisure</option>
-                      <option value="group">Group</option>
                     </select>
                   </div>
 
@@ -3373,7 +3377,11 @@ export default function EditReservationView({
                       onChange={(e) => setBookingForm({ ...bookingForm, bookingSource: e.target.value })}
                     >
                       <option value="walk-in">walk-in</option>
-                      <option value="ota">OTA</option>
+                      <option value="website">website</option>
+                      <option value="ota">ota</option>
+                      <option value="travel agent">travel agent</option>
+                      <option value="corporate">corporate</option>
+                      <option value="phone">phone</option>
                       <option value="direct">Direct</option>
                     </select>
                   </div>
@@ -3986,40 +3994,40 @@ export default function EditReservationView({
               </div>
             </div>
           )}
+
+          {/* Fixed Bottom Action Bar inside Right Content Column (matches reference screenshot) */}
+          {(activeTab === 'guest' || activeTab === 'booking') && !isLocked && (
+            <div className="edit-res-bottom-save-bar">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {activeTab === 'booking' && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: '#334155', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={bookingForm.applyToAllRooms}
+                      onChange={(e) => setBookingForm({ ...bookingForm, applyToAllRooms: e.target.checked })}
+                    />
+                    <span>Apply to all rooms</span>
+                  </label>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="edit-res-save-btn"
+                  onClick={
+                    isAddingSharer || editingSharerIndex !== null
+                      ? handleSaveSharer
+                      : handleSaveAll
+                  }
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* 5. Fixed Bottom Action Bar (Save Button Fixed - Hidden when reservation is locked / checked out) */}
-      {(activeTab === 'guest' || activeTab === 'booking') && !isLocked && (
-        <div className="edit-res-bottom-save-bar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {activeTab === 'booking' && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: '#334155', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={bookingForm.applyToAllRooms}
-                  onChange={(e) => setBookingForm({ ...bookingForm, applyToAllRooms: e.target.checked })}
-                />
-                <span>Apply to all rooms</span>
-              </label>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button
-              type="button"
-              className="edit-res-save-btn"
-              onClick={
-                isAddingSharer || editingSharerIndex !== null
-                  ? handleSaveSharer
-                  : handleSaveAll
-              }
-            >
-              Save
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Add Charges Modal (Exact OTAL PMS Specification & Design) */}
       {showAddChargeModal && (
