@@ -1560,14 +1560,22 @@ class PMSStore {
       const unsubAudit = onSnapshot(
         auditQuery,
         (snapshot) => {
-          const cloudAudits = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-          const mergedMap = new Map();
+          const cloudAudits = snapshot.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((item) => !(this.inFlightDeletes && this.inFlightDeletes.has(`auditTrail/${item.id}`)));
 
-          (this.auditTrail || []).forEach((item) => {
-            if (item && item.id) mergedMap.set(item.id, item);
-          });
+          const mergedMap = new Map();
           cloudAudits.forEach((item) => {
             if (item && item.id) mergedMap.set(item.id, item);
+          });
+
+          // Preserve local entries only if pending sync or snapshot is still from offline cache
+          (this.auditTrail || []).forEach((item) => {
+            if (!item || !item.id) return;
+            if (this.inFlightDeletes && this.inFlightDeletes.has(`auditTrail/${item.id}`)) return;
+            if (!mergedMap.has(item.id) && (item._pendingSync || snapshot.metadata?.fromCache)) {
+              mergedMap.set(item.id, item);
+            }
           });
 
           const parseAuditTime = (entry) => {
@@ -1598,20 +1606,30 @@ class PMSStore {
       );
       this.unsubscribers.push(unsubAudit);
 
-      // 9. Real-time Listener: Cleaning History
+      // 9. Real-time Listener: Cleaning History (Firestore is authoritative so cross-device deletions sync immediately)
       const cleanCol = collection(db, 'properties', this.propertyId, 'cleaningHistory');
       const cleanQuery = query(cleanCol, orderBy('createdAtMs', 'desc'), limit(200));
       const unsubClean = onSnapshot(
         cleanQuery,
         (snapshot) => {
-          const cloudRecords = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const cloudRecords = snapshot.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((item) => !(this.inFlightDeletes && this.inFlightDeletes.has(`cleaningHistory/${item.id}`)));
+
           const mergedMap = new Map();
-          (this.cleaningHistory || []).forEach((item) => {
-            if (item && item.id) mergedMap.set(item.id, item);
-          });
           cloudRecords.forEach((item) => {
             if (item && item.id) mergedMap.set(item.id, item);
           });
+
+          // Only keep local records that are actively pending sync or if reading from offline cache
+          (this.cleaningHistory || []).forEach((item) => {
+            if (!item || !item.id) return;
+            if (this.inFlightDeletes && this.inFlightDeletes.has(`cleaningHistory/${item.id}`)) return;
+            if (!mergedMap.has(item.id) && (item._pendingSync || snapshot.metadata?.fromCache)) {
+              mergedMap.set(item.id, item);
+            }
+          });
+
           this.cleaningHistory = Array.from(mergedMap.values())
             .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0))
             .slice(0, 500);
@@ -3731,11 +3749,19 @@ class PMSStore {
         notes: meta.notes || '',
         markedBy: this.currentUser?.name || this.property?.userProfile?.name || 'Front Desk',
         createdAt: nowIso,
-        createdAtMs: Date.now()
+        createdAtMs: Date.now(),
+        _pendingSync: true
       };
       if (!Array.isArray(this.cleaningHistory)) this.cleaningHistory = [];
       this.cleaningHistory = [cleaningRecord, ...this.cleaningHistory.slice(0, 499)];
-      this.syncDocToFirestore('cleaningHistory', cleaningRecord.id, cleaningRecord);
+      const cleanRecordPayload = { ...cleaningRecord };
+      delete cleanRecordPayload._pendingSync;
+      this.syncDocToFirestore('cleaningHistory', cleaningRecord.id, cleanRecordPayload).then(() => {
+        this.cleaningHistory = (this.cleaningHistory || []).map((rec) =>
+          rec.id === cleaningRecord.id ? { ...rec, _pendingSync: false } : rec
+        );
+        this.save();
+      });
     }
 
     this.save();
@@ -3762,11 +3788,58 @@ class PMSStore {
   deleteCleaningHistory(recordId) {
     if (!recordId) return;
     const idStr = String(recordId);
-    this.cleaningHistory = (this.cleaningHistory || []).filter((rec) => String(rec.id) !== idStr);
-    this.auditTrail = (this.auditTrail || []).filter((entry) => String(entry.id) !== idStr);
+
+    const targetClean = (this.cleaningHistory || []).find((rec) => String(rec.id) === idStr);
+    const targetAudit = (this.auditTrail || []).find((entry) => String(entry.id) === idStr);
+
+    const targetRoomNum = String(
+      targetClean?.roomNumber || targetAudit?.entityId || ''
+    ).trim();
+    const targetMs =
+      targetClean?.createdAtMs ||
+      (targetClean?.createdAt ? Date.parse(targetClean.createdAt) : 0) ||
+      targetAudit?.createdAtMs ||
+      (targetAudit?.timestamp ? Date.parse(String(targetAudit.timestamp).replace(' ', 'T')) : 0) ||
+      0;
+
+    // Collect any paired cleaningHistory & auditTrail IDs for the same room & event timestamp (±15s)
+    const cleanIdsToDelete = new Set([idStr]);
+    const auditIdsToDelete = new Set([idStr]);
+
+    if (targetRoomNum && targetMs > 0) {
+      (this.cleaningHistory || []).forEach((rec) => {
+        if (!rec || !rec.id) return;
+        const rNum = String(rec.roomNumber || '').trim();
+        const rMs = rec.createdAtMs || (rec.createdAt ? Date.parse(rec.createdAt) : 0) || 0;
+        if (rNum === targetRoomNum && Math.abs(rMs - targetMs) < 15000) {
+          cleanIdsToDelete.add(String(rec.id));
+        }
+      });
+
+      (this.auditTrail || []).forEach((entry) => {
+        if (!entry || !entry.id || entry.action !== 'HOUSEKEEPING_UPDATE') return;
+        if (!/^Marked CLEAN by /i.test(String(entry.details || ''))) return;
+        const eRoom = String(entry.entityId || '').trim();
+        const eMs =
+          entry.createdAtMs ||
+          (entry.timestamp ? Date.parse(String(entry.timestamp).replace(' ', 'T')) : 0) ||
+          0;
+        if (eRoom === targetRoomNum && Math.abs(eMs - targetMs) < 15000) {
+          auditIdsToDelete.add(String(entry.id));
+        }
+      });
+    }
+
+    this.cleaningHistory = (this.cleaningHistory || []).filter(
+      (rec) => !cleanIdsToDelete.has(String(rec.id))
+    );
+    this.auditTrail = (this.auditTrail || []).filter(
+      (entry) => !auditIdsToDelete.has(String(entry.id))
+    );
     this.save();
-    this.deleteDocFromFirestore('cleaningHistory', idStr);
-    this.deleteDocFromFirestore('auditTrail', idStr);
+
+    cleanIdsToDelete.forEach((cid) => this.deleteDocFromFirestore('cleaningHistory', cid));
+    auditIdsToDelete.forEach((aid) => this.deleteDocFromFirestore('auditTrail', aid));
     this.notify();
   }
 
