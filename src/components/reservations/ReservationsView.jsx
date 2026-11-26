@@ -161,6 +161,10 @@ export default function ReservationsView({
 
   const hasDateRange = Boolean(fromDate || toDate);
 
+  // Pagination state (15 reservations per page)
+  const PAGE_SIZE = 15;
+  const [currentPage, setCurrentPage] = useState(1);
+
   // Calculate dynamic tab counts
   const counts = useMemo(() => {
     const departuresList = reservations.filter((r) => {
@@ -290,6 +294,45 @@ export default function ReservationsView({
     bookingType,
     businessDate
   ]);
+
+  // Reset to page 1 when filters/tab change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, statusFilter, fromDate, toDate, sourceFilter, filterVip, filterSingleLady, bookingType]);
+
+  const totalResults = filteredReservations.length;
+  const totalPages = Math.max(1, Math.ceil(totalResults / PAGE_SIZE));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIdx = (safePage - 1) * PAGE_SIZE;
+  const paginatedReservations = useMemo(
+    () => filteredReservations.slice(startIdx, startIdx + PAGE_SIZE),
+    [filteredReservations, startIdx]
+  );
+  const showingFrom = totalResults === 0 ? 0 : startIdx + 1;
+  const showingTo = Math.min(startIdx + PAGE_SIZE, totalResults);
+
+  const handlePageChange = (nextPage) => {
+    const clamped = Math.min(Math.max(1, nextPage), totalPages);
+    setCurrentPage(clamped);
+    if (typeof window !== 'undefined') {
+      const viewport = document.querySelector('.reservations-viewport') || document.querySelector('.content-viewport');
+      if (viewport) viewport.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const pageNumbers = useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages = [1];
+    if (safePage > 3) pages.push('...');
+    for (let p = Math.max(2, safePage - 1); p <= Math.min(totalPages - 1, safePage + 1); p++) {
+      pages.push(p);
+    }
+    if (safePage < totalPages - 2) pages.push('...');
+    pages.push(totalPages);
+    return pages;
+  }, [totalPages, safePage]);
 
   // Export to Excel report
   const handleExport = () => {
@@ -426,8 +469,8 @@ export default function ReservationsView({
 
       {/* 5. Main Reservation Cards / Grid View */}
       {viewMode === 'grid' ? (
-        <div key={activeTab} className="res-cards-grid">
-          {filteredReservations.map((res) => (
+        <div key={`${activeTab}-${safePage}`} className="res-cards-grid">
+          {paginatedReservations.map((res) => (
             <ReservationCard
               key={res.id}
               reservation={res}
@@ -465,7 +508,14 @@ export default function ReservationsView({
       ) : (
         /* List / Table View matching exact design specification */
         <ReservationsListView
-          reservations={filteredReservations}
+          reservations={paginatedReservations}
+          totalResults={totalResults}
+          showingFrom={showingFrom}
+          showingTo={showingTo}
+          currentPage={safePage}
+          totalPages={totalPages}
+          pageNumbers={pageNumbers}
+          onPageChange={handlePageChange}
           onSelectReservation={onSelectReservation}
           onEditReservation={handleEditReservation}
           onCheckIn={(r) => {
@@ -495,17 +545,42 @@ export default function ReservationsView({
       {viewMode === 'grid' && (
         <div className="res-pagination-footer">
           <div className="pagination-results-text">
-            Showing <strong>1–{filteredReservations.length}</strong> of <strong>{filteredReservations.length}</strong> results
+            Showing <strong>{showingFrom}–{showingTo}</strong> of <strong>{totalResults}</strong> results
           </div>
 
           <div className="pagination-controls">
-            <button className="pagination-nav-btn" disabled title="Previous page">
+            <button
+              type="button"
+              className="pagination-nav-btn"
+              disabled={safePage <= 1}
+              onClick={() => handlePageChange(safePage - 1)}
+              title="Previous page"
+            >
               &lt;
             </button>
-            <button className="pagination-page-btn active">
-              1
-            </button>
-            <button className="pagination-nav-btn" disabled title="Next page">
+            {pageNumbers.map((p, idx) =>
+              p === '...' ? (
+                <span key={`dots-${idx}`} style={{ padding: '0 6px', color: '#94a3b8', fontSize: '13px' }}>
+                  ...
+                </span>
+              ) : (
+                <button
+                  key={p}
+                  type="button"
+                  className={`pagination-page-btn ${safePage === p ? 'active' : ''}`}
+                  onClick={() => handlePageChange(p)}
+                >
+                  {p}
+                </button>
+              )
+            )}
+            <button
+              type="button"
+              className="pagination-nav-btn"
+              disabled={safePage >= totalPages}
+              onClick={() => handlePageChange(safePage + 1)}
+              title="Next page"
+            >
               &gt;
             </button>
           </div>

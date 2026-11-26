@@ -48,7 +48,14 @@ export default function ReservationsListView({
   onOpenDetailsDrawer,
   onGroupList,
   onAmendStay,
-  onToggleViewMode
+  onToggleViewMode,
+  totalResults,
+  showingFrom,
+  showingTo,
+  currentPage = 1,
+  totalPages = 1,
+  pageNumbers = [1],
+  onPageChange
 }) {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [showPrintSubmenu, setShowPrintSubmenu] = useState(false);
@@ -734,17 +741,42 @@ export default function ReservationsListView({
       {/* Pagination Footer matching exact reference image */}
       <div className="res-table-pagination">
         <div className="pagination-results-text">
-          Showing <strong>1–{reservations.length}</strong> of <strong>{reservations.length}</strong> results
+          Showing <strong>{showingFrom !== undefined ? showingFrom : (reservations.length === 0 ? 0 : 1)}–{showingTo !== undefined ? showingTo : reservations.length}</strong> of <strong>{totalResults !== undefined ? totalResults : reservations.length}</strong> results
         </div>
 
         <div className="pagination-controls">
-          <button className="pagination-nav-btn" disabled title="Previous page">
+          <button
+            type="button"
+            className="pagination-nav-btn"
+            disabled={currentPage <= 1}
+            onClick={() => onPageChange && onPageChange(currentPage - 1)}
+            title="Previous page"
+          >
             &lt;
           </button>
-          <button className="pagination-page-btn active">
-            1
-          </button>
-          <button className="pagination-nav-btn" disabled title="Next page">
+          {pageNumbers.map((p, idx) =>
+            p === '...' ? (
+              <span key={`dots-${idx}`} style={{ padding: '0 6px', color: '#94a3b8', fontSize: '13px' }}>
+                ...
+              </span>
+            ) : (
+              <button
+                key={p}
+                type="button"
+                className={`pagination-page-btn ${currentPage === p ? 'active' : ''}`}
+                onClick={() => onPageChange && onPageChange(p)}
+              >
+                {p}
+              </button>
+            )
+          )}
+          <button
+            type="button"
+            className="pagination-nav-btn"
+            disabled={currentPage >= totalPages}
+            onClick={() => onPageChange && onPageChange(currentPage + 1)}
+            title="Next page"
+          >
             &gt;
           </button>
         </div>
