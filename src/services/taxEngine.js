@@ -337,6 +337,72 @@ export function getGstinStateCode(gstin) {
   return gstin.trim().substring(0, 2);
 }
 
+export const GST_STATE_CODES = {
+  '01': 'Jammu and Kashmir',
+  '02': 'Himachal Pradesh',
+  '03': 'Punjab',
+  '04': 'Chandigarh',
+  '05': 'Uttarakhand',
+  '06': 'Haryana',
+  '07': 'Delhi',
+  '08': 'Rajasthan',
+  '09': 'Uttar Pradesh',
+  '10': 'Bihar',
+  '11': 'Sikkim',
+  '12': 'Arunachal Pradesh',
+  '13': 'Nagaland',
+  '14': 'Manipur',
+  '15': 'Mizoram',
+  '16': 'Tripura',
+  '17': 'Meghalaya',
+  '18': 'Assam',
+  '19': 'West Bengal',
+  '20': 'Jharkhand',
+  '21': 'Odisha',
+  '22': 'Chhattisgarh',
+  '23': 'Madhya Pradesh',
+  '24': 'Gujarat',
+  '26': 'Dadra and Nagar Haveli and Daman and Diu',
+  '27': 'Maharashtra',
+  '28': 'Andhra Pradesh (Old)',
+  '29': 'Karnataka',
+  '30': 'Goa',
+  '31': 'Lakshadweep',
+  '32': 'Kerala',
+  '33': 'Tamil Nadu',
+  '34': 'Puducherry',
+  '35': 'Andaman and Nicobar Islands',
+  '36': 'Telangana',
+  '37': 'Andhra Pradesh',
+  '38': 'Ladakh'
+};
+
+/**
+ * Resolves Place of Supply { stateName, stateCode } from GSTIN or state name
+ */
+export function resolvePlaceOfSupply(guestGstin, guestState, propertyGstin, propertyState) {
+  const guestCode = getGstinStateCode(guestGstin);
+  if (guestCode && GST_STATE_CODES[guestCode]) {
+    return { stateName: GST_STATE_CODES[guestCode], stateCode: guestCode };
+  }
+  const propCode = getGstinStateCode(propertyGstin);
+  if (propCode && GST_STATE_CODES[propCode]) {
+    return { stateName: GST_STATE_CODES[propCode], stateCode: propCode };
+  }
+  const candidateState = (guestState || propertyState || '').trim();
+  if (candidateState) {
+    const normalized = candidateState.toLowerCase();
+    const matched = Object.entries(GST_STATE_CODES).find(
+      ([, name]) => name.toLowerCase() === normalized
+    );
+    if (matched) {
+      return { stateName: matched[1], stateCode: matched[0] };
+    }
+    return { stateName: candidateState, stateCode: '' };
+  }
+  return { stateName: 'N/A', stateCode: '' };
+}
+
 /**
  * Checks if a guest GSTIN is interstate compared to property GSTIN
  */
@@ -362,7 +428,16 @@ export function generateTaxInvoiceSummary(transactions = [], property, guest, ov
   let totalGross = 0;
 
   transactions.forEach((tx, idx) => {
-    if (tx.direction !== 'DEBIT' && tx.amount <= 0) return; // Skip payments/credits
+    if (
+      !tx ||
+      tx.isVoided ||
+      tx.type === 'PAYMENT' ||
+      tx.direction === 'CREDIT' ||
+      tx.direction === 'Credit' ||
+      Number(tx.amount) <= 0
+    ) {
+      return; // Skip payments/credits/voided entries
+    }
 
     const isFnb = tx.type === 'EXTRA_SERVICE' || tx.type === 'FNB';
     const sacCode = isFnb ? SAC_CODES.RESTAURANT_FNB : SAC_CODES.ACCOMMODATION;
@@ -408,7 +483,7 @@ export function generateTaxInvoiceSummary(transactions = [], property, guest, ov
     }
 
     lineItems.push({
-      itemIndex: idx + 1,
+      itemIndex: lineItems.length + 1,
       date: tx.date || property?.businessDate,
       description: tx.desc || (isFnb ? 'Food & Beverage Service' : 'Hotel Accommodation Room Tariff'),
       sacCode,
