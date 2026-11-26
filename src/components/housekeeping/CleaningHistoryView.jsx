@@ -115,14 +115,14 @@ export default function CleaningHistoryView({
   return (
     <div
       style={{
-        padding: '12px',
+        padding: '12px 0 0 0',
         width: '100%',
         boxSizing: 'border-box',
         backgroundColor: '#f8fafc',
         minHeight: 'calc(100vh - 54px)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '14px'
+        gap: '12px'
       }}
     >
       {/* 1. Summary KPI Row */}
@@ -398,8 +398,11 @@ export default function CleaningHistoryView({
       <div
         style={{
           backgroundColor: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '12px',
+          borderTop: '1px solid #e2e8f0',
+          borderBottom: 'none',
+          borderLeft: 'none',
+          borderRight: 'none',
+          borderRadius: 0,
           overflow: 'hidden',
           flex: 1
         }}

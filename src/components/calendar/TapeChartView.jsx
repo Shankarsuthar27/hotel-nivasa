@@ -1397,7 +1397,7 @@ export default function TapeChartView({
 
       {/* 2. Tape Chart Gantt Table */}
       <div
-        className="tape-chart-scroll"
+        className="tape-chart-scroll no-scrollbar"
         ref={scrollContainerRef}
         onMouseDown={onTimelineMouseDown}
         style={{
@@ -1406,6 +1406,8 @@ export default function TapeChartView({
           height: '100%',
           overflowX: 'auto',
           overflowY: 'auto',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
           display: 'flex',
           flexDirection: 'column',
           position: 'relative'
