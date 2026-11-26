@@ -19,6 +19,7 @@ import {
   Eye,
   ChevronRight
 } from 'lucide-react';
+import { formatBookingDateTime } from '../../services/dateUtils';
 import './reservation-card.css';
 
 /**
@@ -98,7 +99,7 @@ export default function ReservationCard({
         : 1);
   const nightsText = `${nightsCount} ${nightsCount === 1 ? 'Night' : 'Nights'}`;
 
-  const bookingDateText = reservation.bookingDateFormatted || '26 Oct 2026, 1:08 PM';
+  const bookingDateText = formatBookingDateTime(reservation);
   const roomsCount = reservation.roomsCount || 1;
   const adultsCount = reservation.adults !== undefined ? reservation.adults : 1;
   const childrenCount = reservation.children !== undefined ? reservation.children : 2;

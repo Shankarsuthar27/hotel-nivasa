@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Smile, MoreVertical } from 'lucide-react';
+import { formatBookingDateTime } from '../../services/dateUtils';
+export { formatBookingDateTime };
 import './reservations-list.css';
 import './reservation-card.css';
 
@@ -30,31 +32,6 @@ export const formatStayDate = (dateStr) => {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${days[d.getDay()]} ${d.getDate()}, ${months[d.getMonth()]} ${d.getFullYear()}`;
-};
-
-// Date formatter for Booking Date matching image: "16 Nov 2026, 12:03 PM"
-export const formatBookingDateTime = (val, res) => {
-  if (res?.bookingDateFormatted) return res.bookingDateFormatted;
-  const target = val || res?.createdAt || res?.bookingDate;
-  if (!target) return '';
-  if (
-    typeof target === 'string' &&
-    /^\d{1,2}\s+[A-Za-z]{3}\s+\d{4},\s+\d{1,2}:\d{2}\s+(AM|PM)$/i.test(target.trim())
-  ) {
-    return target.trim();
-  }
-  const d = new Date(target);
-  if (isNaN(d.getTime())) return String(target);
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const day = d.getDate();
-  const month = months[d.getMonth()];
-  const year = d.getFullYear();
-  let hours = d.getHours();
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12;
-  hours = hours ? hours : 12;
-  return `${day} ${month} ${year}, ${hours}:${minutes} ${ampm}`;
 };
 
 export default function ReservationsListView({

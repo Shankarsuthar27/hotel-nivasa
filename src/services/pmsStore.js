@@ -21,7 +21,7 @@ import {
 import { calculateRoomTax, setActiveTaxRules } from './taxEngine';
 import { getRoleDefaultPermissions } from '../data/rolePresets';
 import { hasPermission as checkUserPermission } from '../utils/permissions';
-import { normalizeDateStr, getNextDayIsoDate, getTodayIsoDate, getCurrentTimeString, formatTimeToHhMm, getAccurateArrivalTime, formatDisplayDate } from './dateUtils';
+import { normalizeDateStr, getNextDayIsoDate, getTodayIsoDate, getCurrentTimeString, formatTimeToHhMm, getAccurateArrivalTime, formatDisplayDate, formatBookingDateTime } from './dateUtils';
 import {
   doc,
   setDoc,
@@ -2487,7 +2487,12 @@ class PMSStore {
       isComplimentary: !!bookingData.isComplimentary,
       specialRequests: bookingData.specialRequests || bookingData.notes || '',
       notes: bookingData.specialRequests || bookingData.notes || '',
-      createdAt: new Date().toISOString(),
+      createdAt: (bookingData.createdAt && typeof bookingData.createdAt === 'string')
+        ? bookingData.createdAt
+        : (bookingData.createdAt instanceof Date ? bookingData.createdAt.toISOString() : new Date().toISOString()),
+      bookingDate: bookingData.bookingDate || checkInIso || getTodayIsoDate(),
+      bookingTime: bookingData.bookingTime || getCurrentTimeString(),
+      bookingDateFormatted: bookingData.bookingDateFormatted || formatBookingDateTime(bookingData.createdAt || new Date()),
       folioId
     };
 

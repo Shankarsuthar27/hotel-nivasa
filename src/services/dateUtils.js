@@ -251,3 +251,98 @@ export function formatDisplayDate(dateStr) {
   return dateStr;
 }
 
+/**
+ * Formats any reservation or timestamp into authoritative OTAL PMS Booking Date & Time:
+ * "26 Nov 2026, 1:08 PM"
+ */
+export function formatBookingDateTime(val, resObj = null) {
+  if (!val && !resObj) return '';
+
+  const res = resObj || (val && typeof val === 'object' && !(val instanceof Date) && typeof val.getTime !== 'function' && typeof val.seconds !== 'number' ? val : null);
+
+  // 1. If res has a pre-formatted valid bookingDateFormatted that isn't a stale Oct mock fallback
+  if (res?.bookingDateFormatted && typeof res.bookingDateFormatted === 'string') {
+    const trimmed = res.bookingDateFormatted.trim();
+    const isMockOct = trimmed === '26 Oct 2026, 1:08 PM';
+    const hasDifferentCheckIn = res.checkInDate && !String(res.checkInDate).startsWith('2026-10');
+    const hasDifferentCreated = res.createdAt && !String(res.createdAt).startsWith('2026-10');
+    // If it's the mock fallback string but the reservation is from November or another date, ignore the stale string
+    if (!(isMockOct && (hasDifferentCheckIn || hasDifferentCreated))) {
+      if (/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4},\s+\d{1,2}:\d{2}\s+(AM|PM)$/i.test(trimmed)) {
+        return trimmed;
+      }
+    }
+  }
+
+  // 2. Identify primary date/time candidate
+  let raw = (!res && val !== undefined && val !== null)
+    ? val
+    : (res?.createdAt || res?.createdAtMs || res?.bookingDate || res?.checkInDate);
+
+  if (!raw && res) {
+    raw = res.checkInDate;
+  }
+
+  if (!raw) {
+    raw = new Date();
+  }
+
+  // If already matches "DD MMM YYYY, h:mm A"
+  if (typeof raw === 'string' && /^\d{1,2}\s+[A-Za-z]{3}\s+\d{4},\s+\d{1,2}:\d{2}\s+(AM|PM)$/i.test(raw.trim())) {
+    return raw.trim();
+  }
+
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  let d = null;
+
+  // Handle Firestore Timestamp { seconds, nanoseconds }
+  if (raw && typeof raw === 'object' && typeof raw.seconds === 'number') {
+    d = new Date(raw.seconds * 1000);
+  } else if (raw instanceof Date) {
+    d = isNaN(raw.getTime()) ? new Date() : raw;
+  } else if (typeof raw === 'number') {
+    d = new Date(raw);
+  } else if (typeof raw === 'string') {
+    const str = raw.trim();
+    // YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      const [y, m, dayNum] = str.split('-').map(Number);
+      // Combine with time if available on reservation
+      const timeStr = res?.bookingTime || res?.actualCheckInTime || res?.checkInTime || res?.arrivalTime || '';
+      let hh = 12;
+      let mm = 0;
+      if (timeStr) {
+        const ampmMatch = String(timeStr).match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?/i);
+        if (ampmMatch) {
+          hh = parseInt(ampmMatch[1], 10);
+          mm = parseInt(ampmMatch[2], 10);
+          const meridian = ampmMatch[3]?.toUpperCase();
+          if (meridian === 'PM' && hh < 12) hh += 12;
+          if (meridian === 'AM' && hh === 12) hh = 0;
+        }
+      }
+      d = new Date(y, m - 1, dayNum, hh, mm);
+    } else {
+      d = new Date(str);
+      if (isNaN(d.getTime())) {
+        d = new Date();
+      }
+    }
+  }
+
+  if (!d || isNaN(d.getTime())) {
+    d = new Date();
+  }
+
+  const day = d.getDate();
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+
+  return `${day} ${month} ${year}, ${hours}:${minutes} ${ampm}`;
+}
+

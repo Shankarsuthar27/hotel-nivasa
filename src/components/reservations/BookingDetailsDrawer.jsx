@@ -23,7 +23,7 @@ import {
 import CustomTimePickerModal from '../common/CustomTimePickerModal';
 import GuestCheckOutModal from './GuestCheckOutModal';
 import { pmsStore } from '../../services/pmsStore';
-import { formatTimeToHhMm, getAccurateArrivalTime } from '../../services/dateUtils';
+import { formatTimeToHhMm, getAccurateArrivalTime, formatBookingDateTime } from '../../services/dateUtils';
 
 export default function BookingDetailsDrawer({
   isOpen,
@@ -104,7 +104,7 @@ export default function BookingDetailsDrawer({
     : (reservation.checkOutDate || '2026-10-27');
   const departureDateFormatted = formatDate(departureDateVal);
 
-  const bookingDateFormatted = formatDate(reservation.checkInDate || '2026-10-26');
+  const bookingDateFormatted = formatBookingDateTime(reservation);
 
   // Status computation
   const statusNorm = (reservation.status || '').toLowerCase().replace('-', '_').replace(' ', '_');

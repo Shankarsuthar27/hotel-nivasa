@@ -34,7 +34,8 @@ import {
   getNextDayIsoDate,
   getCurrentTimeString,
   doDateRangesOverlap,
-  isResMatchingRoom
+  isResMatchingRoom,
+  formatBookingDateTime
 } from '../../services/dateUtils';
 
 // Venus / Female Icon matching OTAL
@@ -934,6 +935,9 @@ export default function AddReservationView({
       advanceAmount: advanceVal,
       paymentMethod: paymentMode,
       paymentReference: paymentReference || 'Direct',
+      bookingDate: checkInDate || todayStr,
+      bookingTime: getCurrentTimeString(),
+      bookingDateFormatted: formatBookingDateTime(new Date()),
       primaryGuest: {
         name: fullGuestName,
         title: guestTitle,
