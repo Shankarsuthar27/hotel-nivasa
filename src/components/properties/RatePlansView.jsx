@@ -10,6 +10,36 @@ import {
 } from 'lucide-react';
 import AddRatePlanModal from './AddRatePlanModal';
 
+// Toggle switch icon matching exact user design (capsule with circle thumb)
+const ToggleSwitchIcon = ({ checked = true }) => (
+  <span
+    style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: checked ? 'flex-end' : 'flex-start',
+      width: '26px',
+      height: '15px',
+      borderRadius: '999px',
+      border: `2px solid ${checked ? '#16a34a' : '#94a3b8'}`,
+      backgroundColor: '#ffffff',
+      padding: '1px 2px',
+      boxSizing: 'border-box',
+      transition: 'all 0.15s ease',
+      flexShrink: 0
+    }}
+  >
+    <span
+      style={{
+        width: '8px',
+        height: '8px',
+        borderRadius: '50%',
+        backgroundColor: checked ? '#16a34a' : '#94a3b8',
+        transition: 'all 0.15s ease'
+      }}
+    />
+  </span>
+);
+
 export default function RatePlansView({
   ratePlans = [],
   mealPlans = [],
@@ -133,6 +163,18 @@ export default function RatePlansView({
 
     return Array.from(new Set(byId.values()));
   }, [ratePlans]);
+
+  const handleToggleStatus = (plan) => {
+    const isCurrentlyActive = plan.status !== 'INACTIVE';
+    const nextStatus = isCurrentlyActive ? 'INACTIVE' : 'ACTIVE';
+    if (onUpdateRatePlan) {
+      onUpdateRatePlan(plan.id || plan.code, { ...plan, status: nextStatus });
+    }
+    setActiveMenuId(null);
+    if (showToast) {
+      showToast(`Rate plan "${plan.name}" marked as ${nextStatus === 'ACTIVE' ? 'Active' : 'Inactive'}`);
+    }
+  };
 
   const handleDelete = (plan) => {
     if (onDeleteRatePlan) {
@@ -262,7 +304,7 @@ export default function RatePlansView({
 
                         {activeMenuId === planKey && (
                           <div
-                            className="properties-action-menu fixed-popover"
+                            className="rate-plan-action-menu"
                             ref={menuRef}
                             style={{
                               position: 'fixed',
@@ -274,20 +316,20 @@ export default function RatePlansView({
                           >
                             <button
                               type="button"
-                              className="properties-action-item"
+                              className="rate-plan-action-item edit"
                               onClick={() => handleEdit(rp)}
                             >
-                              <SquarePen size={15} color="#334155" />
+                              <SquarePen size={16} strokeWidth={2.2} color="#475569" />
                               <span>Edit</span>
                             </button>
-                            <div className="properties-action-divider" />
+                            <div className="rate-plan-action-divider" />
                             <button
                               type="button"
-                              className="properties-action-item delete"
-                              onClick={() => handleDelete(rp)}
+                              className={`rate-plan-action-item toggle-status ${rp.status === 'INACTIVE' ? 'is-inactive' : 'is-active'}`}
+                              onClick={() => handleToggleStatus(rp)}
                             >
-                              <Trash2 size={15} color="#EF4444" />
-                              <span>Delete</span>
+                              <ToggleSwitchIcon checked={rp.status !== 'INACTIVE'} />
+                              <span>{rp.status === 'INACTIVE' ? 'Inactive' : 'Active'}</span>
                             </button>
                           </div>
                         )}

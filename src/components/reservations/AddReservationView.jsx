@@ -1170,14 +1170,6 @@ export default function AddReservationView({
                 <h2 className="add-res-card-title">Room Configuration</h2>
                 <p className="add-res-card-subtitle">Configure room details, guest occupancy, and applicable rates.</p>
               </div>
-              <button
-                type="button"
-                className="btn-add-room-outline"
-                onClick={handleAddRoomRow}
-              >
-                <Plus size={15} />
-                <span>Add More Room</span>
-              </button>
             </div>
 
             <div style={{ overflow: 'visible', width: '100%' }}>

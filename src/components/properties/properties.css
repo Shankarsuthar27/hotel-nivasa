@@ -365,6 +365,76 @@
   margin: 4px 0;
 }
 
+/* Rate Plan Action Popover Menu (Matches exact user screenshot) */
+.rate-plan-action-menu {
+  position: fixed !important;
+  right: auto !important;
+  z-index: 9999 !important;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  min-width: 140px;
+  padding: 6px;
+  animation: fadeIn 0.12s ease-out;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.rate-plan-action-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 8px;
+  text-align: left;
+  transition: all 0.12s ease;
+  box-sizing: border-box;
+}
+
+.rate-plan-action-item.edit {
+  color: #0f172a;
+  background-color: #f8fafc;
+}
+
+.rate-plan-action-item.edit:hover {
+  background-color: #f1f5f9;
+}
+
+.rate-plan-action-divider {
+  height: 1px;
+  background-color: #f1f5f9;
+  margin: 5px 4px;
+}
+
+.rate-plan-action-item.toggle-status {
+  background: transparent;
+}
+
+.rate-plan-action-item.toggle-status.is-active {
+  color: #16a34a;
+}
+
+.rate-plan-action-item.toggle-status.is-active:hover {
+  background-color: #f0fdf4;
+}
+
+.rate-plan-action-item.toggle-status.is-inactive {
+  color: #64748b;
+}
+
+.rate-plan-action-item.toggle-status.is-inactive:hover {
+  background-color: #f8fafc;
+}
+
 /* Pagination Footer (Matches Image 1) */
 .properties-pagination-footer {
   display: flex;
