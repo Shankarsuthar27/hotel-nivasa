@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Hotel,
+  Bed,
   MoreVertical,
   User,
   Baby,
@@ -136,8 +136,8 @@ export default function ReservationCard({
         {/* Header Row: Hotel Icon, Guest Name, Ref, Status Badge, More Button */}
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-2 min-w-0 flex-1">
-            <div className="bg-blue-100 flex p-2 rounded-sm shrink-0 items-center justify-center">
-              <Hotel size={20} className="text-blue-500 shrink-0" />
+            <div className="bg-blue-100 flex p-2 rounded-lg shrink-0 items-center justify-center">
+              <Bed size={20} className="text-blue-600 shrink-0" />
             </div>
             <div className="flex flex-col gap-1 flex-1 min-w-0">
               <div className="cursor-pointer group/name inline-block w-fit">
