@@ -5,6 +5,7 @@ import {
   Filter,
   Search,
   Calendar,
+  CalendarCheck,
   Tag,
   Star,
   FileSpreadsheet,
@@ -427,17 +428,16 @@ export default function ReservationsView({
             <button
               id="addNavButton"
               type="button"
-              className="btn-create-reservation"
+              className="btn-create-reservation small-title-4"
               onClick={onNewReservation}
             >
               <span
                 className="material-symbols-outlined select-none"
-                style={{ fontSize: '18px', lineHeight: 1 }}
-                aria-hidden="true"
+                style={{ fontSize: '20px', lineHeight: 1 }}
               >
                 add
               </span>
-              <span>Create Reservation</span>
+              Create Reservation
             </button>
           </Can>
         </div>
@@ -482,8 +482,68 @@ export default function ReservationsView({
       />
 
 
-      {/* 5. Main Reservation Cards / Grid View */}
-      {viewMode === 'grid' ? (
+      {/* 5. Main Reservation Cards / Grid View or List View (with Empty State) */}
+      {paginatedReservations.length === 0 ? (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textAlign: 'center',
+            padding: '5rem 1.5rem',
+            minHeight: '340px'
+          }}
+        >
+          <div
+            style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '12px',
+              backgroundColor: '#f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '1rem'
+            }}
+          >
+            <CalendarCheck size={22} color="#1e293b" strokeWidth={1.9} />
+          </div>
+          <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem' }}>
+            {activeTab === 'arrivals'
+              ? 'No arrivals found'
+              : activeTab === 'in_house'
+              ? 'No in-house guests found'
+              : activeTab === 'departures'
+              ? 'No departures found'
+              : 'No reservations found'}
+          </div>
+          <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.25rem' }}>
+            {activeTab === 'arrivals'
+              ? 'There are no expected arrivals for today.'
+              : activeTab === 'in_house'
+              ? 'There are currently no in-house guests.'
+              : activeTab === 'departures'
+              ? 'There are no departures scheduled for today.'
+              : 'There are no reservations matching your current filters.'}
+          </div>
+          {onNewReservation && (
+            <button
+              type="button"
+              className="btn-create-reservation small-title-4"
+              onClick={onNewReservation}
+            >
+              <span
+                className="material-symbols-outlined select-none"
+                style={{ fontSize: '20px', lineHeight: 1 }}
+              >
+                add
+              </span>
+              Create Reservation
+            </button>
+          )}
+        </div>
+      ) : viewMode === 'grid' ? (
         <div key={`${activeTab}-${safePage}`} className="res-cards-grid">
           {paginatedReservations.map((res) => (
             <ReservationCard
@@ -557,7 +617,7 @@ export default function ReservationsView({
       )}
 
       {/* 6. Pagination Footer (For Grid View only; List View includes its own seamless footer) */}
-      {viewMode === 'grid' && (
+      {viewMode === 'grid' && totalResults > 0 && (
         <div className="res-pagination-footer">
           <div className="pagination-results-text">
             Showing <strong>{showingFrom}–{showingTo}</strong> of <strong>{totalResults}</strong> results

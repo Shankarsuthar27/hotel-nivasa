@@ -112,6 +112,37 @@ export default function App() {
     }
   };
 
+  // Replace native browser alert() popups with non-blocking in-app toast notifications
+  useEffect(() => {
+    const originalAlert = window.alert;
+    window.alert = (msg) => {
+      const text = String(msg ?? '').trim();
+      if (!text) return;
+      const lower = text.toLowerCase();
+      const isError =
+        lower.startsWith('cannot') ||
+        lower.startsWith('could not') ||
+        lower.startsWith('please') ||
+        lower.includes('failed') ||
+        lower.includes('error') ||
+        lower.includes('exceeds') ||
+        lower.includes('invalid') ||
+        lower.includes('mandatory') ||
+        lower.includes('must be');
+      const isSuccess =
+        !isError &&
+        (lower.includes('success') ||
+          lower.includes('saved') ||
+          lower.includes('updated') ||
+          lower.includes('exported') ||
+          lower.includes('dispatched'));
+      showToast(text, isError ? 'error' : isSuccess ? 'success' : null);
+    };
+    return () => {
+      window.alert = originalAlert;
+    };
+  }, []);
+
   // Blur page background whenever operational modals are open
   useEffect(() => {
     const isAnyModalOpen =
