@@ -509,11 +509,18 @@ export default function AddReservationView({
     });
     if (isSelectedInOtherRow) return false;
 
-    // 2. Exclude rooms under maintenance or out of order
+    // 2. Exclude rooms under maintenance, out of order, or dirty
+    const roomStatus = String(room.status || '').toLowerCase();
+    const roomOperational = String(room.operational || '').toLowerCase();
+    const roomHk = String(room.housekeeping || room.hkStatus || '').toLowerCase();
     if (
-      room.status === 'maintenance' ||
-      room.operational === 'maintenance' ||
-      room.operational === 'out_of_order'
+      roomStatus === 'maintenance' ||
+      roomStatus === 'out_of_order' ||
+      roomStatus === 'dirty' ||
+      roomOperational === 'maintenance' ||
+      roomOperational === 'out_of_order' ||
+      roomOperational === 'dirty' ||
+      roomHk === 'dirty'
     ) {
       return false;
     }
