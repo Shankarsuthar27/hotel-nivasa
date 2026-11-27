@@ -43,61 +43,95 @@ export default function DashboardView({
 }) {
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
 
-  const businessDate = property?.businessDate || '2026-10-24';
+  const businessDate = property?.businessDate || new Date().toISOString().split('T')[0];
+  const dateOf = (val) => String(val || '').slice(0, 10);
+  const normStatus = (val) => String(val || '').toLowerCase().replace(/[\s-]+/g, '_');
 
   // --- Dynamic PMS Metric Calculations ---
-  const totalRooms = rooms.length || 2;
-  const inHouseReservations = reservations.filter((r) => r.status === 'in_house');
+  const totalRooms = rooms.length;
+  const maintenanceRoomsCount = rooms.filter((r) => {
+    const st = normStatus(r.status);
+    const op = normStatus(r.operational);
+    return st === 'maintenance' || st === 'out_of_order' || op === 'maintenance' || op === 'out_of_order';
+  }).length;
+  const inHouseReservations = reservations.filter((r) => {
+    const st = normStatus(r.status);
+    return st === 'in_house' || st === 'checked_in';
+  });
   const occupiedRoomsCount = inHouseReservations.length;
-  const availableRoomsCount = Math.max(0, totalRooms - occupiedRoomsCount);
+  const availableRoomsCount = Math.max(0, totalRooms - occupiedRoomsCount - maintenanceRoomsCount);
 
   // Arrivals today:
   // Expected arrivals: confirmed bookings checking in today that haven't checked in yet
   const expectedArrivals = reservations.filter(
-    (r) => r.checkInDate === businessDate && r.status === 'confirmed'
+    (r) => dateOf(r.checkInDate) === businessDate && normStatus(r.status) === 'confirmed'
   ).length;
   // Checked in today:
-  const checkedInToday = reservations.filter(
-    (r) => r.checkInDate === businessDate && (r.status === 'in_house' || r.status === 'checked_out')
-  ).length;
+  const checkedInToday = reservations.filter((r) => {
+    const st = normStatus(r.status);
+    const isCheckedInStatus = st === 'in_house' || st === 'checked_in' || st === 'checked_out';
+    if (!isCheckedInStatus) return false;
+    return dateOf(r.checkedInAt) === businessDate || dateOf(r.checkInDate) === businessDate;
+  }).length;
 
   // Departures today:
   // Expected departures: in-house bookings whose checkout date is today
-  const expectedDepartures = reservations.filter(
-    (r) => r.checkOutDate === businessDate && r.status === 'in_house'
-  ).length;
+  const expectedDepartures = reservations.filter((r) => {
+    const st = normStatus(r.status);
+    return dateOf(r.checkOutDate) === businessDate && (st === 'in_house' || st === 'checked_in');
+  }).length;
   // Already checked out today:
-  const checkedOutToday = reservations.filter(
-    (r) => r.checkOutDate === businessDate && r.status === 'checked_out'
-  ).length;
+  const checkedOutToday = reservations.filter((r) => {
+    if (normStatus(r.status) !== 'checked_out') return false;
+    return dateOf(r.checkedOutAt) === businessDate || dateOf(r.checkOutDate) === businessDate;
+  }).length;
 
   // VIP Guests: in-house or arriving today
-  const vipGuests = reservations.filter(
-    (r) =>
-      r.isVIP &&
-      (r.status === 'in_house' || (r.checkInDate === businessDate && r.status === 'confirmed'))
-  ).length;
+  const vipGuests = reservations.filter((r) => {
+    const isVip = Boolean(r.isVIP || r.primaryGuest?.isVIP);
+    if (!isVip) return false;
+    const st = normStatus(r.status);
+    return st === 'in_house' || st === 'checked_in' || (dateOf(r.checkInDate) === businessDate && st === 'confirmed');
+  }).length;
 
   // Single Ladies: in-house or arriving today
-  const singleLadies = reservations.filter(
-    (r) =>
-      r.isSingleLady &&
-      (r.status === 'in_house' || (r.checkInDate === businessDate && r.status === 'confirmed'))
-  ).length;
+  const singleLadies = reservations.filter((r) => {
+    const isSl = Boolean(r.isSingleLady || r.primaryGuest?.isSingleLady);
+    if (!isSl) return false;
+    const st = normStatus(r.status);
+    return st === 'in_house' || st === 'checked_in' || (dateOf(r.checkInDate) === businessDate && st === 'confirmed');
+  }).length;
 
   // Occupancy percentage:
   const occupancyRate = totalRooms > 0 ? Math.round((occupiedRoomsCount / totalRooms) * 100) : 0;
 
   // Revenue metrics:
-  // Daily room revenue from currently occupied rooms:
-  const roomRevenue = inHouseReservations.reduce((sum, r) => sum + (r.baseRatePerNight || 2625), 0);
-  const adr = occupiedRoomsCount > 0 ? roomRevenue / occupiedRoomsCount : 2625;
-  const revpar = totalRooms > 0 ? roomRevenue / totalRooms : 1312.5;
-  const totalRevenue = roomRevenue;
+  // Daily room revenue (net room tariff) & gross total revenue (with tax/extras) from in-house rooms
+  const roomRevenue = inHouseReservations.reduce((sum, r) => {
+    const nights = Math.max(1, Number(r.nights) || 1);
+    const nightlyTariff =
+      r.baseRatePerNight !== undefined && r.baseRatePerNight !== null
+        ? Number(r.baseRatePerNight) || 0
+        : (Number(r.totalRoomCharges) || 0) / nights;
+    return sum + nightlyTariff;
+  }, 0);
 
-  // Currency Formatter (matches "Rs 1,312.50" format from image)
+  const totalRevenue = inHouseReservations.reduce((sum, r) => {
+    const nights = Math.max(1, Number(r.nights) || 1);
+    if (r.totalAmount !== undefined && r.totalAmount !== null) {
+      return sum + (Number(r.totalAmount) || 0) / nights;
+    }
+    const nightlyTariff = Number(r.baseRatePerNight) || 0;
+    const nightlyTax = (Number(r.taxAmount) || 0) / nights;
+    return sum + nightlyTariff + nightlyTax;
+  }, 0);
+
+  const adr = occupiedRoomsCount > 0 ? roomRevenue / occupiedRoomsCount : 0;
+  const revpar = totalRooms > 0 ? roomRevenue / totalRooms : 0;
+
+  // Currency Formatter (INR ₹)
   const formatCurrency = (val) => {
-    return `Rs ${Number(val || 0).toLocaleString('en-IN', {
+    return `₹${Number(val || 0).toLocaleString('en-IN', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     })}`;
@@ -271,7 +305,8 @@ export default function DashboardView({
             <div className="kpi-title">Available Rooms</div>
             <div className="kpi-value">{availableRoomsCount}</div>
             <div className="kpi-subtitle">
-              Sold: {occupiedRoomsCount} / Total: {totalRooms}
+              Sold: {occupiedRoomsCount}
+              {maintenanceRoomsCount > 0 ? ` • Blocked: ${maintenanceRoomsCount}` : ''} / Total: {totalRooms}
             </div>
           </div>
           <div className="kpi-bottom-accent kpi-accent-cyan" />
