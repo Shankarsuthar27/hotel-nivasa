@@ -107,6 +107,12 @@ export default function ProfileView({
         ctx.drawImage(img, 0, 0, width, height);
         const compressed = canvas.toDataURL('image/jpeg', 0.85);
         setAvatarPreview(compressed);
+        if (onSaveProfile) {
+          onSaveProfile({ avatarUrl: compressed });
+        }
+        if (onShowToast) {
+          onShowToast('Avatar updated and saved to database.');
+        }
       };
       img.src = reader.result;
     };

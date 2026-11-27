@@ -1013,6 +1013,7 @@ class PMSStore {
         localStorage.setItem('pms_current_user', JSON.stringify(nextUser));
       }
     } catch (_) {}
+    let matchedAny = false;
     if (Array.isArray(this.teamMembers)) {
       this.teamMembers = this.teamMembers.map((m) => {
         if (!m) return m;
@@ -1022,6 +1023,7 @@ class PMSStore {
           (nextUser.email && m.email && m.email.toLowerCase() === nextUser.email.toLowerCase()) ||
           (nextUser.role === 'Owner' && m.role === 'Owner');
         if (!matches) return m;
+        matchedAny = true;
         const updatedMember = { ...m, ...patch };
         this.syncDocToFirestore('teamMembers', updatedMember.id, updatedMember);
         if (updatedMember.uid || updatedMember.id) {
@@ -1029,6 +1031,16 @@ class PMSStore {
         }
         return updatedMember;
       });
+    }
+    if (!matchedAny) {
+      const targetDocId = nextUser.id === 'usr_owner' ? 'usr_01' : (nextUser.id || nextUser.uid || `usr_${Date.now()}`);
+      const memberPayload = { ...nextUser, id: targetDocId };
+      this.syncDocToFirestore('teamMembers', targetDocId, memberPayload);
+      this.syncDocToFirestore('staff', nextUser.uid || targetDocId, memberPayload);
+    }
+    if (nextUser.role === 'Owner' && patch.avatarUrl !== undefined) {
+      this.property = { ...this.property, ownerAvatarUrl: patch.avatarUrl };
+      this.syncDocToFirestore('', this.propertyId, { ownerAvatarUrl: patch.avatarUrl });
     }
     this.save();
     this.notify();
@@ -5441,8 +5453,9 @@ class PMSStore {
         id: liveMember.id || cur.id,
         uid: liveMember.uid || liveMember.id || cur.uid || cur.id,
         staffId: liveMember.staffId || cur.staffId || '',
-        name: (liveRole === 'Owner' || liveMember.name === 'Astha India') ? 'HOTEL NIVASA' : (liveMember.name || cur.name),
-        initials: (liveRole === 'Owner' || liveMember.initials === 'AI') ? 'HN' : (liveMember.initials || cur.initials || 'ST'),
+        name: liveMember.name === 'Astha India' ? 'HOTEL NIVASA' : (liveMember.name || (liveRole === 'Owner' ? 'HOTEL NIVASA' : cur.name)),
+        initials: (liveRole === 'Owner' || liveMember.initials === 'AI') ? (liveMember.initials && liveMember.initials !== 'AI' ? liveMember.initials : 'HN') : (liveMember.initials || cur.initials || 'ST'),
+        avatarUrl: liveMember.avatarUrl || cur.avatarUrl || (liveRole === 'Owner' ? (this.property?.ownerAvatarUrl || '') : ''),
         email: liveMember.email || liveMember.loginEmail || cur.email,
         loginEmail: liveMember.loginEmail || liveMember.email || cur.loginEmail,
         role: liveRole,
@@ -5530,6 +5543,7 @@ class PMSStore {
       id: merged.id || `usr_${Date.now()}`,
       uid: merged.uid || merged.id || `usr_${Date.now()}`,
       staffId: merged.staffId || '',
+      avatarUrl: merged.avatarUrl || (userRole === 'Owner' ? (this.property?.ownerAvatarUrl || '') : ''),
       name: merged.name || (isExplicitOwner ? 'HOTEL NIVASA' : cleanEmail.split('@')[0] || 'Staff'),
       email: merged.email || merged.loginEmail || '',
       loginEmail: merged.loginEmail || merged.email || '',
