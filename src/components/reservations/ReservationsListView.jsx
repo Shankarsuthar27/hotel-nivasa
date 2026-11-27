@@ -44,6 +44,7 @@ export default function ReservationsListView({
   onOpenVoucher,
   onOpenInvoice,
   onCancelReservation,
+  onDeleteReservation,
   onNoShowReservation,
   onOpenDetailsDrawer,
   onGroupList,
@@ -489,6 +490,22 @@ export default function ReservationsListView({
                                   </div>
                                 )}
                               </div>
+                              <button
+                                className="radix-menu-item danger"
+                                role="menuitem"
+                                style={{ color: '#dc2626' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuId(null);
+                                  setShowPrintSubmenu(false);
+                                  if (onDeleteReservation) {
+                                    onDeleteReservation(res);
+                                  }
+                                }}
+                              >
+                                <span className="material-symbols-outlined" style={{ color: '#dc2626' }}>delete</span>
+                                <span>Delete</span>
+                              </button>
                             </>
                           ) : (isCancelled || isNoShow) ? (
                             /* Cancelled / No-Show Menu: View, Group List, Print */
@@ -573,6 +590,22 @@ export default function ReservationsListView({
                                   </div>
                                 )}
                               </div>
+                              <button
+                                className="radix-menu-item danger"
+                                role="menuitem"
+                                style={{ color: '#dc2626' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuId(null);
+                                  setShowPrintSubmenu(false);
+                                  if (onDeleteReservation) {
+                                    onDeleteReservation(res);
+                                  }
+                                }}
+                              >
+                                <span className="material-symbols-outlined" style={{ color: '#dc2626' }}>delete</span>
+                                <span>Delete</span>
+                              </button>
                             </>
                           ) : (
                             /* Confirmed Reservation Menu matching exact specification */

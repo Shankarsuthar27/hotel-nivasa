@@ -121,6 +121,7 @@ export default function ReservationsView({
   const [drawerReservation, setDrawerReservation] = useState(null);
   const [groupListReservation, setGroupListReservation] = useState(null);
   const [cancellingRes, setCancellingRes] = useState(null);
+  const [deletingRes, setDeletingRes] = useState(null);
   const [amendStayReservation, setAmendStayReservation] = useState(null);
 
   // Filters
@@ -571,7 +572,10 @@ export default function ReservationsView({
                 const target = typeof r === 'object' ? r : (reservations.find((x) => x.id === r) || { id: r });
                 setCancellingRes(target);
               }}
-              onDelete={onDeleteReservation}
+              onDelete={(r) => {
+                const target = typeof r === 'object' ? r : (reservations.find((x) => x.id === r) || { id: r });
+                setDeletingRes(target);
+              }}
               onNoShow={onNoShowReservation}
               onVoucher={onOpenVoucher}
               onInvoice={onOpenInvoice}
@@ -605,6 +609,10 @@ export default function ReservationsView({
           onCancelReservation={(r) => {
             const target = typeof r === 'object' ? r : (reservations.find((x) => x.id === r) || { id: r });
             setCancellingRes(target);
+          }}
+          onDeleteReservation={(r) => {
+            const target = typeof r === 'object' ? r : (reservations.find((x) => x.id === r) || { id: r });
+            setDeletingRes(target);
           }}
           onNoShowReservation={onNoShowReservation}
           onOpenVoucher={onOpenVoucher}
@@ -761,6 +769,71 @@ export default function ReservationsView({
           setAmendStayReservation(null);
         }}
       />
+
+      {/* Delete Reservation Confirmation Modal */}
+      {deletingRes && (
+        <div className="modal-overlay" onClick={() => setDeletingRes(null)}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '420px', padding: '1.5rem', borderRadius: '14px' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                Delete Reservation?
+              </h3>
+              <button
+                type="button"
+                onClick={() => setDeletingRes(null)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p style={{ fontSize: '0.875rem', color: '#475569', lineHeight: 1.5, margin: '0 0 1.25rem' }}>
+              Are you sure you want to permanently delete reservation{' '}
+              <strong style={{ color: '#0f172a' }}>
+                {deletingRes.bookingReference || (deletingRes.id ? `#${deletingRes.id.toUpperCase()}` : '')}
+              </strong>
+              {deletingRes.primaryGuest?.name || deletingRes.guestName
+                ? ` (${deletingRes.primaryGuest?.name || deletingRes.guestName})`
+                : ''}
+              ? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setDeletingRes(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-danger"
+                style={{
+                  backgroundColor: '#dc2626',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+                onClick={() => {
+                  if (deletingRes && onDeleteReservation) {
+                    onDeleteReservation(deletingRes.id || deletingRes);
+                  }
+                  setDeletingRes(null);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
