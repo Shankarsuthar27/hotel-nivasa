@@ -1114,6 +1114,31 @@ class PMSStore {
             }
           }
 
+          // 4. Process cloud-deleted reservations by ID / bookingReference / _firestoreDocId
+          if (Array.isArray(data.reservations) && data.reservations.length > 0) {
+            if (!this.deletedReservationIds) this.deletedReservationIds = new Set();
+            const delResIds = new Set();
+            data.reservations.forEach((id) => {
+              const clean = String(id || '').trim().toLowerCase();
+              if (clean) {
+                delResIds.add(clean);
+                this.deletedReservationIds.add(clean);
+                this.deletedReservationIds.add(String(id));
+              }
+            });
+            const prevResCount = (this.reservations || []).length;
+            this.reservations = (this.reservations || []).filter((r) => {
+              if (!r) return false;
+              const candidates = [r.id, r.bookingReference, r._firestoreDocId]
+                .map((v) => String(v || '').trim().toLowerCase())
+                .filter(Boolean);
+              return !candidates.some((c) => delResIds.has(c));
+            });
+            if (this.reservations.length !== prevResCount) {
+              stateChanged = true;
+            }
+          }
+
           this.canonicalizeRoomsAndRoomTypes();
 
           if (stateChanged) {
@@ -1131,7 +1156,7 @@ class PMSStore {
       const unsubRes = onSnapshot(
         resQuery,
         (snapshot) => {
-          const cloudRes = snapshot.docs.map((d) => d.data());
+          const cloudRes = snapshot.docs.map((d) => ({ ...d.data(), _firestoreDocId: d.id }));
           const validCloudRes = cloudRes.filter((r) => {
             if (r.id === 'res_unassigned_1') return false;
             return true;
@@ -1139,16 +1164,32 @@ class PMSStore {
 
           // Two-way merge: Preserve all local reservations created in PMS while merging cloud updates
           const resMap = new Map();
-          const isDeleted = (id) => this.deletedReservationIds && this.deletedReservationIds.has(id);
+          const isDeleted = (resOrId) => {
+            if (!this.deletedReservationIds || this.deletedReservationIds.size === 0) return false;
+            if (typeof resOrId === 'string') {
+              return (
+                this.deletedReservationIds.has(resOrId) ||
+                this.deletedReservationIds.has(resOrId.trim().toLowerCase())
+              );
+            }
+            if (!resOrId || typeof resOrId !== 'object') return false;
+            return [resOrId.id, resOrId.bookingReference, resOrId._firestoreDocId]
+              .filter(Boolean)
+              .some(
+                (v) =>
+                  this.deletedReservationIds.has(String(v)) ||
+                  this.deletedReservationIds.has(String(v).trim().toLowerCase())
+              );
+          };
 
           // 1. Local reservations in memory (from localStorage or newly created by user)
           (this.reservations || []).forEach((r) => {
-            if (r && r.id && !isDeleted(r.id)) resMap.set(r.id, r);
+            if (r && r.id && !isDeleted(r)) resMap.set(r.id, r);
           });
 
           // 3. Incoming cloud updates with non-destructive state protection
           validCloudRes.forEach((r) => {
-            if (r && r.id && !isDeleted(r.id)) {
+            if (r && r.id && !isDeleted(r)) {
               const existing = resMap.get(r.id);
               if (existing) {
                 const normLocal = String(existing.status || '').toLowerCase().replace(/[\s-]/g, '_');
@@ -6250,17 +6291,21 @@ class PMSStore {
 
     const targetResId = res.id;
     const targetFolioId = res.folioId;
+    const deleteIds = [targetResId, res.bookingReference, res._firestoreDocId].filter(Boolean);
 
     if (!this.deletedReservationIds) this.deletedReservationIds = new Set();
-    this.deletedReservationIds.add(targetResId);
+    deleteIds.forEach((id) => {
+      this.deletedReservationIds.add(String(id));
+      this.deletedReservationIds.add(String(id).trim().toLowerCase());
+    });
 
     this.reservations = this.reservations.filter(r => r.id !== targetResId);
 
     // Free up any allocated room
     if (res.roomId) {
       this.rooms = this.rooms.map(rm => {
-        if (rm.id === res.roomId && rm.operational === 'allocated') {
-          return { ...rm, operational: 'available' };
+        if (rm.id === res.roomId && (rm.operational === 'allocated' || rm.currentReservationId === targetResId)) {
+          return { ...rm, operational: 'available', currentReservationId: null };
         }
         return rm;
       });
@@ -6285,6 +6330,13 @@ class PMSStore {
 
     this.save();
     this.deleteDocFromFirestore('reservations', targetResId);
+    if (res._firestoreDocId && res._firestoreDocId !== targetResId) {
+      this.deleteDocFromFirestore('reservations', res._firestoreDocId);
+    }
+    if (res.bookingReference && res.bookingReference !== targetResId) {
+      this.deleteDocFromFirestore('reservations', res.bookingReference);
+    }
+    this.recordCloudDeletion('reservations', deleteIds);
     this.notify();
     return true;
   }
