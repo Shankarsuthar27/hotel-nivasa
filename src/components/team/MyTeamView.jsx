@@ -102,8 +102,10 @@ export default function MyTeamView({
       m.id !== 'usr_02' &&
       m.name !== 'Shankar L' &&
       m.role !== 'Owner' &&
+      m.email !== 'info@hotelnivasa.com' &&
+      m.email !== 'owner@hotelnivasa.com' &&
       m.email !== 'owner@hotelastha.com' &&
-      m.name !== 'Astha India'
+      m.name !== 'HOTEL NIVASA'
   );
 
   const filteredMembers = eligibleMembers.filter((m) => {

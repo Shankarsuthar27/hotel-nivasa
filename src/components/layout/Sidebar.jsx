@@ -267,16 +267,19 @@ export default function Sidebar({
         <div className="sidebar-user-card" style={{ position: 'relative' }}>
           <div
             style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, cursor: 'pointer', overflow: 'hidden' }}
-            onClick={() => setIsUserSwitcherOpen(!isUserSwitcherOpen)}
-            title="Click to switch active role or profile"
+            onClick={() => {
+              setIsUserSwitcherOpen(false);
+              if (setActiveTab) setActiveTab('profile');
+            }}
+            title="View Profile"
           >
             <div
               className="user-avatar-ai"
-              style={propertyLogo ? { overflow: 'hidden', padding: 0, background: 'transparent' } : undefined}
+              style={(activeUser.avatarUrl || propertyLogo) ? { overflow: 'hidden', padding: 0, background: 'transparent' } : undefined}
             >
-              {propertyLogo ? (
+              {(activeUser.avatarUrl || propertyLogo) ? (
                 <img
-                  src={propertyLogo}
+                  src={activeUser.avatarUrl || propertyLogo}
                   alt={activeUser.name === 'Astha India' ? 'HOTEL NIVASA' : activeUser.name}
                   style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit', display: 'block' }}
                 />
@@ -352,7 +355,7 @@ export default function Sidebar({
                   {teamMembers
                     .filter((m) => {
                       if (!m || m.role === 'Owner' || m.isDeleted || m.status === 'Removed') return false;
-                      if (m.id === 'usr_02' || m.name === 'Shankar L' || m.email === 'owner@hotelastha.com' || m.name === 'Astha India') return false;
+                      if (m.id === 'usr_02' || m.name === 'Shankar L' || m.email === 'info@hotelnivasa.com' || m.email === 'owner@hotelnivasa.com' || m.email === 'owner@hotelastha.com' || m.name === 'Astha India') return false;
                       const currentPropRaw = property?.name || 'HOTEL NIVASA';
                       const targetProp = currentPropRaw === 'HOTEL ASTHA' || currentPropRaw === 'Hotel Astha' ? 'HOTEL NIVASA' : currentPropRaw;
                       const memberProps = (m.properties || []).map((p) =>

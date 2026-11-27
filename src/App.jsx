@@ -14,6 +14,7 @@ import MyTeamView from './components/team/MyTeamView';
 import AcceptInviteView from './components/team/AcceptInviteView';
 import PropertySettingsView from './components/settings/PropertySettingsView';
 import SettingsView from './components/settings/SettingsView';
+import ProfileView from './components/profile/ProfileView';
 import PropertiesView from './components/properties/PropertiesView';
 
 import CreateReservationModal from './components/reservations/CreateReservationModal';
@@ -971,6 +972,18 @@ export default function App() {
                 pmsStore.updateProperty(patch);
               }}
               showToast={showToast}
+            />
+          )}
+
+          {activeTab === 'profile' && (
+            <ProfileView
+              currentUser={state.currentUser}
+              teamMembers={state.teamMembers}
+              property={state.property}
+              onSaveProfile={(patch) => {
+                pmsStore.updateCurrentUserProfile(patch);
+              }}
+              onShowToast={showToast}
             />
           )}
             </>

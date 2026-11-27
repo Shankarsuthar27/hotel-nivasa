@@ -24,6 +24,7 @@ export default function TopNav({
       case 'permissions': return 'Staff & Granular RBAC Permissions';
       case 'settings':
       case 'properties': return 'Settings';
+      case 'profile': return 'Profile';
       case 'myteam': return 'My Team';
       default: return 'Overview';
     }

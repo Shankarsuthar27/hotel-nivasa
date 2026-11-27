@@ -16,7 +16,7 @@ export const initialProperty = {
   country: 'India',
   postalCode: '343001',
   location: 'Jalore, Jalore, India',
-  website: 'https://hotelastha.com',
+  website: 'https://hotelnivasa.com',
   currency: '₹ (Indian Rupee)',
   currencySymbol: '₹',
   timezone: 'Asia/Kolkata',
@@ -697,7 +697,7 @@ export const initialTeamMembers = [
   {
     id: 'usr_01',
     name: 'HOTEL NIVASA',
-    email: 'owner@hotelastha.com',
+    email: 'info@hotelnivasa.com',
     role: 'Owner',
     avatar: '🏢',
     initials: 'HN',

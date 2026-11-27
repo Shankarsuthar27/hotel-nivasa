@@ -27,6 +27,7 @@ export const ROUTES = {
   PROPERTIES_MARKET_SEGMENT: '/properties/market-segment',
   PROPERTIES_TAX_SERVICES: '/properties/tax-services',
   SETTINGS: '/settings',
+  PROFILE: '/profile',
   LOGIN: '/login'
 };
 
@@ -218,6 +219,18 @@ export function parseRoute(pathname = window.location.pathname, search = window.
     return {
       type: 'SETTINGS',
       tab: 'settings',
+      pathname: cleanPath,
+      search,
+      queryParams,
+      params: {}
+    };
+  }
+
+  // 13b. User Profile: /profile
+  if (cleanPath === '/profile') {
+    return {
+      type: 'PROFILE',
+      tab: 'profile',
       pathname: cleanPath,
       search,
       queryParams,

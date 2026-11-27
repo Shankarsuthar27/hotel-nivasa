@@ -106,6 +106,9 @@ class PMSStore {
     if (savedSessionUser && (savedSessionUser.name === 'Astha India' || savedSessionUser.name === 'HOTEL NIVASA' || savedSessionUser.role === 'Owner')) {
       savedSessionUser.name = 'HOTEL NIVASA';
       savedSessionUser.initials = 'HN';
+      if (savedSessionUser.email === 'owner@hotelastha.com' || savedSessionUser.email === 'owner@hotelnivasa.com') {
+        savedSessionUser.email = 'info@hotelnivasa.com';
+      }
       try {
         localStorage.setItem('pms_current_user', JSON.stringify(savedSessionUser));
       } catch (_) {}
@@ -998,6 +1001,40 @@ class PMSStore {
     return this.property;
   }
 
+  updateCurrentUserProfile(patch = {}) {
+    if (!this.currentUser) return null;
+    const nextUser = {
+      ...this.currentUser,
+      ...patch
+    };
+    this.currentUser = nextUser;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('pms_current_user', JSON.stringify(nextUser));
+      }
+    } catch (_) {}
+    if (Array.isArray(this.teamMembers)) {
+      this.teamMembers = this.teamMembers.map((m) => {
+        if (!m) return m;
+        const matches =
+          (nextUser.id && m.id === nextUser.id) ||
+          (nextUser.uid && m.uid === nextUser.uid) ||
+          (nextUser.email && m.email && m.email.toLowerCase() === nextUser.email.toLowerCase()) ||
+          (nextUser.role === 'Owner' && m.role === 'Owner');
+        if (!matches) return m;
+        const updatedMember = { ...m, ...patch };
+        this.syncDocToFirestore('teamMembers', updatedMember.id, updatedMember);
+        if (updatedMember.uid || updatedMember.id) {
+          this.syncDocToFirestore('staff', updatedMember.uid || updatedMember.id, updatedMember);
+        }
+        return updatedMember;
+      });
+    }
+    this.save();
+    this.notify();
+    return this.currentUser;
+  }
+
   getReservation(resId) {
     if (!resId) return null;
     return this.reservations.find((r) => r.id === resId || r.bookingReference === resId) || null;
@@ -1594,7 +1631,11 @@ class PMSStore {
               if (!map.has(key)) map.set(key, tm);
             }
           });
-          this.teamMembers = Array.from(map.values());
+          this.teamMembers = Array.from(map.values()).map((tm) =>
+            tm && (tm.role === 'Owner' || tm.email === 'owner@hotelastha.com' || tm.email === 'owner@hotelnivasa.com')
+              ? { ...tm, email: (tm.email === 'owner@hotelastha.com' || tm.email === 'owner@hotelnivasa.com') ? 'info@hotelnivasa.com' : tm.email }
+              : tm
+          );
           this.syncCurrentUserWithTeamMembers();
           this.save();
           this.notify();
@@ -1985,9 +2026,13 @@ class PMSStore {
             }
           }
         });
-        this.teamMembers = Array.from(map.values()).filter(
-          (m) => m && m.id !== 'usr_02' && m.name !== 'Shankar L'
-        );
+        this.teamMembers = Array.from(map.values())
+          .filter((m) => m && m.id !== 'usr_02' && m.name !== 'Shankar L')
+          .map((tm) =>
+            tm.role === 'Owner' && (tm.email === 'owner@hotelastha.com' || tm.email === 'owner@hotelnivasa.com')
+              ? { ...tm, email: 'info@hotelnivasa.com' }
+              : tm
+          );
         this.syncCurrentUserWithTeamMembers();
         hasChanges = true;
       } else {
@@ -5197,7 +5242,7 @@ class PMSStore {
       this.currentUser = {
         id: 'usr_owner',
         name: 'HOTEL NIVASA',
-        email: 'owner@hotelastha.com',
+        email: 'info@hotelnivasa.com',
         role: 'Owner',
         initials: 'HN',
         status: 'ACTIVE'
@@ -5468,6 +5513,8 @@ class PMSStore {
     const isExplicitOwner =
       merged.role === 'Owner' ||
       merged.id === 'usr_owner' ||
+      cleanEmail === 'info@hotelnivasa.com' ||
+      cleanEmail === 'owner@hotelnivasa.com' ||
       cleanEmail === 'owner@hotelastha.com' ||
       cleanEmail === 'info@asthasoftindia.com';
 

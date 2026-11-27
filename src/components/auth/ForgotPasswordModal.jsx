@@ -225,7 +225,7 @@ export default function ForgotPasswordModal({ isOpen, onClose, initialEmail = ''
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="e.g. staff@hotelastha.com"
+                    placeholder="e.g. staff@hotelnivasa.com"
                     autoFocus
                     required
                     style={{
