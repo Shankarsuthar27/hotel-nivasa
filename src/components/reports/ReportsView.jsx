@@ -64,18 +64,30 @@ export default function ReportsView({
   };
 
   // Card 1: Manager Report Form State
-  const defaultManagerDate = '28/10/2026';
+  const defaultManagerDate = (() => {
+    const d = property?.businessDate ? new Date(property.businessDate) : new Date();
+    const safe = Number.isNaN(d.getTime()) ? new Date() : d;
+    return `${String(safe.getDate()).padStart(2, '0')}/${String(safe.getMonth() + 1).padStart(2, '0')}/${safe.getFullYear()}`;
+  })();
   const [managerDate, setManagerDate] = useState(defaultManagerDate);
 
   // Card 2: Guest Details Report Form State
-  const defaultGuestStartDate = '05/09/2026';
-  const defaultGuestEndDate = '06/11/2026';
+  const guestBaseDate = (() => {
+    const d = property?.businessDate ? new Date(property.businessDate) : new Date();
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  })();
+  const defaultGuestStartDate = `01/${String(guestBaseDate.getMonth() + 1).padStart(2, '0')}/${guestBaseDate.getFullYear()}`;
+  const defaultGuestEndDate = `${String(guestBaseDate.getDate()).padStart(2, '0')}/${String(guestBaseDate.getMonth() + 1).padStart(2, '0')}/${guestBaseDate.getFullYear()}`;
   const [guestStartDate, setGuestStartDate] = useState(defaultGuestStartDate);
   const [guestEndDate, setGuestEndDate] = useState(defaultGuestEndDate);
 
   // Card 3: Folio List Report Form State
-  const defaultFolioStartDate = '01/11/2026';
-  const defaultFolioEndDate = '06/11/2026';
+  const folioBaseDate = (() => {
+    const d = property?.businessDate ? new Date(property.businessDate) : new Date();
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  })();
+  const defaultFolioStartDate = `01/${String(folioBaseDate.getMonth() + 1).padStart(2, '0')}/${folioBaseDate.getFullYear()}`;
+  const defaultFolioEndDate = `${String(folioBaseDate.getDate()).padStart(2, '0')}/${String(folioBaseDate.getMonth() + 1).padStart(2, '0')}/${folioBaseDate.getFullYear()}`;
   const defaultFolioMode = 'Both';
   const defaultFolioInclude = 'Confirmed +5';
   const [folioStartDate, setFolioStartDate] = useState(defaultFolioStartDate);

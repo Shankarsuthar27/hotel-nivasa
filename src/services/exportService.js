@@ -130,23 +130,20 @@ export function exportManagerReportExcel(
       // Replace property name in second shared string
       sstXml = sstXml.replace(
         /<t>HOTEL ASTHA<\/t>/,
-        `<t>${propertyName}</t>`
+        `<t>${escapeXml(propertyName)}</t>`
       );
       // Replace date string in third shared string
       const dateSubtitle = `${asOnWords}   MTD: ${mtdWords}   YTD: ${ytdWords}`;
       sstXml = sstXml.replace(
         /<t>3 Nov 2026   MTD: 1 Nov 2026   YTD: 1 Apr 2026<\/t>/,
-        `<t>${dateSubtitle}</t>`
+        `<t>${escapeXml(dateSubtitle)}</t>`
       );
       sstEntry.content = encoder.encode(sstXml);
       sstEntry.size = sstEntry.content.length;
     }
 
-    // 2. Compute dynamic metrics or retain official baseline
-    // =========================================================================
-    // Dynamic PMS Revenue & Night Audit Calculation Engine
-    // =========================================================================
-    // Elapsed days calculation
+    // 2. Compute dynamic metrics from live PMS data
+    const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
     const elapsedDaysToday = 1;
     const elapsedDaysMtd = Math.max(1, day);
     const ytdStartDateObj = new Date(`${fyYear}-04-01T00:00:00`);
@@ -155,96 +152,200 @@ export function exportManagerReportExcel(
     const elapsedDaysYtd = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1);
 
     // Property Inventory & Room Capacity
-    const totalPhysicalRooms = rooms.length > 0 ? rooms.length : 2;
-    const maintenanceRoomsCount = rooms.filter(
-      (r) => r.status === 'maintenance' || r.status === 'out_of_order'
-    ).length;
-    const blockedRoomsBase = maintenanceRoomsCount > 0 ? maintenanceRoomsCount : 1;
+    const totalPhysicalRooms = rooms.length > 0 ? rooms.length : 1;
+    const maintenanceRoomsCount = rooms.filter((r) => {
+      const st = String(r.status || '').toLowerCase();
+      return st === 'maintenance' || st === 'out_of_order' || st === 'blocked';
+    }).length;
 
-    // Filter audits by date ranges
-    const auditsToday = nightAudits.filter((a) => a.rawDate === isoDate);
-    const auditsMtd = nightAudits.filter((a) => a.rawDate >= mtdStartIso && a.rawDate <= isoDate);
-    const auditsYtd = nightAudits.filter((a) => a.rawDate >= ytdStartIso && a.rawDate <= isoDate);
+    // Filter audits by date ranges (supporting rawDate, auditDate, or date)
+    const getAuditIso = (a) => toIsoDateString(a?.rawDate || a?.auditDate || a?.date || '');
+    const auditsToday = nightAudits.filter((a) => getAuditIso(a) === isoDate);
+    const auditsMtd = nightAudits.filter((a) => {
+      const d = getAuditIso(a);
+      return d && d >= mtdStartIso && d <= isoDate;
+    });
+    const auditsYtd = nightAudits.filter((a) => {
+      const d = getAuditIso(a);
+      return d && d >= ytdStartIso && d <= isoDate;
+    });
+    const auditedDatesSet = new Set(auditsYtd.map(getAuditIso).filter(Boolean));
 
     // Filter reservations by date ranges
-    const resToday = reservations.filter((r) => r.checkInDate === isoDate || r.createdAt?.startsWith(isoDate));
-    const resMtd = reservations.filter((r) => (r.checkInDate >= mtdStartIso && r.checkInDate <= isoDate) || (r.createdAt >= mtdStartIso && r.createdAt <= isoDate));
-    const resYtd = reservations.filter((r) => (r.checkInDate >= ytdStartIso && r.checkInDate <= isoDate) || (r.createdAt >= ytdStartIso && r.createdAt <= isoDate));
+    const getResDateIso = (r) => toIsoDateString(r.checkInDate || r.createdAt || '');
+    const resToday = reservations.filter((r) => getResDateIso(r) === isoDate);
+    const resMtd = reservations.filter((r) => {
+      const d = getResDateIso(r);
+      return d && d >= mtdStartIso && d <= isoDate;
+    });
+    const resYtd = reservations.filter((r) => {
+      const d = getResDateIso(r);
+      return d && d >= ytdStartIso && d <= isoDate;
+    });
+
+    // Aggregate Folio Transactions (Extra Charges, Unaudited Room Charges/Taxes, & Payments by Tender)
+    const extraKeys = ['extraBed', 'extraPax', 'earlyCheckIn', 'lateCheckOut', 'serviceCharge', 'laundry', 'penalty', 'refund', 'other'];
+    const createBucket = () => ({
+      roomDebit: 0,
+      roomTax: 0,
+      extra: Object.fromEntries(extraKeys.map((k) => [k, 0])),
+      card: 0,
+      cash: 0,
+      upi: 0,
+      bank: 0
+    });
+    const buckets = {
+      today: createBucket(),
+      mtd: createBucket(),
+      ytd: createBucket()
+    };
+
+    const classifyExtra = (tx) => {
+      const text = `${tx.type || ''} ${tx.particulars || ''} ${tx.desc || ''}`.toLowerCase();
+      if (text.includes('extra bed') || text.includes('extrabed')) return 'extraBed';
+      if (text.includes('extra pax') || text.includes('extra person') || text.includes('extrapax')) return 'extraPax';
+      if (text.includes('early check')) return 'earlyCheckIn';
+      if (text.includes('late check')) return 'lateCheckOut';
+      if (text.includes('service charge')) return 'serviceCharge';
+      if (text.includes('laundry')) return 'laundry';
+      if (text.includes('penalt')) return 'penalty';
+      if (text.includes('refund')) return 'refund';
+      return 'other';
+    };
+
+    const classifyTender = (tx) => {
+      const text = `${tx.paymentMethod || ''} ${tx.method || ''} ${tx.reference || ''} ${tx.desc || ''} ${tx.particulars || ''}`.toLowerCase();
+      if (text.includes('upi') || text.includes('gpay') || text.includes('phonepe') || text.includes('paytm')) return 'upi';
+      if (text.includes('card') || text.includes('visa') || text.includes('master') || text.includes('pos')) return 'card';
+      if (text.includes('bank') || text.includes('neft') || text.includes('rtgs') || text.includes('imps') || text.includes('transfer')) return 'bank';
+      return 'cash';
+    };
+
+    Object.values(folios || {}).forEach((folio) => {
+      (folio?.transactions || []).forEach((tx) => {
+        if (!tx || tx.isVoided) return;
+        const txIso = toIsoDateString(tx.date || tx.createdAt || '');
+        if (!txIso || txIso < ytdStartIso || txIso > isoDate) return;
+
+        const targetBuckets = [buckets.ytd];
+        if (txIso >= mtdStartIso) targetBuckets.push(buckets.mtd);
+        if (txIso === isoDate) targetBuckets.push(buckets.today);
+
+        const isCredit =
+          tx.type === 'PAYMENT' ||
+          tx.direction === 'CREDIT' ||
+          tx.direction === 'Credit' ||
+          Number(tx.amount) < 0;
+
+        if (isCredit) {
+          const amt = Math.abs(Number(tx.amount) || 0);
+          const tender = classifyTender(tx);
+          targetBuckets.forEach((b) => {
+            b[tender] = r2(b[tender] + amt);
+          });
+          return;
+        }
+
+        const amt = Math.max(0, Number(tx.amount) || 0);
+        const tax = Math.max(0, Number(tx.tax) || 0);
+        const txType = String(tx.type || '').toUpperCase();
+        const isRoomCharge =
+          txType === 'ROOM_RENT' ||
+          txType === 'ROOM_CHARGE' ||
+          txType === 'ACCOMMODATION' ||
+          String(tx.desc || '').toLowerCase().includes('room tariff');
+
+        if (isRoomCharge) {
+          if (!auditedDatesSet.has(txIso)) {
+            targetBuckets.forEach((b) => {
+              b.roomDebit = r2(b.roomDebit + amt);
+              b.roomTax = r2(b.roomTax + tax);
+            });
+          }
+        } else {
+          const extraKey = classifyExtra(tx);
+          targetBuckets.forEach((b) => {
+            b.extra[extraKey] = r2(b.extra[extraKey] + amt);
+            b.roomTax = r2(b.roomTax + tax);
+          });
+        }
+      });
+    });
 
     // Occupied / Sold Rooms
-    const inHouseToday = reservations.filter((r) => r.status === 'in_house' && (r.checkInDate <= isoDate && r.checkOutDate >= isoDate)).length;
-    const soldRoomsToday = auditsToday.length > 0 ? auditsToday.reduce((acc, a) => acc + (a.occupiedRooms || 0), 0) : inHouseToday;
-    const soldRoomsMtd = auditsMtd.reduce((acc, a) => acc + (a.occupiedRooms || 0), 0);
-    const soldRoomsYtd = Math.max(3, auditsYtd.reduce((acc, a) => acc + (a.occupiedRooms || 0), 0));
+    const inHouseToday = reservations.filter((r) => {
+      const st = String(r.status || '').toLowerCase();
+      return (st === 'in_house' || st === 'checked_in') && r.checkInDate <= isoDate && r.checkOutDate >= isoDate;
+    }).length;
+    const soldRoomsToday = auditsToday.length > 0
+      ? auditsToday.reduce((acc, a) => acc + (a.occupiedRooms || 0), 0)
+      : inHouseToday;
+    const soldRoomsMtd = auditsMtd.reduce((acc, a) => acc + (a.occupiedRooms || 0), 0) + (auditedDatesSet.has(isoDate) ? 0 : inHouseToday);
+    const soldRoomsYtd = auditsYtd.reduce((acc, a) => acc + (a.occupiedRooms || 0), 0) + (auditedDatesSet.has(isoDate) ? 0 : inHouseToday);
 
     // 1. Block 2: Room Revenue
-    const roomChargesToday = auditsToday.reduce((acc, a) => acc + (a.totalRevenue || 0), 0);
-    const roomChargesMtd = auditsMtd.reduce((acc, a) => acc + (a.totalRevenue || 0), 0);
-    const roomChargesYtd = Math.max(12500, auditsYtd.reduce((acc, a) => acc + (a.totalRevenue || 0), 0));
+    const roomChargesToday = r2(auditsToday.reduce((acc, a) => acc + (a.totalRevenue || 0), 0) + buckets.today.roomDebit);
+    const roomChargesMtd = r2(auditsMtd.reduce((acc, a) => acc + (a.totalRevenue || 0), 0) + buckets.mtd.roomDebit);
+    const roomChargesYtd = r2(auditsYtd.reduce((acc, a) => acc + (a.totalRevenue || 0), 0) + buckets.ytd.roomDebit);
 
     // Cancellations & No-Shows
-    const cancelRevToday = resToday.filter((r) => r.status === 'cancelled').reduce((acc, r) => acc + (r.paidAmount || 0), 0);
-    const cancelRevMtd = resMtd.filter((r) => r.status === 'cancelled').reduce((acc, r) => acc + (r.paidAmount || 0), 0);
-    const cancelRevYtd = Math.max(7500, resYtd.filter((r) => r.status === 'cancelled').reduce((acc, r) => acc + (r.paidAmount || 0), 0));
+    const isCancelStatus = (r) => ['cancelled', 'canceled'].includes(String(r.status || '').toLowerCase());
+    const isNoShowStatus = (r) => ['no_show', 'noshow', 'no-show'].includes(String(r.status || '').toLowerCase());
+    const cancelRevToday = r2(resToday.filter(isCancelStatus).reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0));
+    const cancelRevMtd = r2(resMtd.filter(isCancelStatus).reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0));
+    const cancelRevYtd = r2(resYtd.filter(isCancelStatus).reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0));
 
-    const noShowRevToday = resToday.filter((r) => r.status === 'no_show').reduce((acc, r) => acc + (r.paidAmount || 0), 0);
-    const noShowRevMtd = resMtd.filter((r) => r.status === 'no_show').reduce((acc, r) => acc + (r.paidAmount || 0), 0);
-    const noShowRevYtd = resYtd.filter((r) => r.status === 'no_show').reduce((acc, r) => acc + (r.paidAmount || 0), 0);
+    const noShowRevToday = r2(resToday.filter(isNoShowStatus).reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0));
+    const noShowRevMtd = r2(resMtd.filter(isNoShowStatus).reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0));
+    const noShowRevYtd = r2(resYtd.filter(isNoShowStatus).reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0));
 
-    const totalRoomChargesToday = roomChargesToday + cancelRevToday + noShowRevToday;
-    const totalRoomChargesMtd = roomChargesMtd + cancelRevMtd + noShowRevMtd;
-    const totalRoomChargesYtd = roomChargesYtd + cancelRevYtd + noShowRevYtd;
+    const totalRoomChargesToday = r2(roomChargesToday + cancelRevToday + noShowRevToday);
+    const totalRoomChargesMtd = r2(roomChargesMtd + cancelRevMtd + noShowRevMtd);
+    const totalRoomChargesYtd = r2(roomChargesYtd + cancelRevYtd + noShowRevYtd);
 
     // 2. Block 3: Extra & Ancillary Charges
-    const totalExtraToday = 0;
-    const totalExtraMtd = 0;
-    const totalExtraYtd = 0;
+    const sumExtras = (extraMap) => r2(Object.values(extraMap).reduce((s, v) => s + v, 0));
+    const totalExtraToday = sumExtras(buckets.today.extra);
+    const totalExtraMtd = sumExtras(buckets.mtd.extra);
+    const totalExtraYtd = sumExtras(buckets.ytd.extra);
 
     // 3. Block 4: Taxes (GST Breakdown: SGST 50% + CGST 50%)
-    const taxToday = auditsToday.reduce((acc, a) => acc + (a.totalTax || 0), 0);
-    const taxMtd = auditsMtd.reduce((acc, a) => acc + (a.totalTax || 0), 0);
-    const taxYtd = Math.max(625, auditsYtd.reduce((acc, a) => acc + (a.totalTax || 0), 0));
-    const sgstToday = taxToday / 2;
-    const cgstToday = taxToday / 2;
-    const sgstMtd = taxMtd / 2;
-    const cgstMtd = taxMtd / 2;
-    const sgstYtd = taxYtd / 2;
-    const cgstYtd = taxYtd / 2;
+    const taxToday = r2(auditsToday.reduce((acc, a) => acc + (a.totalTax || 0), 0) + buckets.today.roomTax);
+    const taxMtd = r2(auditsMtd.reduce((acc, a) => acc + (a.totalTax || 0), 0) + buckets.mtd.roomTax);
+    const taxYtd = r2(auditsYtd.reduce((acc, a) => acc + (a.totalTax || 0), 0) + buckets.ytd.roomTax);
+    const sgstToday = r2(taxToday / 2);
+    const cgstToday = r2(taxToday - sgstToday);
+    const sgstMtd = r2(taxMtd / 2);
+    const cgstMtd = r2(taxMtd - sgstMtd);
+    const sgstYtd = r2(taxYtd / 2);
+    const cgstYtd = r2(taxYtd - sgstYtd);
 
     // 4. Block 5: Revenue Totals
-    const totalRevNoTaxToday = totalRoomChargesToday + totalExtraToday;
-    const totalRevNoTaxMtd = totalRoomChargesMtd + totalExtraMtd;
-    const totalRevNoTaxYtd = totalRoomChargesYtd + totalExtraYtd;
+    const totalRevNoTaxToday = r2(totalRoomChargesToday + totalExtraToday);
+    const totalRevNoTaxMtd = r2(totalRoomChargesMtd + totalExtraMtd);
+    const totalRevNoTaxYtd = r2(totalRoomChargesYtd + totalExtraYtd);
 
-    const totalRevWithTaxToday = totalRevNoTaxToday + taxToday;
-    const totalRevWithTaxMtd = totalRevNoTaxMtd + taxMtd;
-    const totalRevWithTaxYtd = totalRevNoTaxYtd + taxYtd;
+    const totalRevWithTaxToday = r2(totalRevNoTaxToday + taxToday);
+    const totalRevWithTaxMtd = r2(totalRevNoTaxMtd + taxMtd);
+    const totalRevWithTaxYtd = r2(totalRevNoTaxYtd + taxYtd);
 
     // 5. Block 6: Payments & Settlements (Tender Breakdown)
-    const cardYtd = 10900;
-    const cashYtd = 5200;
-    const upiYtd = 0;
-    const bankYtd = 0;
-    const totalPaymentsYtd = cardYtd + cashYtd + upiYtd + bankYtd;
+    const totalPaymentsToday = r2(buckets.today.card + buckets.today.cash + buckets.today.upi + buckets.today.bank);
+    const totalPaymentsMtd = r2(buckets.mtd.card + buckets.mtd.cash + buckets.mtd.upi + buckets.mtd.bank);
+    const totalPaymentsYtd = r2(buckets.ytd.card + buckets.ytd.cash + buckets.ytd.upi + buckets.ytd.bank);
 
     // 6. Block 7: Room Summary & KPI Drivers
     const totalRoomToday = totalPhysicalRooms * elapsedDaysToday;
-    const totalRoomMtd = totalPhysicalRooms * (elapsedDaysMtd <= 2 ? 2 : elapsedDaysMtd);
-    const totalRoomYtd = Math.max(24, totalPhysicalRooms * 12);
+    const totalRoomMtd = totalPhysicalRooms * elapsedDaysMtd;
+    const totalRoomYtd = totalPhysicalRooms * elapsedDaysYtd;
 
-    const blockRoomToday = blockedRoomsBase;
-    const blockRoomMtd = blockedRoomsBase;
-    const blockRoomYtd = blockedRoomsBase;
+    const blockRoomToday = maintenanceRoomsCount * elapsedDaysToday;
+    const blockRoomMtd = maintenanceRoomsCount * elapsedDaysMtd;
+    const blockRoomYtd = maintenanceRoomsCount * elapsedDaysYtd;
 
     const availRoomToday = Math.max(0, totalRoomToday - blockRoomToday);
     const availRoomMtd = Math.max(0, totalRoomMtd - blockRoomMtd);
-    const availRoomYtd = Math.max(0, totalRoomYtd - (blockRoomYtd * 4));
-
-    // KPI Calculations for validation / audit check:
-    // Occupancy Rate (%) = (Sold Rooms / Total Available Room nights) * 100
-    // ADR = Gross Room Charges / Sold Rooms
-    // RevPAR = Gross Room Charges / Total Available Room nights
-    // Uncollected Folio Balance = (Total Revenue with Tax) - (Total Payments)
+    const availRoomYtd = Math.max(0, totalRoomYtd - blockRoomYtd);
 
     // Complete values & native formula mapping across all 4 columns
     const rowDefinitions = {
@@ -259,15 +360,15 @@ export function exportManagerReportExcel(
       },
 
       // Block 3: Extra & Ancillary Charges
-      12: { B: { val: 0 }, C: { val: 0 }, D: { val: 0 } }, // Extra Bed
-      13: { B: { val: 0 }, C: { val: 0 }, D: { val: 0 } }, // Extra Pax
-      14: { B: { val: 0 }, C: { val: 0 }, D: { val: 0 } }, // Early Check-in
-      15: { B: { val: 0 }, C: { val: 0 }, D: { val: 0 } }, // Late Checkout
-      16: { B: { val: 0 }, C: { val: 0 }, D: { val: 0 } }, // Service Charges
-      17: { B: { val: 0 }, C: { val: 0 }, D: { val: 0 } }, // Laundry
-      18: { B: { val: 0 }, C: { val: 0 }, D: { val: 0 } }, // Penalty
-      19: { B: { val: 0 }, C: { val: 0 }, D: { val: 0 } }, // Refund
-      20: { B: { val: 0 }, C: { val: 0 }, D: { val: 0 } }, // Other
+      12: { B: { val: buckets.today.extra.extraBed }, C: { val: buckets.mtd.extra.extraBed }, D: { val: buckets.ytd.extra.extraBed } },
+      13: { B: { val: buckets.today.extra.extraPax }, C: { val: buckets.mtd.extra.extraPax }, D: { val: buckets.ytd.extra.extraPax } },
+      14: { B: { val: buckets.today.extra.earlyCheckIn }, C: { val: buckets.mtd.extra.earlyCheckIn }, D: { val: buckets.ytd.extra.earlyCheckIn } },
+      15: { B: { val: buckets.today.extra.lateCheckOut }, C: { val: buckets.mtd.extra.lateCheckOut }, D: { val: buckets.ytd.extra.lateCheckOut } },
+      16: { B: { val: buckets.today.extra.serviceCharge }, C: { val: buckets.mtd.extra.serviceCharge }, D: { val: buckets.ytd.extra.serviceCharge } },
+      17: { B: { val: buckets.today.extra.laundry }, C: { val: buckets.mtd.extra.laundry }, D: { val: buckets.ytd.extra.laundry } },
+      18: { B: { val: buckets.today.extra.penalty }, C: { val: buckets.mtd.extra.penalty }, D: { val: buckets.ytd.extra.penalty } },
+      19: { B: { val: buckets.today.extra.refund }, C: { val: buckets.mtd.extra.refund }, D: { val: buckets.ytd.extra.refund } },
+      20: { B: { val: buckets.today.extra.other }, C: { val: buckets.mtd.extra.other }, D: { val: buckets.ytd.extra.other } },
       21: {
         B: { val: totalExtraToday, f: 'SUM(B12:B20)' },
         C: { val: totalExtraMtd, f: 'SUM(C12:C20)' },
@@ -296,13 +397,13 @@ export function exportManagerReportExcel(
       },
 
       // Block 6: Payments & Settlements
-      29: { B: { val: 0 }, C: { val: 0 }, D: { val: cardYtd } }, // Card
-      30: { B: { val: 0 }, C: { val: 0 }, D: { val: cashYtd } }, // Cash
-      31: { B: { val: 0 }, C: { val: 0 }, D: { val: upiYtd } },  // UPI
-      32: { B: { val: 0 }, C: { val: 0 }, D: { val: bankYtd } }, // Bank
+      29: { B: { val: buckets.today.card }, C: { val: buckets.mtd.card }, D: { val: buckets.ytd.card } },
+      30: { B: { val: buckets.today.cash }, C: { val: buckets.mtd.cash }, D: { val: buckets.ytd.cash } },
+      31: { B: { val: buckets.today.upi }, C: { val: buckets.mtd.upi }, D: { val: buckets.ytd.upi } },
+      32: { B: { val: buckets.today.bank }, C: { val: buckets.mtd.bank }, D: { val: buckets.ytd.bank } },
       33: {
-        B: { val: 0, f: 'SUM(B29:B32)' },
-        C: { val: 0, f: 'SUM(C29:C32)' },
+        B: { val: totalPaymentsToday, f: 'SUM(B29:B32)' },
+        C: { val: totalPaymentsMtd, f: 'SUM(C29:C32)' },
         D: { val: totalPaymentsYtd, f: 'SUM(D29:D32)' }
       },
 
@@ -518,24 +619,36 @@ export function exportGuestDetailsExcel(
       return false;
     }
 
-    const startInfo = parseReportDateInfo(startDateStr, new Date(2026, 8, 5));
-    const endInfo = parseReportDateInfo(endDateStr, new Date(2026, 10, 6));
+    const startInfo = parseReportDateInfo(startDateStr, new Date());
+    const endInfo = parseReportDateInfo(endDateStr, new Date());
+    const [rangeStartInfo, rangeEndInfo] = startInfo.iso > endInfo.iso ? [endInfo, startInfo] : [startInfo, endInfo];
     const propertyName = property?.name || 'HOTEL NIVASA';
-    const dateRangeStr = `${startInfo.display} to ${endInfo.display}`;
-    const fileName = `guest-details_${startInfo.iso}_to_${endInfo.iso}.xlsx`;
+    const dateRangeStr = `${rangeStartInfo.display} to ${rangeEndInfo.display}`;
+    const fileName = `guest-details_${rangeStartInfo.iso}_to_${rangeEndInfo.iso}.xlsx`;
 
     // 1. Filter reservations overlapping the date range
-    const startIso = startInfo.iso;
-    const endIso = endInfo.iso;
+    const startIso = rangeStartInfo.iso;
+    const endIso = rangeEndInfo.iso;
 
-    const filteredReservations = (reservations || []).filter((r) => {
+    const targetReservations = (reservations || []).filter((r) => {
       const checkInIso = toIsoDateString(r.checkInDate);
       const checkOutIso = toIsoDateString(r.checkOutDate);
-      if (!checkInIso || !checkOutIso) return true;
+      if (!checkInIso && !checkOutIso) return true;
+      if (checkInIso && !checkOutIso) return checkInIso >= startIso && checkInIso <= endIso;
+      if (!checkInIso && checkOutIso) return checkOutIso >= startIso && checkOutIso <= endIso;
       return checkInIso <= endIso && checkOutIso >= startIso;
+    }).sort((a, b) => {
+      const da = toIsoDateString(a.checkInDate || '');
+      const db = toIsoDateString(b.checkInDate || '');
+      if (da !== db) return da.localeCompare(db);
+      return String(a.bookingReference || a.id || '').localeCompare(String(b.bookingReference || b.id || ''));
     });
 
-    const targetReservations = filteredReservations.length > 0 ? filteredReservations : (reservations || []);
+    const formatCap = (val, fallback = '') => {
+      const s = String(val || fallback).trim();
+      if (!s) return '';
+      return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+    };
 
     // 2. Flatten guests (primary and additional guests)
     const guestRows = [];
@@ -549,14 +662,18 @@ export function exportGuestDetailsExcel(
 
       // Primary Guest
       const pg = r.primaryGuest || {};
-      const primaryName = pg.name || [pg.title, pg.firstName, pg.lastName].filter(Boolean).join(' ') || 'mr shankar suthar';
+      const primaryName =
+        pg.name ||
+        [pg.title, pg.firstName, pg.lastName].filter(Boolean).join(' ') ||
+        r.guestName ||
+        'Guest';
       guestRows.push({
         resCode,
         name: primaryName,
-        email: pg.email || 'ss2137789@gmail.com',
-        phone: formatPhone(pg.phone || '+91 9664471637'),
-        gender: pg.gender ? pg.gender.toLowerCase() : '',
-        type: pg.type ? pg.type.toLowerCase() : 'adult',
+        email: pg.email || r.guestEmail || '',
+        phone: formatPhone(pg.phone || r.guestPhone || ''),
+        gender: formatCap(pg.gender),
+        type: formatCap(pg.type || 'Adult'),
         nationality: pg.nationality || pg.country || '',
         dob: formatDisplayDob(pg.dob || pg.dateOfBirth),
         isVip: (r.isVIP || pg.isVIP) ? 'Yes' : 'No',
@@ -566,27 +683,29 @@ export function exportGuestDetailsExcel(
         status
       });
 
-      // Additional Guests
-      if (Array.isArray(r.additionalGuests)) {
-        r.additionalGuests.forEach((ag) => {
-          const agName = ag.name || [ag.title, ag.firstName, ag.lastName].filter(Boolean).join(' ') || 'Guest';
-          guestRows.push({
-            resCode,
-            name: agName,
-            email: ag.email || '',
-            phone: formatPhone(ag.phone || ''),
-            gender: ag.gender ? ag.gender.toLowerCase() : '',
-            type: ag.type ? ag.type.toLowerCase() : (ag.isChild ? 'child' : 'adult'),
-            nationality: ag.nationality || ag.country || '',
-            dob: formatDisplayDob(ag.dob || ag.dateOfBirth),
-            isVip: ag.isVIP ? 'Yes' : 'No',
-            isPrimary: 'No',
-            checkInDate,
-            checkOutDate,
-            status
-          });
+      // Additional Guests (from additionalGuests or guests[] excluding primary)
+      const extraGuests = Array.isArray(r.additionalGuests) && r.additionalGuests.length > 0
+        ? r.additionalGuests
+        : (Array.isArray(r.guests) ? r.guests.filter((g) => g && !g.isPrimary && g.name !== primaryName) : []);
+
+      extraGuests.forEach((ag) => {
+        const agName = ag.name || [ag.title, ag.firstName, ag.lastName].filter(Boolean).join(' ') || 'Guest';
+        guestRows.push({
+          resCode,
+          name: agName,
+          email: ag.email || '',
+          phone: formatPhone(ag.phone || ''),
+          gender: formatCap(ag.gender),
+          type: formatCap(ag.type || (ag.isChild ? 'Child' : 'Adult')),
+          nationality: ag.nationality || ag.country || '',
+          dob: formatDisplayDob(ag.dob || ag.dateOfBirth),
+          isVip: ag.isVIP ? 'Yes' : 'No',
+          isPrimary: 'No',
+          checkInDate,
+          checkOutDate,
+          status
         });
-      }
+      });
     });
 
     // 3. Read template
@@ -614,24 +733,31 @@ export function exportGuestDetailsExcel(
 
     // 6. Build Data Rows XML
     let dataRowsXml = '';
-    guestRows.forEach((g, idx) => {
-      const rowNum = 6 + idx;
-      dataRowsXml += `<row r="${rowNum}" spans="1:13" x14ac:dyDescent="0.25">` +
-        `<c r="A${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.resCode)}</t></is></c>` +
-        `<c r="B${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.name)}</t></is></c>` +
-        `<c r="C${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.email)}</t></is></c>` +
-        `<c r="D${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.phone)}</t></is></c>` +
-        `<c r="E${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.gender)}</t></is></c>` +
-        `<c r="F${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.type)}</t></is></c>` +
-        `<c r="G${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.nationality)}</t></is></c>` +
-        `<c r="H${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.dob)}</t></is></c>` +
-        `<c r="I${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.isVip)}</t></is></c>` +
-        `<c r="J${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.isPrimary)}</t></is></c>` +
-        `<c r="K${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.checkInDate)}</t></is></c>` +
-        `<c r="L${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.checkOutDate)}</t></is></c>` +
-        `<c r="M${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.status)}</t></is></c>` +
+    if (guestRows.length === 0) {
+      dataRowsXml = `<row r="6" spans="1:13" x14ac:dyDescent="0.25">` +
+        `<c r="A6" s="5" t="inlineStr"><is><t>No guests found for the selected date range.</t></is></c>` +
+        `<c r="B6" s="5"/><c r="C6" s="5"/><c r="D6" s="5"/><c r="E6" s="5"/><c r="F6" s="5"/><c r="G6" s="5"/><c r="H6" s="5"/><c r="I6" s="5"/><c r="J6" s="5"/><c r="K6" s="5"/><c r="L6" s="5"/><c r="M6" s="5"/>` +
         `</row>`;
-    });
+    } else {
+      guestRows.forEach((g, idx) => {
+        const rowNum = 6 + idx;
+        dataRowsXml += `<row r="${rowNum}" spans="1:13" x14ac:dyDescent="0.25">` +
+          `<c r="A${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.resCode)}</t></is></c>` +
+          `<c r="B${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.name)}</t></is></c>` +
+          `<c r="C${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.email)}</t></is></c>` +
+          `<c r="D${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.phone)}</t></is></c>` +
+          `<c r="E${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.gender)}</t></is></c>` +
+          `<c r="F${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.type)}</t></is></c>` +
+          `<c r="G${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.nationality)}</t></is></c>` +
+          `<c r="H${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.dob)}</t></is></c>` +
+          `<c r="I${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.isVip)}</t></is></c>` +
+          `<c r="J${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.isPrimary)}</t></is></c>` +
+          `<c r="K${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.checkInDate)}</t></is></c>` +
+          `<c r="L${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.checkOutDate)}</t></is></c>` +
+          `<c r="M${rowNum}" s="5" t="inlineStr"><is><t>${escapeXml(g.status)}</t></is></c>` +
+          `</row>`;
+      });
+    }
 
     // Replace everything after row 5 with new data rows
     const row5End = sheetXml.indexOf('</row>', sheetXml.indexOf('<row r="5"')) + 6;
@@ -639,7 +765,7 @@ export function exportGuestDetailsExcel(
     sheetXml = sheetXml.substring(0, row5End) + dataRowsXml + sheetXml.substring(sheetDataEnd);
 
     // Update dimension ref
-    const lastRow = Math.max(5, 5 + guestRows.length);
+    const lastRow = Math.max(6, 5 + guestRows.length);
     sheetXml = sheetXml.replace(/dimension ref="A1:M[0-9]+"/, `dimension ref="A1:M${lastRow}"`);
 
     sheetEntry.content = encoder.encode(sheetXml);
@@ -760,19 +886,20 @@ export function exportFolioListExcel(
       actualIncludeFilter = includeFilter;
     }
 
-    const startInfo = parseReportDateInfo(startDateStr, new Date(2026, 10, 1));
-    const endInfo = parseReportDateInfo(endDateStr, new Date(2026, 10, 6));
+    const startInfo = parseReportDateInfo(startDateStr, new Date());
+    const endInfo = parseReportDateInfo(endDateStr, new Date());
+    const [rangeStartInfo, rangeEndInfo] = startInfo.iso > endInfo.iso ? [endInfo, startInfo] : [startInfo, endInfo];
     const propertyName = actualProperty?.name || 'HOTEL NIVASA';
 
     // Date range display in format DD/MM/YYYY - DD/MM/YYYY
-    const startFormatted = `${String(startInfo.day).padStart(2, '0')}/${String(startInfo.month).padStart(2, '0')}/${startInfo.year}`;
-    const endFormatted = `${String(endInfo.day).padStart(2, '0')}/${String(endInfo.month).padStart(2, '0')}/${endInfo.year}`;
+    const startFormatted = `${String(rangeStartInfo.day).padStart(2, '0')}/${String(rangeStartInfo.month).padStart(2, '0')}/${rangeStartInfo.year}`;
+    const endFormatted = `${String(rangeEndInfo.day).padStart(2, '0')}/${String(rangeEndInfo.month).padStart(2, '0')}/${rangeEndInfo.year}`;
     const dateRangeStr = `${startFormatted} - ${endFormatted}`;
-    const fileName = `folio_list_${startInfo.iso}_to_${endInfo.iso}.xlsx`;
+    const fileName = `folio_list_${rangeStartInfo.iso}_to_${rangeEndInfo.iso}.xlsx`;
 
     // 1. Filter reservations overlapping the date range
-    const startIso = startInfo.iso;
-    const endIso = endInfo.iso;
+    const startIso = rangeStartInfo.iso;
+    const endIso = rangeEndInfo.iso;
 
     let targetReservations = (actualReservations || []).filter((r) => {
       const checkInIso = toIsoDateString(r.checkInDate || r.createdAt);
@@ -780,41 +907,6 @@ export function exportFolioListExcel(
       if (!checkInIso || !checkOutIso) return true;
       return checkInIso <= endIso && checkOutIso >= startIso;
     });
-
-    if (targetReservations.length === 0 && (!actualReservations || actualReservations.length === 0)) {
-      targetReservations = [
-        {
-          id: 'res_6',
-          bookingReference: 'RES_6',
-          folioId: 'fol_6',
-          primaryGuest: { name: 'Mr Kkk Suthar' },
-          checkInDate: '2026-11-02',
-          checkOutDate: '2026-11-03',
-          adults: 1,
-          children: 0,
-          status: 'in_house',
-          totalRoomCharges: 3500,
-          taxAmount: 175,
-          paidAmount: 0,
-          balanceDue: 3675
-        },
-        {
-          id: 'res_7',
-          bookingReference: 'RES_7',
-          folioId: 'fol_7',
-          primaryGuest: { name: 'Mr Hitesh Suthar' },
-          checkInDate: '2026-11-02',
-          checkOutDate: '2026-11-03',
-          adults: 1,
-          children: 2,
-          status: 'no_show',
-          totalRoomCharges: 0,
-          taxAmount: 0,
-          paidAmount: 0,
-          balanceDue: 0
-        }
-      ];
-    }
 
     // 2. Filter by reservation status (Include filter)
     targetReservations = targetReservations.filter((r) => matchesFolioInclude(r, actualIncludeFilter));
@@ -865,17 +957,44 @@ export function exportFolioListExcel(
       else if (rawStatus === 'hold') status = 'Hold';
       else status = formatGuestStatus(r.status);
 
-      const paymentMethod = f.payments?.[0]?.method || r.paymentMethod || '';
+      const txList = Array.isArray(f.transactions) ? f.transactions.filter((tx) => tx && !tx.isVoided) : [];
+      const creditTxs = txList.filter(
+        (tx) => tx.type === 'PAYMENT' || tx.direction === 'CREDIT' || tx.direction === 'Credit' || Number(tx.amount) < 0
+      );
+      const debitTxs = txList.filter(
+        (tx) => tx.type !== 'PAYMENT' && tx.direction !== 'CREDIT' && tx.direction !== 'Credit' && Number(tx.amount) >= 0
+      );
 
-      const charges = Number(r.totalRoomCharges !== undefined ? r.totalRoomCharges : (r.totalAmount || 0) - (r.taxAmount || 0));
-      const tax = Number(r.taxAmount || 0);
-      const credit = Number(r.paidAmount || 0);
-      const balance = Number(r.balanceDue !== undefined ? r.balanceDue : Math.max(0, (charges + tax) - credit));
+      const txMethods = Array.from(
+        new Set(
+          creditTxs
+            .map((tx) => tx.paymentMethod || tx.method || (tx.reference && tx.reference !== '-' ? tx.reference : ''))
+            .map((m) => String(m || '').trim())
+            .filter(Boolean)
+        )
+      );
+      const paymentMethod = txMethods.join(', ') || f.payments?.[0]?.method || r.paymentMethod || '';
 
-      sumCharges += charges;
-      sumTax += tax;
-      sumCredit += credit;
-      sumBalance += balance;
+      const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+      const charges = txList.length > 0
+        ? r2(debitTxs.reduce((s, tx) => s + (Number(tx.amount) || 0), 0))
+        : r2(r.totalRoomCharges !== undefined ? r.totalRoomCharges : (r.totalAmount || 0) - (r.taxAmount || 0));
+      const tax = txList.length > 0
+        ? r2(debitTxs.reduce((s, tx) => s + (Number(tx.tax) || 0), 0))
+        : r2(r.taxAmount || 0);
+      const credit = txList.length > 0
+        ? r2(creditTxs.reduce((s, tx) => s + Math.abs(Number(tx.amount) || 0), 0))
+        : r2(r.paidAmount || 0);
+      const balance = r2(
+        txList.length > 0
+          ? Math.max(0, (charges + tax) - credit)
+          : (r.balanceDue !== undefined ? r.balanceDue : Math.max(0, (charges + tax) - credit))
+      );
+
+      sumCharges = r2(sumCharges + charges);
+      sumTax = r2(sumTax + tax);
+      sumCredit = r2(sumCredit + credit);
+      sumBalance = r2(sumBalance + balance);
 
       folioRecords.push({
         folioNo,
@@ -1835,6 +1954,8 @@ function matchesResMarketSegment(r, segment) {
 }
 
 function filterReservationsByReportCategory(categoryKey, reservations, startIso, endIso, marketSegment) {
+  const [rangeStart, rangeEnd] = startIso && endIso && startIso > endIso ? [endIso, startIso] : [startIso, endIso];
+
   return (reservations || []).filter((r) => {
     if (!matchesResMarketSegment(r, marketSegment)) return false;
 
@@ -1845,21 +1966,21 @@ function filterReservationsByReportCategory(categoryKey, reservations, startIso,
 
     // Arrivals specifically matches check-in date falling in range
     if (categoryKey === 'arrivals') {
-      const isArrivalDateInRange = Boolean(checkInIso && checkInIso >= startIso && checkInIso <= endIso);
-      const isArrivingStatus = ['confirmed', 'arriving', 'in_house', 'checked_in'].includes(status) || Boolean(r.isArriving);
+      const isArrivalDateInRange = Boolean(checkInIso && checkInIso >= rangeStart && checkInIso <= rangeEnd);
+      const isArrivingStatus = ['confirmed', 'reserved', 'booked', 'arriving', 'in_house', 'checked_in'].includes(status) || Boolean(r.isArriving);
       return isArrivalDateInRange && isArrivingStatus;
     }
 
-    // For all other categories, match stay overlap with [startIso, endIso] (fallback to createdIso if stay dates missing)
+    // For all other categories, match stay overlap with [rangeStart, rangeEnd] (fallback to createdIso if stay dates missing)
     const inRange =
-      (checkInIso && checkOutIso && checkInIso <= endIso && checkOutIso >= startIso) ||
-      (checkInIso && !checkOutIso && checkInIso >= startIso && checkInIso <= endIso) ||
-      (!checkInIso && createdIso && createdIso >= startIso && createdIso <= endIso) ||
+      (checkInIso && checkOutIso && checkInIso <= rangeEnd && checkOutIso >= rangeStart) ||
+      (checkInIso && !checkOutIso && checkInIso >= rangeStart && checkInIso <= rangeEnd) ||
+      (!checkInIso && createdIso && createdIso >= rangeStart && createdIso <= rangeEnd) ||
       (!checkInIso && !createdIso);
     if (!inRange) return false;
 
     if (categoryKey === 'confirmed') {
-      return status === 'confirmed';
+      return status === 'confirmed' || status === 'reserved' || status === 'booked';
     }
     if (categoryKey === 'in_house') {
       return status === 'in_house' || status === 'checked_in';
@@ -1871,12 +1992,17 @@ function filterReservationsByReportCategory(categoryKey, reservations, startIso,
       return status === 'cancelled' || status === 'canceled';
     }
     if (categoryKey === 'hold') {
-      return status === 'hold' || status === 'on_hold';
+      return status === 'hold' || status === 'on_hold' || status === 'pending';
     }
     if (categoryKey === 'no_show') {
       return status === 'no_show' || status === 'noshow';
     }
     return false;
+  }).sort((a, b) => {
+    const da = toIsoDateString(a.checkInDate || a.createdAt || '');
+    const db = toIsoDateString(b.checkInDate || b.createdAt || '');
+    if (da !== db) return da.localeCompare(db);
+    return String(a.bookingReference || a.id || '').localeCompare(String(b.bookingReference || b.id || ''));
   });
 }
 
