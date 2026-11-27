@@ -2110,7 +2110,12 @@ export default function EditReservationView({
 
                 <div className="edit-res-sidebar-item active">
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.78rem' }}>FOL_1</span>
+                    <span style={{ fontWeight: 700, fontSize: '0.78rem' }}>
+                      {currentFolio?.folioNumber ||
+                        (currentRes?.folioId
+                          ? String(currentRes.folioId).toUpperCase()
+                          : `FOL_${currentRes?.id ? currentRes.id.replace('res_', '') : '1'}`)}
+                    </span>
                     <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
                       {guestForm.firstName} {guestForm.lastName}
                     </span>
@@ -4178,9 +4183,16 @@ export default function EditReservationView({
           isOpen={!!movingTx}
           onClose={() => setMovingTx(null)}
           transaction={movingTx}
-          currentFolioId={currentRes.folioId || 'FOL_16'}
+          currentFolioId={currentRes.folioId || currentFolio?.folioNumber || 'FOL_1'}
           availableFolios={currentRes ? [
-            { id: currentRes.folioId || 'fol_1', folioNumber: currentFolio?.folioNumber || 'FOL_16' },
+            {
+              id: currentRes.folioId || 'fol_1',
+              folioNumber:
+                currentFolio?.folioNumber ||
+                (currentRes?.folioId
+                  ? String(currentRes.folioId).toUpperCase()
+                  : `FOL_${currentRes?.id ? currentRes.id.replace('res_', '') : '1'}`)
+            },
             { id: 'fol_extra', folioNumber: 'FOL_EXTRA' }
           ] : []}
           onConfirmMove={(txId, targetFolioId) => {

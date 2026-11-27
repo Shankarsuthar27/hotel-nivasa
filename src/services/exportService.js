@@ -158,32 +158,36 @@ export function exportManagerReportExcel(
       return st === 'maintenance' || st === 'out_of_order' || st === 'blocked';
     }).length;
 
-    // Filter audits by date ranges (supporting rawDate, auditDate, or date)
-    const getAuditIso = (a) => toIsoDateString(a?.rawDate || a?.auditDate || a?.date || '');
-    const auditsToday = nightAudits.filter((a) => getAuditIso(a) === isoDate);
-    const auditsMtd = nightAudits.filter((a) => {
-      const d = getAuditIso(a);
-      return d && d >= mtdStartIso && d <= isoDate;
+    // Filter active/current reservations (exclude deleted)
+    const activeReservations = (reservations || []).filter((r) => r && !r.isDeleted);
+    const normStatus = (r) => String(r?.status || '').toLowerCase().replace(/[\s-]/g, '_');
+    const isCancelStatus = (r) => ['cancelled', 'canceled'].includes(normStatus(r));
+    const isNoShowStatus = (r) => ['no_show', 'noshow'].includes(normStatus(r));
+    const isStayStatus = (r) => ['in_house', 'checked_in', 'checked_out'].includes(normStatus(r));
+    const getResRoomCount = (r) =>
+      Math.max(1, Number(r?.roomsCount) || (Array.isArray(r?.configuredRooms) && r.configuredRooms.length) || 1);
+
+    // Build lookup from reservation ID / bookingReference / folioId -> reservation
+    const resByKey = new Map();
+    activeReservations.forEach((r) => {
+      if (r.id) resByKey.set(String(r.id), r);
+      if (r.bookingReference) resByKey.set(String(r.bookingReference), r);
+      if (r.folioId) resByKey.set(String(r.folioId), r);
     });
-    const auditsYtd = nightAudits.filter((a) => {
-      const d = getAuditIso(a);
-      return d && d >= ytdStartIso && d <= isoDate;
-    });
-    const auditedDatesSet = new Set(auditsYtd.map(getAuditIso).filter(Boolean));
 
     // Filter reservations by date ranges
     const getResDateIso = (r) => toIsoDateString(r.checkInDate || r.createdAt || '');
-    const resToday = reservations.filter((r) => getResDateIso(r) === isoDate);
-    const resMtd = reservations.filter((r) => {
+    const resToday = activeReservations.filter((r) => getResDateIso(r) === isoDate);
+    const resMtd = activeReservations.filter((r) => {
       const d = getResDateIso(r);
       return d && d >= mtdStartIso && d <= isoDate;
     });
-    const resYtd = reservations.filter((r) => {
+    const resYtd = activeReservations.filter((r) => {
       const d = getResDateIso(r);
       return d && d >= ytdStartIso && d <= isoDate;
     });
 
-    // Aggregate Folio Transactions (Extra Charges, Unaudited Room Charges/Taxes, & Payments by Tender)
+    // Aggregate Folio Transactions (only for current reservations)
     const extraKeys = ['extraBed', 'extraPax', 'earlyCheckIn', 'lateCheckOut', 'serviceCharge', 'laundry', 'penalty', 'refund', 'other'];
     const createBucket = () => ({
       roomDebit: 0,
@@ -221,8 +225,20 @@ export function exportManagerReportExcel(
       return 'cash';
     };
 
-    Object.values(folios || {}).forEach((folio) => {
-      (folio?.transactions || []).forEach((tx) => {
+    const folioRoomChargeDates = new Set();
+
+    Object.entries(folios || {}).forEach(([folioKey, folio]) => {
+      if (!folio) return;
+      const linkedRes =
+        (folio.reservationId && resByKey.get(String(folio.reservationId))) ||
+        resByKey.get(String(folioKey)) ||
+        null;
+      // Ignore orphaned folios belonging to deleted reservations
+      if (!linkedRes) return;
+
+      const isCancelledOrNoShow = isCancelStatus(linkedRes) || isNoShowStatus(linkedRes);
+
+      (folio.transactions || []).forEach((tx) => {
         if (!tx || tx.isVoided) return;
         const txIso = toIsoDateString(tx.date || tx.createdAt || '');
         if (!txIso || txIso < ytdStartIso || txIso > isoDate) return;
@@ -256,12 +272,14 @@ export function exportManagerReportExcel(
           String(tx.desc || '').toLowerCase().includes('room tariff');
 
         if (isRoomCharge) {
-          if (!auditedDatesSet.has(txIso)) {
-            targetBuckets.forEach((b) => {
-              b.roomDebit = r2(b.roomDebit + amt);
-              b.roomTax = r2(b.roomTax + tax);
-            });
+          if (isCancelledOrNoShow) return;
+          if (linkedRes.id) {
+            folioRoomChargeDates.add(`${linkedRes.id}::${txIso}`);
           }
+          targetBuckets.forEach((b) => {
+            b.roomDebit = r2(b.roomDebit + amt);
+            b.roomTax = r2(b.roomTax + tax);
+          });
         } else {
           const extraKey = classifyExtra(tx);
           targetBuckets.forEach((b) => {
@@ -272,25 +290,51 @@ export function exportManagerReportExcel(
       });
     });
 
-    // Occupied / Sold Rooms
-    const inHouseToday = reservations.filter((r) => {
-      const st = String(r.status || '').toLowerCase();
-      return (st === 'in_house' || st === 'checked_in') && r.checkInDate <= isoDate && r.checkOutDate >= isoDate;
-    }).length;
-    const soldRoomsToday = auditsToday.length > 0
-      ? auditsToday.reduce((acc, a) => acc + (a.occupiedRooms || 0), 0)
-      : inHouseToday;
-    const soldRoomsMtd = auditsMtd.reduce((acc, a) => acc + (a.occupiedRooms || 0), 0) + (auditedDatesSet.has(isoDate) ? 0 : inHouseToday);
-    const soldRoomsYtd = auditsYtd.reduce((acc, a) => acc + (a.occupiedRooms || 0), 0) + (auditedDatesSet.has(isoDate) ? 0 : inHouseToday);
+    // Occupied / Sold Rooms & Reservation-level Fallback directly from current reservations
+    let soldRoomsToday = 0;
+    let soldRoomsMtd = 0;
+    let soldRoomsYtd = 0;
 
-    // 1. Block 2: Room Revenue
-    const roomChargesToday = r2(auditsToday.reduce((acc, a) => acc + (a.totalRevenue || 0), 0) + buckets.today.roomDebit);
-    const roomChargesMtd = r2(auditsMtd.reduce((acc, a) => acc + (a.totalRevenue || 0), 0) + buckets.mtd.roomDebit);
-    const roomChargesYtd = r2(auditsYtd.reduce((acc, a) => acc + (a.totalRevenue || 0), 0) + buckets.ytd.roomDebit);
+    activeReservations.forEach((r) => {
+      if (!isStayStatus(r)) return;
+      const checkInIso = toIsoDateString(r.checkInDate || r.createdAt || '');
+      if (!checkInIso) return;
+      const nights = Math.max(1, Number(r.nights) || 1);
+      const roomCnt = getResRoomCount(r);
+      const dailyRoomRev = r2((Number(r.totalRoomCharges) || 0) / nights);
+      const dailyRoomTax = r2((Number(r.taxAmount) || 0) / nights);
+
+      const startDt = new Date(`${checkInIso}T00:00:00`);
+      if (isNaN(startDt.getTime())) return;
+
+      for (let i = 0; i < nights; i++) {
+        const dt = new Date(startDt);
+        dt.setDate(dt.getDate() + i);
+        const nightIso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+        if (nightIso < ytdStartIso || nightIso > isoDate) continue;
+
+        soldRoomsYtd += roomCnt;
+        if (nightIso >= mtdStartIso) soldRoomsMtd += roomCnt;
+        if (nightIso === isoDate) soldRoomsToday += roomCnt;
+
+        if (!r.id || !folioRoomChargeDates.has(`${r.id}::${nightIso}`)) {
+          const targetBuckets = [buckets.ytd];
+          if (nightIso >= mtdStartIso) targetBuckets.push(buckets.mtd);
+          if (nightIso === isoDate) targetBuckets.push(buckets.today);
+          targetBuckets.forEach((b) => {
+            b.roomDebit = r2(b.roomDebit + dailyRoomRev);
+            b.roomTax = r2(b.roomTax + dailyRoomTax);
+          });
+        }
+      }
+    });
+
+    // 1. Block 2: Room Revenue (from current reservations & their folios)
+    const roomChargesToday = r2(buckets.today.roomDebit);
+    const roomChargesMtd = r2(buckets.mtd.roomDebit);
+    const roomChargesYtd = r2(buckets.ytd.roomDebit);
 
     // Cancellations & No-Shows
-    const isCancelStatus = (r) => ['cancelled', 'canceled'].includes(String(r.status || '').toLowerCase());
-    const isNoShowStatus = (r) => ['no_show', 'noshow', 'no-show'].includes(String(r.status || '').toLowerCase());
     const cancelRevToday = r2(resToday.filter(isCancelStatus).reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0));
     const cancelRevMtd = r2(resMtd.filter(isCancelStatus).reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0));
     const cancelRevYtd = r2(resYtd.filter(isCancelStatus).reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0));
@@ -310,9 +354,9 @@ export function exportManagerReportExcel(
     const totalExtraYtd = sumExtras(buckets.ytd.extra);
 
     // 3. Block 4: Taxes (GST Breakdown: SGST 50% + CGST 50%)
-    const taxToday = r2(auditsToday.reduce((acc, a) => acc + (a.totalTax || 0), 0) + buckets.today.roomTax);
-    const taxMtd = r2(auditsMtd.reduce((acc, a) => acc + (a.totalTax || 0), 0) + buckets.mtd.roomTax);
-    const taxYtd = r2(auditsYtd.reduce((acc, a) => acc + (a.totalTax || 0), 0) + buckets.ytd.roomTax);
+    const taxToday = r2(buckets.today.roomTax);
+    const taxMtd = r2(buckets.mtd.roomTax);
+    const taxYtd = r2(buckets.ytd.roomTax);
     const sgstToday = r2(taxToday / 2);
     const cgstToday = r2(taxToday - sgstToday);
     const sgstMtd = r2(taxMtd / 2);
@@ -1536,27 +1580,32 @@ export function exportMultipleSheetsToExcel(sheetsMap, fileName = 'Multi_Sheet_R
  * Generates Manager Audit Report dataset for Excel download
  */
 export function generateManagerReportData(property = {}, rooms = [], reservations = [], nightAudits = []) {
-  const inHouseCount = reservations.filter(r => r.status === 'in_house').length;
-  const arrivalsCount = reservations.filter(r => r.status === 'confirmed').length;
-  const departuresCount = reservations.filter(r => r.status === 'in_house' && r.checkOutDate === (property.businessDate || '2026-10-27')).length;
-  const totalRevenue = reservations.reduce((acc, r) => acc + (r.paidAmount || 0), 0);
-  const totalBalanceDue = reservations.reduce((acc, r) => acc + (r.balanceDue || 0), 0);
-  const occupancyRate = rooms.length > 0 ? Math.round((inHouseCount / rooms.length) * 100) : 0;
+  const activeRes = (reservations || []).filter((r) => r && !r.isDeleted);
+  const inHouseCount = activeRes.filter((r) => r.status === 'in_house').length;
+  const arrivalsCount = activeRes.filter((r) => r.status === 'confirmed').length;
+  const departuresCount = activeRes.filter((r) => r.status === 'in_house' && r.checkOutDate === (property.businessDate || '')).length;
+  const totalRevenue = activeRes.reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0);
+  const totalBalanceDue = activeRes.reduce((acc, r) => acc + (Number(r.balanceDue) || 0), 0);
+  const totalRoomRevenue = activeRes.reduce((acc, r) => acc + (Number(r.totalRoomCharges) || 0), 0);
+  const totalRooms = rooms.length || 0;
+  const occupancyRate = totalRooms > 0 ? Math.round((inHouseCount / totalRooms) * 100) : 0;
+  const adr = inHouseCount > 0 ? Math.round(totalRoomRevenue / inHouseCount) : 0;
+  const revPar = totalRooms > 0 ? Math.round(totalRoomRevenue / totalRooms) : 0;
 
   return [
     { 'Metric': 'Property Name', 'Value': property.name || 'HOTEL NIVASA' },
-    { 'Metric': 'Business Date', 'Value': property.businessDate || '27 Oct 2026' },
-    { 'Metric': 'Total Physical Rooms', 'Value': rooms.length || 4 },
-    { 'Metric': 'Occupied Rooms (In-House)', 'Value': inHouseCount || 1 },
-    { 'Metric': 'Vacant Rooms', 'Value': Math.max(0, (rooms.length || 4) - (inHouseCount || 1)) },
-    { 'Metric': 'Occupancy Percentage', 'Value': `${occupancyRate || 25}%` },
-    { 'Metric': 'Expected Arrivals Today', 'Value': arrivalsCount || 1 },
-    { 'Metric': 'Expected Departures Today', 'Value': departuresCount || 0 },
-    { 'Metric': 'Total Collected Payments (₹)', 'Value': totalRevenue || 5250 },
-    { 'Metric': 'Total Outstanding Ledger Balance (₹)', 'Value': totalBalanceDue || 3675 },
-    { 'Metric': 'Completed Night Audits Count', 'Value': nightAudits.length || 5 },
-    { 'Metric': 'Current ADR (₹)', 'Value': 2500 },
-    { 'Metric': 'Current RevPAR (₹)', 'Value': 625 }
+    { 'Metric': 'Business Date', 'Value': property.businessDate || '' },
+    { 'Metric': 'Total Physical Rooms', 'Value': totalRooms },
+    { 'Metric': 'Occupied Rooms (In-House)', 'Value': inHouseCount },
+    { 'Metric': 'Vacant Rooms', 'Value': Math.max(0, totalRooms - inHouseCount) },
+    { 'Metric': 'Occupancy Percentage', 'Value': `${occupancyRate}%` },
+    { 'Metric': 'Expected Arrivals Today', 'Value': arrivalsCount },
+    { 'Metric': 'Expected Departures Today', 'Value': departuresCount },
+    { 'Metric': 'Total Collected Payments (₹)', 'Value': totalRevenue },
+    { 'Metric': 'Total Outstanding Ledger Balance (₹)', 'Value': totalBalanceDue },
+    { 'Metric': 'Completed Night Audits Count', 'Value': nightAudits.length },
+    { 'Metric': 'Current ADR (₹)', 'Value': adr },
+    { 'Metric': 'Current RevPAR (₹)', 'Value': revPar }
   ];
 }
 
