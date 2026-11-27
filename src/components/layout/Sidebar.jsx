@@ -350,7 +350,16 @@ export default function Sidebar({
 
                   {/* Team Members */}
                   {teamMembers
-                    .filter((m) => m.role !== 'Owner')
+                    .filter((m) => {
+                      if (!m || m.role === 'Owner' || m.isDeleted || m.status === 'Removed') return false;
+                      if (m.id === 'usr_02' || m.name === 'Shankar L' || m.email === 'owner@hotelastha.com' || m.name === 'Astha India') return false;
+                      const currentPropRaw = property?.name || 'HOTEL NIVASA';
+                      const targetProp = currentPropRaw === 'HOTEL ASTHA' || currentPropRaw === 'Hotel Astha' ? 'HOTEL NIVASA' : currentPropRaw;
+                      const memberProps = (m.properties || []).map((p) =>
+                        p === 'HOTEL ASTHA' || p === 'Hotel Astha' ? 'HOTEL NIVASA' : p
+                      );
+                      return memberProps.length === 0 || memberProps.includes(targetProp) || memberProps.includes('HOTEL NIVASA') || targetProp === 'ALL';
+                    })
                     .map((m) => {
                       const isCurrent = activeUser.id === m.id;
                       return (

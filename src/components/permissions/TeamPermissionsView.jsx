@@ -110,15 +110,24 @@ export default function TeamPermissionsView({
   const isReadOnly = activeSubtab === 'my_permissions';
 
   // Selected Team Member for 'manage_team' tab
-  const nonOwnerMembers = teamMembers.filter(
-    (m) =>
-      m &&
-      m.role !== 'Owner' &&
-      m.id !== 'usr_02' &&
-      m.name !== 'Shankar L' &&
-      !m.isDeleted &&
-      m.status !== 'Removed'
-  );
+  const nonOwnerMembers = teamMembers.filter((m) => {
+    if (!m || m.role === 'Owner' || m.id === 'usr_02' || m.name === 'Shankar L' || m.isDeleted || m.status === 'Removed') {
+      return false;
+    }
+    const memberProps = (m.properties || []).map((p) =>
+      p === 'HOTEL ASTHA' || p === 'Hotel Astha' ? 'HOTEL NIVASA' : p
+    );
+    const targetProp =
+      currentProperty === 'HOTEL ASTHA' || currentProperty === 'Hotel Astha'
+        ? 'HOTEL NIVASA'
+        : currentProperty;
+    return (
+      memberProps.length === 0 ||
+      memberProps.includes(targetProp) ||
+      memberProps.includes('HOTEL NIVASA') ||
+      targetProp === 'ALL'
+    );
+  });
   const [selectedMemberId, setSelectedMemberId] = useState(
     initialMemberId && initialMemberId !== 'usr_02' ? initialMemberId : ''
   );

@@ -1104,7 +1104,7 @@ class PMSStore {
             const prevTmCount = (this.teamMembers || []).length;
             this.teamMembers = (this.teamMembers || []).filter((tm) => {
               if (!tm) return false;
-              const candidates = [tm.id, tm.staffId, tm.uid, tm.email]
+              const candidates = [tm.id, tm._firestoreDocId, tm.staffId, tm.uid, tm.email]
                 .map((v) => String(v || '').trim().toLowerCase())
                 .filter(Boolean);
               return !candidates.some((c) => delTmIds.has(c));
@@ -1552,19 +1552,19 @@ class PMSStore {
       const unsubTm = onSnapshot(
         tmCol,
         (snapshot) => {
-          if (snapshot.empty) return;
           const cloudTm = snapshot.docs.map((d) => {
             const data = d.data() || {};
             const props = (data.properties && data.properties.length > 0 ? data.properties : ['HOTEL NIVASA']).map((p) =>
               p === 'HOTEL ASTHA' || p === 'Hotel Astha' ? 'HOTEL NIVASA' : p
             );
-            return { id: d.id, ...data, properties: props };
+            return { id: d.id, ...data, _firestoreDocId: d.id, properties: props };
           });
           const deletedTm = this.deletedTeamMemberIds || new Set();
           const isTmDeleted = (tm) => {
             if (!tm) return true;
             if (tm.id === 'usr_02' || tm.name === 'Shankar L' || tm.isDeleted) return true;
             if (tm.id && deletedTm.has(String(tm.id))) return true;
+            if (tm._firestoreDocId && deletedTm.has(String(tm._firestoreDocId))) return true;
             if (tm.staffId && deletedTm.has(String(tm.staffId))) return true;
             if (tm.uid && deletedTm.has(String(tm.uid))) return true;
             if (tm.email && deletedTm.has(String(tm.email).toLowerCase())) return true;
@@ -1955,13 +1955,14 @@ class PMSStore {
           const props = (data.properties && data.properties.length > 0 ? data.properties : ['HOTEL NIVASA']).map((p) =>
             p === 'HOTEL ASTHA' || p === 'Hotel Astha' ? 'HOTEL NIVASA' : p
           );
-          return { id: d.id, ...data, properties: props };
+          return { id: d.id, ...data, _firestoreDocId: d.id, properties: props };
         });
         const deletedTm = this.deletedTeamMemberIds || new Set();
         const isTmDeleted = (tm) => {
           if (!tm) return true;
           if (tm.id === 'usr_02' || tm.name === 'Shankar L' || tm.isDeleted) return true;
           if (tm.id && deletedTm.has(String(tm.id))) return true;
+          if (tm._firestoreDocId && deletedTm.has(String(tm._firestoreDocId))) return true;
           if (tm.staffId && deletedTm.has(String(tm.staffId))) return true;
           if (tm.uid && deletedTm.has(String(tm.uid))) return true;
           if (tm.email && deletedTm.has(String(tm.email).toLowerCase())) return true;
@@ -4987,17 +4988,22 @@ class PMSStore {
 
   removeInvitation(memberId) {
     const member = this.teamMembers.find(
-      (m) => m.id === memberId || m.staffId === memberId || m.email === memberId
+      (m) => m.id === memberId || m._firestoreDocId === memberId || m.staffId === memberId || m.email === memberId
     );
+    const delIds = [memberId, member?.id, member?._firestoreDocId, member?.staffId, member?.uid, member?.email].filter(Boolean);
     if (!this.deletedTeamMemberIds) this.deletedTeamMemberIds = new Set();
-    this.deletedTeamMemberIds.add(String(memberId));
-    if (member?.id) this.deletedTeamMemberIds.add(String(member.id));
-    if (member?.staffId) this.deletedTeamMemberIds.add(String(member.staffId));
-    if (member?.uid) this.deletedTeamMemberIds.add(String(member.uid));
-    if (member?.email) this.deletedTeamMemberIds.add(String(member.email).toLowerCase());
+    delIds.forEach((id) => {
+      this.deletedTeamMemberIds.add(String(id));
+      this.deletedTeamMemberIds.add(String(id).toLowerCase());
+    });
 
     this.teamMembers = this.teamMembers.filter(
-      (m) => m.id !== memberId && m.staffId !== memberId && (!member?.email || m.email !== member.email)
+      (m) =>
+        m.id !== memberId &&
+        m._firestoreDocId !== memberId &&
+        m.staffId !== memberId &&
+        (!member?.email || m.email !== member.email) &&
+        (!member?.uid || m.uid !== member.uid)
     );
     if (this.invitationTokens) {
       this.invitationTokens = this.invitationTokens.filter((t) => t.memberId !== memberId);
@@ -5008,14 +5014,14 @@ class PMSStore {
       if (member.id && member.id !== memberId) {
         this.deleteDocFromFirestore('teamMembers', member.id);
       }
+      if (member._firestoreDocId && member._firestoreDocId !== memberId && member._firestoreDocId !== member.id) {
+        this.deleteDocFromFirestore('teamMembers', member._firestoreDocId);
+      }
       if (member.uid) {
         this.deleteDocFromFirestore('staff', member.uid);
       }
     }
-    this.recordCloudDeletion(
-      'teamMembers',
-      [memberId, member?.id, member?.staffId, member?.uid, member?.email].filter(Boolean)
-    );
+    this.recordCloudDeletion('teamMembers', delIds);
     this.save();
     this.notify();
     return { success: true };
@@ -5023,22 +5029,30 @@ class PMSStore {
 
   removeTeamMember(memberId) {
     const member = this.teamMembers.find(
-      (m) => m.id === memberId || m.staffId === memberId || m.email === memberId
+      (m) => m.id === memberId || m._firestoreDocId === memberId || m.staffId === memberId || m.email === memberId
     );
+    const delIds = [memberId, member?.id, member?._firestoreDocId, member?.staffId, member?.uid, member?.email].filter(Boolean);
     if (!this.deletedTeamMemberIds) this.deletedTeamMemberIds = new Set();
-    this.deletedTeamMemberIds.add(String(memberId));
-    if (member?.id) this.deletedTeamMemberIds.add(String(member.id));
-    if (member?.staffId) this.deletedTeamMemberIds.add(String(member.staffId));
-    if (member?.uid) this.deletedTeamMemberIds.add(String(member.uid));
-    if (member?.email) this.deletedTeamMemberIds.add(String(member.email).toLowerCase());
+    delIds.forEach((id) => {
+      this.deletedTeamMemberIds.add(String(id));
+      this.deletedTeamMemberIds.add(String(id).toLowerCase());
+    });
     this.teamMembers = this.teamMembers.filter(
-      (m) => m.id !== memberId && m.staffId !== memberId && (!member?.email || m.email !== member.email)
+      (m) =>
+        m.id !== memberId &&
+        m._firestoreDocId !== memberId &&
+        m.staffId !== memberId &&
+        (!member?.email || m.email !== member.email) &&
+        (!member?.uid || m.uid !== member.uid)
     );
     if (member) {
       this.logAudit('REMOVE_MEMBER', 'TEAM', member.email, `Member removed from organization.`);
       this.deleteDocFromFirestore('teamMembers', memberId);
       if (member.id && member.id !== memberId) {
         this.deleteDocFromFirestore('teamMembers', member.id);
+      }
+      if (member._firestoreDocId && member._firestoreDocId !== memberId && member._firestoreDocId !== member.id) {
+        this.deleteDocFromFirestore('teamMembers', member._firestoreDocId);
       }
       if (member.staffId && member.staffId !== memberId && member.staffId !== member.id) {
         this.deleteDocFromFirestore('teamMembers', member.staffId);
@@ -5049,10 +5063,7 @@ class PMSStore {
         this.deleteDocFromFirestore('staff', memberId);
       }
     }
-    this.recordCloudDeletion(
-      'teamMembers',
-      [memberId, member?.id, member?.staffId, member?.uid, member?.email].filter(Boolean)
-    );
+    this.recordCloudDeletion('teamMembers', delIds);
     this.syncCurrentUserWithTeamMembers();
     this.save();
     this.notify();
