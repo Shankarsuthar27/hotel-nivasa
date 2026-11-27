@@ -64,7 +64,7 @@
   --font-mono: 'JetBrains Mono', monospace;
 
   /* Color Palette */
-  --bg-app: #f8fafc;
+  --bg-app: #f4f7fc;
   --bg-surface: #ffffff;
   --bg-sidebar: #0f172a;
   --bg-sidebar-hover: #1e293b;
@@ -463,6 +463,7 @@ h1, h2, h3, h4, h5, h6,
   flex: 1;
   overflow-y: auto;
   padding: 1.5rem 1.75rem;
+  background: linear-gradient(180deg, #eff4ff 0%, #f5f8fd 180px, #f4f7fc 100%);
 }
 
 /* Calendar & Rates Viewport: Fills 100% available viewport height with no double scrollbars */
@@ -1479,8 +1480,8 @@ body.has-res-modal-open .tape-chart-container {
 .sidebar-hotel-card {
   margin: 0.25rem 1rem 0.75rem;
   padding: 0.65rem 0.75rem;
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
+  background: linear-gradient(135deg, #f5f8ff 0%, #eef2ff 100%);
+  border: 1px solid #dbeafe;
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -1567,15 +1568,15 @@ body.has-res-modal-open .tape-chart-container {
 }
 
 .sidebar-nav-btn:hover {
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: #f1f5ff;
+  color: #1e40af;
 }
 
 .sidebar-nav-btn.active {
-  background-color: #eff6ff;
-  color: #0066ff;
+  background: linear-gradient(90deg, #eff6ff 0%, #e0e7ff 100%);
+  color: #1d4ed8;
   font-weight: 700;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
 }
 
 .sidebar-nav-btn.active::before {
@@ -1862,7 +1863,26 @@ body.has-res-modal-open .tape-chart-container {
 
 .kpi-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.08);
+}
+
+.kpi-card.kpi-border-blue {
+  background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
+}
+.kpi-card.kpi-border-green {
+  background: linear-gradient(180deg, #ffffff 0%, #f2fcf6 100%);
+}
+.kpi-card.kpi-border-purple {
+  background: linear-gradient(180deg, #ffffff 0%, #faf5ff 100%);
+}
+.kpi-card.kpi-border-cyan {
+  background: linear-gradient(180deg, #ffffff 0%, #f0f9ff 100%);
+}
+.kpi-card.kpi-border-amber {
+  background: linear-gradient(180deg, #ffffff 0%, #fffbeb 100%);
+}
+.kpi-card.kpi-border-pink {
+  background: linear-gradient(180deg, #ffffff 0%, #fdf2f8 100%);
 }
 
 .kpi-top {
@@ -2131,12 +2151,35 @@ body.has-res-modal-open .tape-chart-container {
 
 .revenue-metric-card {
   background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  border-radius: 9px;
-  padding: 0.75rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.25rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.revenue-metric-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.revenue-metric-card:nth-child(1) {
+  background: linear-gradient(135deg, #f8fbff 0%, #eff6ff 100%);
+  border-color: #dbeafe;
+}
+.revenue-metric-card:nth-child(2) {
+  background: linear-gradient(135deg, #faf8ff 0%, #f3e8ff 100%);
+  border-color: #e9d5ff;
+}
+.revenue-metric-card:nth-child(3) {
+  background: linear-gradient(135deg, #f4fdf8 0%, #ecfdf5 100%);
+  border-color: #d1fae5;
+}
+.revenue-metric-card:nth-child(4) {
+  background: linear-gradient(135deg, #fffdf5 0%, #fef3c7 100%);
+  border-color: #fde68a;
 }
 
 .metric-label {
