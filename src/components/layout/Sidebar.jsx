@@ -47,6 +47,7 @@ export default function Sidebar({
   const propertyName = (property?.name === 'HOTEL ASTHA' || property?.name === 'Hotel Astha' || !property?.name) ? 'HOTEL NIVASA' : property.name;
   const propertyTagline = (property?.tagline === 'HOTEL ASTHA' || property?.tagline === 'Hotel Astha' || !property?.tagline) ? 'HOTEL NIVASA' : property.tagline;
   const propertyInitials = (property?.initials === 'HA' || property?.initials === 'AI' || !property?.initials) ? 'HN' : property.initials;
+  const propertyLogo = property?.organizationIcon || property?.logo || null;
 
   const activeUser = currentUser || property?.userProfile || {
     name: 'HOTEL NIVASA',
@@ -153,8 +154,19 @@ export default function Sidebar({
 
       {/* 2. Hotel Switcher Card */}
       <div className="sidebar-hotel-card">
-        <div className="hotel-avatar-ha">
-          {propertyInitials}
+        <div
+          className="hotel-avatar-ha"
+          style={propertyLogo ? { overflow: 'hidden', padding: 0, background: 'transparent' } : undefined}
+        >
+          {propertyLogo ? (
+            <img
+              src={propertyLogo}
+              alt={propertyName}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit', display: 'block' }}
+            />
+          ) : (
+            propertyInitials
+          )}
         </div>
         <div className="hotel-info">
           <div className="hotel-name">{propertyName}</div>

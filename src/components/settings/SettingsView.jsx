@@ -15,6 +15,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import './settings-view.css';
+import { uploadOrganizationLogo } from '../../services/firebaseStorage';
 
 const HOURS_LIST = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
 const MINUTES_LIST = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
@@ -29,6 +30,7 @@ export default function SettingsView({
   // Organization Settings State
   const [orgName, setOrgName] = useState(property?.name || 'HOTEL NIVASA');
   const [orgIcon, setOrgIcon] = useState(property?.organizationIcon || property?.logo || null);
+  const [isUploadingIcon, setIsUploadingIcon] = useState(false);
 
   // Property Overbooking State
   const [enableOverbooking, setEnableOverbooking] = useState(property?.enableOverbooking ?? false);
@@ -159,15 +161,82 @@ export default function SettingsView({
     setIsAutoExtendModalOpen(false);
   };
 
-  // Handle Organization Logo Upload
-  const handleIconUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  // Compress & resize uploaded logo into a lightweight Blob + Data URL fallback
+  const compressImage = (file, maxDimension = 512) =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Failed to read image file.'));
       reader.onload = (event) => {
-        setOrgIcon(event.target.result);
+        const img = new Image();
+        img.onerror = () => reject(new Error('Invalid image file.'));
+        img.onload = () => {
+          const scale = Math.min(1, maxDimension / Math.max(img.width || 1, img.height || 1));
+          const width = Math.max(1, Math.round((img.width || maxDimension) * scale));
+          const height = Math.max(1, Math.round((img.height || maxDimension) * scale));
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve({ blob: file, dataUrl: event.target.result });
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+
+          let dataUrl = canvas.toDataURL('image/webp', 0.85);
+          let mimeType = 'image/webp';
+          if (!dataUrl.startsWith('data:image/webp')) {
+            dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            mimeType = 'image/jpeg';
+          }
+
+          canvas.toBlob(
+            (blob) => {
+              resolve({ blob: blob || file, dataUrl });
+            },
+            mimeType,
+            0.85
+          );
+        };
+        img.src = event.target.result;
       };
       reader.readAsDataURL(file);
+    });
+
+  // Handle Organization Logo Upload -> Firebase Cloud Storage
+  const handleIconUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingIcon(true);
+    try {
+      const { blob, dataUrl } = await compressImage(file, 512);
+      setOrgIcon(dataUrl); // Immediate preview while uploading
+
+      try {
+        const uploaded = await uploadOrganizationLogo(property?.id || 'prop_astha_01', blob);
+        setOrgIcon(uploaded.url);
+        if (onSaveProperty) {
+          onSaveProperty({
+            organizationIcon: uploaded.url,
+            logo: ''
+          });
+        }
+        if (showToast) {
+          showToast('☁️ Organization icon uploaded to Firebase Storage.');
+        }
+      } catch (uploadErr) {
+        console.warn('Firebase Storage logo upload failed, using compressed local preview:', uploadErr);
+        if (showToast) {
+          showToast('⚠️ Firebase upload failed; saved compressed local image instead.');
+        }
+      }
+    } catch {
+      if (showToast) {
+        showToast('⚠️ Could not process the selected image. Please try another PNG or JPG.');
+      }
+    } finally {
+      setIsUploadingIcon(false);
     }
   };
 
@@ -179,7 +248,7 @@ export default function SettingsView({
         name: orgName,
         tradeName: orgName,
         organizationIcon: orgIcon,
-        logo: orgIcon
+        logo: ''
       });
     }
     if (showToast) {
@@ -282,9 +351,9 @@ export default function SettingsView({
                       <span>Recommended size</span>
                       <span>512 x 512px, PNG or JPG</span>
                     </div>
-                    <label htmlFor="org-icon-upload" className="settings-btn-change">
+                    <label htmlFor="org-icon-upload" className="settings-btn-change" style={isUploadingIcon ? { opacity: 0.65, pointerEvents: 'none' } : undefined}>
                       <Upload size={13} />
-                      <span>Change</span>
+                      <span>{isUploadingIcon ? 'Uploading...' : 'Change'}</span>
                     </label>
                   </div>
 

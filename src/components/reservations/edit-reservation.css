@@ -361,7 +361,7 @@ body.has-res-modal-open .edit-res-page,
 }
 
 .edit-res-checkout-btn {
-  background: #059669;
+  background: #dc2626;
   color: #ffffff;
   border: none;
   border-radius: 8px;
@@ -374,7 +374,7 @@ body.has-res-modal-open .edit-res-page,
 }
 
 .edit-res-checkout-btn:hover {
-  background: #047857;
+  background: #b91c1c;
 }
 
 .edit-res-checkin-btn {

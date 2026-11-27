@@ -95,9 +95,15 @@ export default function MyTeamView({
   const pageSize = 10;
 
   // Filter team members:
-  // Include all team members (including Owner HOTEL NIVASA)
+  // Hide Owner / Astha India account from the visible My Team list
   const eligibleMembers = (teamMembers || []).filter(
-    (m) => m && m.id !== 'usr_02' && m.name !== 'Shankar L'
+    (m) =>
+      m &&
+      m.id !== 'usr_02' &&
+      m.name !== 'Shankar L' &&
+      m.role !== 'Owner' &&
+      m.email !== 'owner@hotelastha.com' &&
+      m.name !== 'Astha India'
   );
 
   const filteredMembers = eligibleMembers.filter((m) => {

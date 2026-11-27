@@ -1488,27 +1488,36 @@ class PMSStore {
             return { id: d.id, ...data, properties: props };
           });
           const deletedTm = this.deletedTeamMemberIds || new Set();
+          const isTmDeleted = (tm) => {
+            if (!tm) return true;
+            if (tm.id === 'usr_02' || tm.name === 'Shankar L' || tm.isDeleted) return true;
+            if (tm.id && deletedTm.has(String(tm.id))) return true;
+            if (tm.staffId && deletedTm.has(String(tm.staffId))) return true;
+            if (tm.uid && deletedTm.has(String(tm.uid))) return true;
+            if (tm.email && deletedTm.has(String(tm.email).toLowerCase())) return true;
+            return false;
+          };
           const map = new Map();
           cloudTm.forEach((tm) => {
-            if (!tm || tm.id === 'usr_02' || tm.name === 'Shankar L') return;
+            if (isTmDeleted(tm)) return;
             const key = tm.id || tm.staffId || tm.email;
-            if (key && !deletedTm.has(String(tm.id))) {
+            if (key) {
               map.set(key, tm);
             }
           });
           (this.teamMembers || initialTeamMembers).forEach((tm) => {
-            if (!tm || tm.id === 'usr_02' || tm.name === 'Shankar L') return;
+            if (isTmDeleted(tm)) return;
             const key = tm.id || tm.staffId || tm.email;
-            if (key && !deletedTm.has(String(tm.id))) {
+            if (key) {
               if (tm.role === 'Owner' || tm._pendingSync) {
                 if (!map.has(key)) map.set(key, tm);
               }
             }
           });
           (initialTeamMembers || []).forEach((tm) => {
-            if (!tm || tm.id === 'usr_02' || tm.name === 'Shankar L') return;
+            if (isTmDeleted(tm)) return;
             const key = tm.id || tm.staffId || tm.email;
-            if (key && !deletedTm.has(String(tm.id))) {
+            if (key) {
               if (!map.has(key)) map.set(key, tm);
             }
           });
@@ -1876,18 +1885,27 @@ class PMSStore {
           return { id: d.id, ...data, properties: props };
         });
         const deletedTm = this.deletedTeamMemberIds || new Set();
+        const isTmDeleted = (tm) => {
+          if (!tm) return true;
+          if (tm.id === 'usr_02' || tm.name === 'Shankar L' || tm.isDeleted) return true;
+          if (tm.id && deletedTm.has(String(tm.id))) return true;
+          if (tm.staffId && deletedTm.has(String(tm.staffId))) return true;
+          if (tm.uid && deletedTm.has(String(tm.uid))) return true;
+          if (tm.email && deletedTm.has(String(tm.email).toLowerCase())) return true;
+          return false;
+        };
         const map = new Map();
         cloudTm.forEach((tm) => {
-          if (!tm || tm.id === 'usr_02' || tm.name === 'Shankar L') return;
+          if (isTmDeleted(tm)) return;
           const key = tm.id || tm.staffId || tm.email;
-          if (key && !deletedTm.has(String(tm.id))) {
+          if (key) {
             map.set(key, tm);
           }
         });
         (this.teamMembers || []).forEach((tm) => {
-          if (!tm || tm.id === 'usr_02' || tm.name === 'Shankar L') return;
+          if (isTmDeleted(tm)) return;
           const key = tm.id || tm.staffId || tm.email;
-          if (key && !deletedTm.has(String(tm.id))) {
+          if (key) {
             if (tm.role === 'Owner' || tm._pendingSync) {
               if (!map.has(key)) map.set(key, tm);
             }
@@ -4889,22 +4907,36 @@ class PMSStore {
   }
 
   removeInvitation(memberId) {
-    const member = this.teamMembers.find(m => m.id === memberId);
-    this.teamMembers = this.teamMembers.filter(m => m.id !== memberId);
+    const member = this.teamMembers.find(
+      (m) => m.id === memberId || m.staffId === memberId || m.email === memberId
+    );
+    if (!this.deletedTeamMemberIds) this.deletedTeamMemberIds = new Set();
+    this.deletedTeamMemberIds.add(String(memberId));
+    if (member?.id) this.deletedTeamMemberIds.add(String(member.id));
+    if (member?.staffId) this.deletedTeamMemberIds.add(String(member.staffId));
+    if (member?.uid) this.deletedTeamMemberIds.add(String(member.uid));
+    if (member?.email) this.deletedTeamMemberIds.add(String(member.email).toLowerCase());
+
+    this.teamMembers = this.teamMembers.filter(
+      (m) => m.id !== memberId && m.staffId !== memberId && (!member?.email || m.email !== member.email)
+    );
     if (this.invitationTokens) {
-      this.invitationTokens = this.invitationTokens.filter(t => t.memberId !== memberId);
+      this.invitationTokens = this.invitationTokens.filter((t) => t.memberId !== memberId);
     }
     if (member) {
       this.logAudit('REVOKE_INVITE', 'TEAM', member.email, `Invitation revoked.`);
       this.deleteDocFromFirestore('teamMembers', memberId);
+      if (member.id && member.id !== memberId) {
+        this.deleteDocFromFirestore('teamMembers', member.id);
+      }
+      if (member.uid) {
+        this.deleteDocFromFirestore('staff', member.uid);
+      }
     }
     this.save();
     this.notify();
     return { success: true };
   }
-
-
-
 
   removeTeamMember(memberId) {
     const member = this.teamMembers.find(
@@ -4914,6 +4946,8 @@ class PMSStore {
     this.deletedTeamMemberIds.add(String(memberId));
     if (member?.id) this.deletedTeamMemberIds.add(String(member.id));
     if (member?.staffId) this.deletedTeamMemberIds.add(String(member.staffId));
+    if (member?.uid) this.deletedTeamMemberIds.add(String(member.uid));
+    if (member?.email) this.deletedTeamMemberIds.add(String(member.email).toLowerCase());
     this.teamMembers = this.teamMembers.filter(
       (m) => m.id !== memberId && m.staffId !== memberId && (!member?.email || m.email !== member.email)
     );
@@ -4922,6 +4956,9 @@ class PMSStore {
       this.deleteDocFromFirestore('teamMembers', memberId);
       if (member.id && member.id !== memberId) {
         this.deleteDocFromFirestore('teamMembers', member.id);
+      }
+      if (member.staffId && member.staffId !== memberId && member.staffId !== member.id) {
+        this.deleteDocFromFirestore('teamMembers', member.staffId);
       }
       if (member.uid && member.uid !== memberId) {
         this.deleteDocFromFirestore('staff', member.uid);

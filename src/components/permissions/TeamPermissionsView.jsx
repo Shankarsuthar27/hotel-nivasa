@@ -111,7 +111,13 @@ export default function TeamPermissionsView({
 
   // Selected Team Member for 'manage_team' tab
   const nonOwnerMembers = teamMembers.filter(
-    (m) => m && m.role !== 'Owner' && m.id !== 'usr_02' && m.name !== 'Shankar L'
+    (m) =>
+      m &&
+      m.role !== 'Owner' &&
+      m.id !== 'usr_02' &&
+      m.name !== 'Shankar L' &&
+      !m.isDeleted &&
+      m.status !== 'Removed'
   );
   const [selectedMemberId, setSelectedMemberId] = useState(
     initialMemberId && initialMemberId !== 'usr_02' ? initialMemberId : ''

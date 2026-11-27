@@ -73,6 +73,43 @@ export async function uploadReservationDocument(propertyId = 'prop_astha_01', re
 }
 
 /**
+ * Uploads an organization / property logo image to Firebase Cloud Storage
+ * @param {string} propertyId
+ * @param {File|Blob} file
+ * @returns {Promise<{ url: string, path: string }>}
+ */
+export async function uploadOrganizationLogo(propertyId = 'prop_astha_01', file) {
+  if (!storage) {
+    throw new Error('Firebase Storage is not initialized');
+  }
+  if (!file) {
+    throw new Error('Logo file is required for upload');
+  }
+
+  const timestamp = Date.now();
+  const mimeType = file.type || 'image/webp';
+  const extFromMime = mimeType.split('/')[1]?.replace(/[^a-z0-9]/gi, '') || 'webp';
+  const fileExt = file.name ? file.name.split('.').pop() : extFromMime;
+  const storagePath = `properties/${propertyId}/branding/logo_${timestamp}.${fileExt}`;
+
+  const storageRef = ref(storage, storagePath);
+  const snapshot = await uploadBytes(storageRef, file, {
+    contentType: mimeType,
+    customMetadata: {
+      propertyId,
+      assetType: 'organization_logo',
+      uploadedAt: new Date().toISOString()
+    }
+  });
+  const downloadUrl = await getDownloadURL(snapshot.ref);
+
+  return {
+    url: downloadUrl,
+    path: storagePath
+  };
+}
+
+/**
  * Deletes a file from Firebase Storage
  * @param {string} storagePath
  */
