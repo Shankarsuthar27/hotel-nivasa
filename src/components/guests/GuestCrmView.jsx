@@ -213,13 +213,15 @@ export default function GuestCrmView({
       dynamicMap[key].stays.push(mapReservationToStay(r));
     });
 
+    const activeGuests = registered.filter((g) => g.stays.length > 0);
+
     Object.values(dynamicMap).forEach((dyn) => {
       dyn.stays = sortStays(dyn.stays);
       dyn.activeStay = dyn.stays.length > 0 ? dyn.stays[0] : null;
-      registered.push(dyn);
+      activeGuests.push(dyn);
     });
 
-    return registered;
+    return activeGuests;
   }, [reservations]);
 
   // Counts by Status
