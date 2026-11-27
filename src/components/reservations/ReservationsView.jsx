@@ -87,7 +87,22 @@ export default function ReservationsView({
 }) {
   // Navigation & View Mode
   const [activeTab, setActiveTab] = useState(initialTab || 'all'); // 'all' | 'arrivals' | 'in_house' | 'departures'
-  const [viewMode, setViewMode] = useState('list'); // 'list' (Table View matching screenshot) | 'grid'
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem('reservations_view_mode');
+      return saved === 'grid' || saved === 'list' ? saved : 'list';
+    } catch {
+      return 'list';
+    }
+  }); // 'list' | 'grid'
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('reservations_view_mode', viewMode);
+    } catch {
+      // Ignore storage errors
+    }
+  }, [viewMode]);
 
   useEffect(() => {
     if (initialTab && initialTab !== activeTab) {

@@ -176,7 +176,7 @@ export default function ReservationsListView({
                 return (
                   <tr
                     key={res.id}
-                    className={`res-list-tbody-row ${isMenuOpen ? 'row-menu-open' : ''}`}
+                    className={`res-list-tbody-row ${isCheckedOut ? 'row-checked-out' : ''} ${isMenuOpen ? 'row-menu-open' : ''}`}
                     onClick={() => {
                       if (onOpenDetailsDrawer) {
                         onOpenDetailsDrawer(res);
@@ -187,7 +187,7 @@ export default function ReservationsListView({
                     <td className="res-td-guest">
                       <div className="res-guest-cell">
                         <div className="res-bed-icon-box">
-                          <BedIcon size={18} color="#2563eb" />
+                          <BedIcon size={18} color={isCheckedOut ? '#64748b' : '#2563eb'} />
                         </div>
                         <div className="res-guest-info">
                           <span

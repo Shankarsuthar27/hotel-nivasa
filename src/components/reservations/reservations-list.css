@@ -138,6 +138,32 @@
   background-color: #f8fafc;
 }
 
+/* Visually differentiate Checked Out rows as completed/archived */
+.res-list-tbody-row.row-checked-out {
+  background-color: #fafbfc;
+}
+
+.res-list-tbody-row.row-checked-out:hover {
+  background-color: #f1f5f9;
+}
+
+.res-list-tbody-row.row-checked-out .res-bed-icon-box {
+  background-color: #f1f5f9;
+}
+
+.res-list-tbody-row.row-checked-out .res-guest-name {
+  color: #475569;
+  font-weight: 600;
+}
+
+.res-list-tbody-row.row-checked-out .res-code-cell,
+.res-list-tbody-row.row-checked-out .res-date-cell,
+.res-list-tbody-row.row-checked-out .res-nights-cell,
+.res-list-tbody-row.row-checked-out .res-stay-dates-cell {
+  color: #64748b;
+  font-weight: 500;
+}
+
 .res-list-tbody-row td {
   padding: 14px 16px;
   vertical-align: middle;

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   SlidersHorizontal,
   Clock,
-  KeyRound,
   Building2,
   Image as ImageIcon,
   Pencil,
@@ -13,9 +12,7 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
-  AlertTriangle,
-  Copy,
-  Check
+  AlertTriangle
 } from 'lucide-react';
 import './settings-view.css';
 
@@ -27,7 +24,7 @@ export default function SettingsView({
   onSaveProperty,
   showToast
 }) {
-  const [activeSubtab, setActiveSubtab] = useState('property'); // 'property' | 'nightaudit' | 'apikeys'
+  const [activeSubtab, setActiveSubtab] = useState('property'); // 'property' | 'nightaudit'
 
   // Organization Settings State
   const [orgName, setOrgName] = useState(property?.name || 'HOTEL NIVASA');
@@ -57,11 +54,6 @@ export default function SettingsView({
   const hoursListRef = useRef(null);
   const minutesListRef = useRef(null);
 
-  // API Keys State
-  const [apiKey, setApiKey] = useState(property?.apiKeys?.key || 'otal_live_9f82d1b74a3c2e105847fae32');
-  const [webhookUrl, setWebhookUrl] = useState(property?.apiKeys?.webhookUrl || 'https://api.hotelastha.com/webhooks/pms');
-  const [copiedKey, setCopiedKey] = useState(false);
-
   // Synchronize when property updates from store
   useEffect(() => {
     if (property) {
@@ -77,10 +69,6 @@ export default function SettingsView({
           if (m) setDraftMinute(m.padStart(2, '0'));
         }
         if (property.nightAuditSettings.autoExtendDueOut !== undefined) setAutoExtendDueOut(property.nightAuditSettings.autoExtendDueOut);
-      }
-      if (property.apiKeys) {
-        if (property.apiKeys.key) setApiKey(property.apiKeys.key);
-        if (property.apiKeys.webhookUrl) setWebhookUrl(property.apiKeys.webhookUrl);
       }
     }
   }, [property]);
@@ -229,30 +217,6 @@ export default function SettingsView({
     }
   };
 
-  // Save API Key Settings
-  const handleSaveApiKeys = (e) => {
-    if (e) e.preventDefault();
-    if (onSaveProperty) {
-      onSaveProperty({
-        apiKeys: {
-          key: apiKey,
-          webhookUrl
-        }
-      });
-    }
-    if (showToast) {
-      showToast('🔑 API credentials updated successfully.');
-    }
-  };
-
-  const handleCopyKey = () => {
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(apiKey);
-      setCopiedKey(true);
-      setTimeout(() => setCopiedKey(false), 2000);
-    }
-  };
-
   return (
     <div className="settings-container">
       {/* Subtabs Bar */}
@@ -272,14 +236,6 @@ export default function SettingsView({
         >
           <Clock size={16} />
           <span>Night Audit</span>
-        </button>
-        <button
-          type="button"
-          className={`settings-subtab-btn ${activeSubtab === 'apikeys' ? 'active' : ''}`}
-          onClick={() => setActiveSubtab('apikeys')}
-        >
-          <KeyRound size={16} />
-          <span>API Keys</span>
         </button>
       </div>
 
@@ -636,77 +592,6 @@ export default function SettingsView({
                   type="button"
                   className="settings-btn-save"
                   onClick={handleSaveNightAudit}
-                >
-                  <Save size={15} />
-                  <span>Save Changes</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: API KEYS */}
-        {activeSubtab === 'apikeys' && (
-          <div style={{ maxWidth: '640px' }}>
-            <div className="settings-card">
-              <div>
-                <div className="settings-card-header">
-                  <div className="settings-icon-badge">
-                    <KeyRound size={20} color="#2563EB" />
-                  </div>
-                  <div>
-                    <h3 className="settings-card-title">API Credentials & Webhooks</h3>
-                    <p className="settings-card-subtitle">Manage secret keys for OTA integrations, booking engines, and webhooks.</p>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  <div>
-                    <label className="settings-label">Live Secret API Key</label>
-                    <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
-                      <input
-                        type="text"
-                        readOnly
-                        value={apiKey}
-                        className="settings-input"
-                        style={{ fontFamily: 'monospace', fontSize: '13px', backgroundColor: '#F8FAFC' }}
-                      />
-                      <button
-                        type="button"
-                        className="settings-btn-secondary"
-                        onClick={handleCopyKey}
-                      >
-                        {copiedKey ? <Check size={14} color="#16A34A" /> : <Copy size={14} />}
-                        <span>{copiedKey ? 'Copied!' : 'Copy'}</span>
-                      </button>
-                    </div>
-                    <div className="settings-helper-text" style={{ marginTop: '4px' }}>
-                      Use this bearer token to authenticate REST and webhook requests from channel managers.
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="settings-label">Webhook Endpoint URL</label>
-                    <input
-                      type="url"
-                      value={webhookUrl}
-                      onChange={(e) => setWebhookUrl(e.target.value)}
-                      className="settings-input"
-                      style={{ marginTop: '6px' }}
-                      placeholder="https://your-domain.com/api/webhook"
-                    />
-                    <div className="settings-helper-text" style={{ marginTop: '4px' }}>
-                      Reservation updates and inventory changes will be posted to this endpoint.
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="settings-card-footer" style={{ marginTop: '26px' }}>
-                <button
-                  type="button"
-                  className="settings-btn-save"
-                  onClick={handleSaveApiKeys}
                 >
                   <Save size={15} />
                   <span>Save Changes</span>

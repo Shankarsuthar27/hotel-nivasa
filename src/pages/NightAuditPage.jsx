@@ -385,7 +385,7 @@ export default function NightAuditPage({ onNavigate }) {
         <div className="na-banner-header">
           <div className="na-banner-title-area">
             <div className="na-banner-icon">
-              <Calendar size={26} />
+              <Calendar size={20} />
             </div>
             <div>
               <h1 className="na-banner-title">
@@ -426,7 +426,7 @@ export default function NightAuditPage({ onNavigate }) {
                   setActiveStep(1);
                 }}
               >
-                <Play size={16} />
+                <Play size={15} />
                 <span>{isTodayAuditCompleted ? 'Review Audit' : 'Start Night Audit'}</span>
               </button>
             )}
@@ -435,7 +435,7 @@ export default function NightAuditPage({ onNavigate }) {
               <button
                 type="button"
                 className="na-btn-action"
-                style={{ background: 'rgba(255,255,255,0.15)', color: '#ffffff', padding: '0.6rem 1rem' }}
+                style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', padding: '0.55rem 0.95rem' }}
                 onClick={() => setActiveStep(0)}
               >
                 <ArrowLeft size={14} />
@@ -448,38 +448,25 @@ export default function NightAuditPage({ onNavigate }) {
         {/* Stats Strip */}
         <div className="na-banner-stats-strip">
           <div className="na-stat-item">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '2px' }}>
-              <span className="na-stat-label" style={{ marginBottom: 0 }}>Current Business Date</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+              <span className="na-stat-label" style={{ marginBottom: 0 }}>Business Date</span>
               <button
                 type="button"
                 onClick={handleSetCurrentDate}
-                style={{
-                  background: 'rgba(96, 165, 250, 0.15)',
-                  border: '1px solid rgba(96, 165, 250, 0.4)',
-                  color: '#93c5fd',
-                  borderRadius: '4px',
-                  padding: '2px 7px',
-                  fontSize: '0.68rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  transition: 'all 0.15s ease'
-                }}
+                className="na-set-date-btn"
                 title="Set or Sync Business Date to Live Current Date"
               >
                 <RefreshCw size={10} />
-                <span>Set Current Date</span>
+                <span>Sync</span>
               </button>
             </div>
-            <span className="na-stat-val" style={{ color: '#60a5fa' }}>
+            <span className="na-stat-val" style={{ color: '#2563eb' }}>
               {formatDisplayDate(currentBusinessDate)}
             </span>
           </div>
 
           <div className="na-stat-item">
-            <span className="na-stat-label">Live System Clock ({systemDate})</span>
+            <span className="na-stat-label">System Clock ({systemDate})</span>
             <span className="na-stat-val" style={{ fontFamily: 'monospace' }}>
               {systemTime}
             </span>
@@ -487,7 +474,7 @@ export default function NightAuditPage({ onNavigate }) {
 
           <div className="na-stat-item">
             <span className="na-stat-label">Pending Blockers</span>
-            <span className="na-stat-val" style={{ color: step1BlockersCount > 0 ? '#fb923c' : '#4ade80' }}>
+            <span className="na-stat-val" style={{ color: step1BlockersCount > 0 ? '#d97706' : '#059669' }}>
               {step1BlockersCount} Pending
             </span>
           </div>
@@ -500,9 +487,9 @@ export default function NightAuditPage({ onNavigate }) {
           </div>
 
           <div className="na-stat-item">
-            <span className="na-stat-label">Audit Engine Status</span>
-            <span className="na-stat-val" style={{ color: '#4ade80', fontSize: '0.98rem' }}>
-              {isTodayAuditCompleted ? '🔒 Locked & Saved' : '⚡ Ready'}
+            <span className="na-stat-label">Audit Engine</span>
+            <span className="na-stat-val" style={{ color: '#059669', fontSize: '0.95rem' }}>
+              {isTodayAuditCompleted ? 'Locked & Saved' : 'Ready'}
             </span>
           </div>
         </div>
