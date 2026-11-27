@@ -689,6 +689,7 @@ export default function TeamPermissionsView({
               { key: 'amendStay', label: 'Amend Stay' },
               { key: 'noShow', label: 'No Show' },
               { key: 'cancel', label: 'Cancel Reservation' },
+              { key: 'delete', label: 'Delete Reservation' },
               { key: 'posVoucher', label: 'Res Voucher' },
               { key: 'estimateInvoice', label: 'Estimate Invoice' }
             ].map((act) => (

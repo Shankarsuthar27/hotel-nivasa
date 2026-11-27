@@ -21,6 +21,7 @@ export const FULL_PERMISSIONS_TEMPLATE = {
       amendStay: true,
       noShow: true,
       cancel: true,
+      delete: true,
       posVoucher: true,
       estimateInvoice: true
     },

@@ -30,6 +30,7 @@ const PERMISSION_GROUPS = [
       { path: 'reservations.actions.assignRoom', label: 'Assign / Move Room', requires: 'reservations.view' },
       { path: 'reservations.actions.amendStay', label: 'Amend Stay / Edit', requires: 'reservations.view' },
       { path: 'reservations.actions.cancel', label: 'Cancel Booking', requires: 'reservations.view' },
+      { path: 'reservations.actions.delete', label: 'Delete Reservation', requires: 'reservations.view' },
       { path: 'reservations.nightAudit', label: 'Run Night Audit' }
     ]
   },

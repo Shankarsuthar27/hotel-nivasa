@@ -39,6 +39,7 @@ export default function ReservationCard({
   onRoomMove,
   onCancel,
   onDelete,
+  canDelete = true,
   onNoShow,
   onVoucher,
   onInvoice,
@@ -378,21 +379,23 @@ export default function ReservationCard({
                         </div>
                       )}
                     </div>
-                    <button
-                      className="radix-menu-item danger"
-                      role="menuitem"
-                      style={{ color: '#dc2626' }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (onToggleMenu) onToggleMenu(e);
-                        if (onDelete) {
-                          onDelete(reservation);
-                        }
-                      }}
-                    >
-                      <Trash2 size={16} className="shrink-0" color="#dc2626" />
-                      <span>Delete</span>
-                    </button>
+                    {canDelete && (
+                      <button
+                        className="radix-menu-item danger"
+                        role="menuitem"
+                        style={{ color: '#dc2626' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onToggleMenu) onToggleMenu(e);
+                          if (onDelete) {
+                            onDelete(reservation);
+                          }
+                        }}
+                      >
+                        <Trash2 size={16} className="shrink-0" color="#dc2626" />
+                        <span>Delete</span>
+                      </button>
+                    )}
                   </>
                 ) : (isCancelled || isNoShow) ? (
                   /* Cancelled / No-Show Menu: View, Group List, Print */

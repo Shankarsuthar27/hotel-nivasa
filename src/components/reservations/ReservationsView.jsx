@@ -36,6 +36,7 @@ import GroupReservationListDrawer from './GroupReservationListDrawer';
 import CancelReservationModal from './CancelReservationModal';
 import SlidingTabBar from '../common/SlidingTabBar';
 import Can from '../common/Can';
+import { hasPermission } from '../../utils/permissions';
 import ReservationsToolbar from './ReservationsToolbar';
 import ReservationsListView from './ReservationsListView';
 import AmendStayDrawer from './AmendStayDrawer';
@@ -576,6 +577,7 @@ export default function ReservationsView({
                 const target = typeof r === 'object' ? r : (reservations.find((x) => x.id === r) || { id: r });
                 setDeletingRes(target);
               }}
+              canDelete={hasPermission(currentUser || pmsStore.getState().currentUser, 'reservations.actions.delete')}
               onNoShow={onNoShowReservation}
               onVoucher={onOpenVoucher}
               onInvoice={onOpenInvoice}
@@ -614,6 +616,7 @@ export default function ReservationsView({
             const target = typeof r === 'object' ? r : (reservations.find((x) => x.id === r) || { id: r });
             setDeletingRes(target);
           }}
+          canDelete={hasPermission(currentUser || pmsStore.getState().currentUser, 'reservations.actions.delete')}
           onNoShowReservation={onNoShowReservation}
           onOpenVoucher={onOpenVoucher}
           onOpenInvoice={onOpenInvoice}

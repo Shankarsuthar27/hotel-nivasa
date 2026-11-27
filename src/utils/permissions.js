@@ -109,6 +109,7 @@ export function summarizeGrantedPermissions(permissions) {
   if (permissions.reservations?.actions?.checkIn) labels.push('Check-In');
   if (permissions.reservations?.actions?.checkOut) labels.push('Check-Out');
   if (permissions.reservations?.actions?.cancel) labels.push('Cancel Booking');
+  if (permissions.reservations?.actions?.delete) labels.push('Delete Reservation');
   if (permissions.reservations?.nightAudit) labels.push('Night Audit');
   if (permissions.ratesInventory?.view) labels.push('View Rates');
   if (permissions.ratesInventory?.actions?.editRates) labels.push('Edit Rates');
@@ -139,6 +140,7 @@ export function createEmptyPermissions() {
         amendStay: false,
         noShow: false,
         cancel: false,
+        delete: false,
         posVoucher: false,
         estimateInvoice: false
       },
