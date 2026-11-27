@@ -122,12 +122,17 @@ export default function AddTeamMemberModal({
 
   if (!isOpen) return null;
 
+  const canDeleteReservation = role === 'Owner' || role === 'Hotel Manager / GM';
+
   const handleRoleChange = (newRole) => {
     setRole(newRole);
     const presets = getRoleDefaultPermissions();
     if (presets[newRole]) {
       const nextPerms = JSON.parse(JSON.stringify(presets[newRole]));
       nextPerms.allowAll = false;
+      if (newRole !== 'Owner' && newRole !== 'Hotel Manager / GM' && nextPerms.reservations?.actions) {
+        nextPerms.reservations.actions.delete = false;
+      }
       setPermissions(nextPerms);
     }
   };
@@ -152,6 +157,7 @@ export default function AddTeamMemberModal({
     let next = createEmptyPermissions();
     PERMISSION_GROUPS.forEach((group) => {
       group.items.forEach((item) => {
+        if (item.path === 'reservations.actions.delete' && !canDeleteReservation) return;
         next = setNestedBool(next, item.path, true);
       });
     });
@@ -451,7 +457,9 @@ export default function AddTeamMemberModal({
                       gap: '8px'
                     }}
                   >
-                    {group.items.map((item) => {
+                    {group.items
+                      .filter((item) => item.path !== 'reservations.actions.delete' || canDeleteReservation)
+                      .map((item) => {
                       const isChecked = getNestedBool(permissions, item.path);
                       return (
                         <label

@@ -701,7 +701,13 @@ export default function TeamPermissionsView({
               { key: 'delete', label: 'Delete Reservation' },
               { key: 'posVoucher', label: 'Res Voucher' },
               { key: 'estimateInvoice', label: 'Estimate Invoice' }
-            ].map((act) => (
+            ]
+              .filter((act) => {
+                if (act.key !== 'delete') return true;
+                const activeRole = activeSubtab === 'my_permissions' ? currentUser?.role : selectedMember?.role;
+                return activeRole === 'Owner' || activeRole === 'Hotel Manager / GM';
+              })
+              .map((act) => (
               <OtalCheckItem
                 key={act.key}
                 checked={!!permissions.reservations?.actions?.[act.key]}

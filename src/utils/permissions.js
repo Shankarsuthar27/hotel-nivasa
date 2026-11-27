@@ -15,11 +15,17 @@ export function hasPermission(user, permissionPath) {
   if (user.role === 'Owner') return true;
   if (!permissionPath) return true;
 
+  const paths = Array.isArray(permissionPath) ? permissionPath : [permissionPath];
+  if (
+    paths.includes('reservations.actions.delete') &&
+    user.role !== 'Hotel Manager / GM'
+  ) {
+    return false;
+  }
+
   const perms = user.permissions;
   if (!perms) return false;
   if (perms.allowAll === true) return true;
-
-  const paths = Array.isArray(permissionPath) ? permissionPath : [permissionPath];
 
   return paths.some((path) => {
     const keys = String(path).split('.');
