@@ -984,7 +984,14 @@ class PMSStore {
   }
 
   updateProperty(patch) {
-    this.property = { ...this.property, ...patch };
+    const nextProp = { ...this.property, ...patch };
+    if (typeof nextProp.logo === 'string' && nextProp.logo.length > 400000) {
+      nextProp.logo = '';
+    }
+    if (typeof nextProp.organizationIcon === 'string' && nextProp.organizationIcon.length > 400000) {
+      nextProp.organizationIcon = '';
+    }
+    this.property = nextProp;
     this.save();
     this.syncDocToFirestore('', this.propertyId, this.property);
     this.notify();
@@ -1078,6 +1085,31 @@ class PMSStore {
               return !delRtIds.has(rId);
             });
             if (this.roomTypes.length !== prevRtCount) {
+              stateChanged = true;
+            }
+          }
+
+          // 3. Process cloud-deleted team members by ID / staffId / uid / email
+          if (Array.isArray(data.teamMembers) && data.teamMembers.length > 0) {
+            if (!this.deletedTeamMemberIds) this.deletedTeamMemberIds = new Set();
+            const delTmIds = new Set();
+            data.teamMembers.forEach((id) => {
+              const clean = String(id || '').trim().toLowerCase();
+              if (clean) {
+                delTmIds.add(clean);
+                this.deletedTeamMemberIds.add(clean);
+                this.deletedTeamMemberIds.add(String(id));
+              }
+            });
+            const prevTmCount = (this.teamMembers || []).length;
+            this.teamMembers = (this.teamMembers || []).filter((tm) => {
+              if (!tm) return false;
+              const candidates = [tm.id, tm.staffId, tm.uid, tm.email]
+                .map((v) => String(v || '').trim().toLowerCase())
+                .filter(Boolean);
+              return !candidates.some((c) => delTmIds.has(c));
+            });
+            if (this.teamMembers.length !== prevTmCount) {
               stateChanged = true;
             }
           }
@@ -2021,6 +2053,12 @@ class PMSStore {
 
       // If syncing the property profile itself (empty collectionName or 'properties')
       if (!collectionName || collectionName === 'property' || collectionName === 'properties') {
+        if (typeof payload.logo === 'string' && payload.logo.length > 400000) {
+          payload.logo = '';
+        }
+        if (typeof payload.organizationIcon === 'string' && payload.organizationIcon.length > 400000) {
+          payload.organizationIcon = '';
+        }
         const propRef = doc(db, 'properties', this.propertyId);
         await setDoc(propRef, payload, { merge: true });
 
@@ -4933,6 +4971,10 @@ class PMSStore {
         this.deleteDocFromFirestore('staff', member.uid);
       }
     }
+    this.recordCloudDeletion(
+      'teamMembers',
+      [memberId, member?.id, member?.staffId, member?.uid, member?.email].filter(Boolean)
+    );
     this.save();
     this.notify();
     return { success: true };
@@ -4966,6 +5008,10 @@ class PMSStore {
         this.deleteDocFromFirestore('staff', memberId);
       }
     }
+    this.recordCloudDeletion(
+      'teamMembers',
+      [memberId, member?.id, member?.staffId, member?.uid, member?.email].filter(Boolean)
+    );
     this.syncCurrentUserWithTeamMembers();
     this.save();
     this.notify();

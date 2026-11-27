@@ -212,7 +212,7 @@ export default function RoomCard({
               title={isDirty ? 'Mark Available / Clean' : 'Mark Dirty'}
               onClick={handleToggleDirty}
             >
-              <SweepingBroomIcon size={17} color={isDirty ? '#ef4444' : '#4ccaa0'} />
+              <SweepingBroomIcon size={20} color={isDirty ? '#ef4444' : '#4ccaa0'} />
             </button>
 
             {/* 2. Wrench Icon (Maintenance / Block Room) */}
@@ -222,7 +222,7 @@ export default function RoomCard({
               title="Maintenance / Block Room"
               onClick={handleMaintenanceClick}
             >
-              <Wrench size={14} strokeWidth={2} />
+              <Wrench size={18} strokeWidth={2} />
             </button>
 
             {/* 3. Plus Circle Icon (Create Reservation) */}
@@ -232,7 +232,7 @@ export default function RoomCard({
               title="Create Reservation for Room"
               onClick={handleReservationClick}
             >
-              <PlusCircle size={15} strokeWidth={2} />
+              <PlusCircle size={19} strokeWidth={2} />
             </button>
           </div>
         </div>

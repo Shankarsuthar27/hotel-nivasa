@@ -9,7 +9,6 @@ import {
   BarChart2,
   Users,
   Menu,
-  Globe,
   LogOut,
   Building2,
   Settings,
@@ -34,7 +33,6 @@ export default function Sidebar({
   isCollapsed = false,
   onToggleCollapse
 }) {
-  const [lang, setLang] = useState('IN'); // 'IN' | 'HI'
   const [isUserSwitcherOpen, setIsUserSwitcherOpen] = useState(false);
   const [isPropertiesOpen, setIsPropertiesOpen] = useState(activeTab === 'properties');
 
@@ -263,30 +261,8 @@ export default function Sidebar({
         })}
       </nav>
 
-      {/* 4. Bottom Controls: Language & User Card */}
+      {/* 4. Bottom Controls: User Card */}
       <div className="sidebar-bottom-section">
-        {/* Language Row */}
-        <div className="sidebar-lang-row">
-          <div className="lang-label-group">
-            <Globe size={16} color="#64748b" />
-            <span className="lang-label-text">Language</span>
-          </div>
-          <div className="lang-toggle-pills">
-            <button
-              className={`lang-pill-btn ${lang === 'US' ? 'active' : ''}`}
-              onClick={() => setLang('US')}
-            >
-              US
-            </button>
-            <button
-              className={`lang-pill-btn ${lang === 'EN' ? 'active' : ''}`}
-              onClick={() => setLang('EN')}
-            >
-              EN
-            </button>
-          </div>
-        </div>
-
         {/* User Profile Card */}
         <div className="sidebar-user-card" style={{ position: 'relative' }}>
           <div
@@ -294,8 +270,19 @@ export default function Sidebar({
             onClick={() => setIsUserSwitcherOpen(!isUserSwitcherOpen)}
             title="Click to switch active role or profile"
           >
-            <div className="user-avatar-ai">
-              {(activeUser.initials === 'AI' || !activeUser.initials) ? 'HN' : activeUser.initials}
+            <div
+              className="user-avatar-ai"
+              style={propertyLogo ? { overflow: 'hidden', padding: 0, background: 'transparent' } : undefined}
+            >
+              {propertyLogo ? (
+                <img
+                  src={propertyLogo}
+                  alt={activeUser.name === 'Astha India' ? 'HOTEL NIVASA' : activeUser.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit', display: 'block' }}
+                />
+              ) : (
+                (activeUser.initials === 'AI' || !activeUser.initials) ? 'HN' : activeUser.initials
+              )}
             </div>
             <div className="user-details">
               <div className="user-name">{activeUser.name === 'Astha India' ? 'HOTEL NIVASA' : activeUser.name}</div>

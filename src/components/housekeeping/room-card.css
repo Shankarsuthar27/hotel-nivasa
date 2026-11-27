@@ -834,7 +834,7 @@ div.flex.items-center.gap-1\.5 {
 .hk-card-action-btn {
   background: transparent;
   border: none;
-  padding: 3px;
+  padding: 4px;
   cursor: pointer;
   color: #64748b;
   display: inline-flex;

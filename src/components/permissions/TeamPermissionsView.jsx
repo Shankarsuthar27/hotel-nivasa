@@ -162,10 +162,10 @@ export default function TeamPermissionsView({
   }, [initialMemberId, initialSubtab]);
 
   useEffect(() => {
-    if (selectedMemberId === 'usr_02') {
+    if (selectedMemberId && !nonOwnerMembers.some((m) => m.id === selectedMemberId)) {
       setSelectedMemberId('');
     }
-  }, [selectedMemberId]);
+  }, [selectedMemberId, nonOwnerMembers]);
 
   // Selected Target Property
   const [targetProperty, setTargetProperty] = useState(currentProperty);
