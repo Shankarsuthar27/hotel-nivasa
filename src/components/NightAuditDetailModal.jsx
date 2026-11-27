@@ -44,15 +44,15 @@ export default function NightAuditDetailModal({
   const completedTime = auditRecord.completedTime || auditRecord.completedAt || (auditRecord.performedAt ? `${formatDisplayDate(auditRecord.performedAt)} ${new Date(auditRecord.performedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}` : `${displayDate} 01:00 AM`);
 
   const kpis = auditRecord.kpis || {
-    totalRooms: auditRecord.roomStatus?.total || 4,
-    sellableRooms: auditRecord.roomStatus?.total || 4,
-    occupiedRooms: auditRecord.roomStatus?.occupied || 1,
-    vacantRooms: auditRecord.roomStatus?.vacant || 3,
+    totalRooms: auditRecord.roomStatus?.total || 0,
+    sellableRooms: auditRecord.roomStatus?.total || 0,
+    occupiedRooms: auditRecord.roomStatus?.occupied || 0,
+    vacantRooms: auditRecord.roomStatus?.vacant || 0,
     blockedRooms: auditRecord.roomStatus?.blocked || 0,
-    occupancyPercent: auditRecord.occupancyPercent || 25,
-    adr: auditRecord.adr || 2500,
-    revpar: auditRecord.revpar || 625,
-    totalRoomRevenue: auditRecord.totalRoomTariff || 2500
+    occupancyPercent: auditRecord.occupancyPercent || 0,
+    adr: auditRecord.adr || 0,
+    revpar: auditRecord.revpar || 0,
+    totalRoomRevenue: auditRecord.totalRoomTariff || 0
   };
 
   const rawRoomCharges = auditRecord.roomCharges || [];
@@ -85,14 +85,22 @@ export default function NightAuditDetailModal({
     spa: { name: 'Spa & Wellness', amount: 0 },
     extraCharges: { name: 'Extra Charges', amount: 0 }
   };
+  const totalDepartmentRevenue = Object.values(outletRevenues).reduce(
+    (sum, o) => sum + (Number(o?.amount) || 0),
+    0
+  );
 
   const collections = auditRecord.collections || {
-    cash: { name: 'Cash', amount: totalRentSum },
+    cash: { name: 'Cash', amount: 0 },
     upi: { name: 'UPI / QR', amount: 0 },
     card: { name: 'Card', amount: 0 },
     bankTransfer: { name: 'Bank Transfer', amount: 0 },
     cityLedger: { name: 'City Ledger', amount: 0 }
   };
+  const totalCollectionsSum = Object.values(collections).reduce(
+    (sum, c) => sum + (Number(c?.amount) || 0),
+    0
+  );
 
   // CSV Export for Room Charges & GST Register
   const handleExportCSV = () => {
@@ -342,7 +350,7 @@ export default function NightAuditDetailModal({
                     ))}
                     <div className="na-recon-total-bar">
                       <span>Total Revenue</span>
-                      <strong style={{ color: '#16a34a' }}>{formatCurrency(totalRentSum)}</strong>
+                      <strong style={{ color: '#16a34a' }}>{formatCurrency(totalDepartmentRevenue || totalRentSum)}</strong>
                     </div>
                   </div>
                 </div>
@@ -361,7 +369,7 @@ export default function NightAuditDetailModal({
                     ))}
                     <div className="na-recon-total-bar">
                       <span>Total Collected</span>
-                      <strong style={{ color: '#2563eb' }}>{formatCurrency(totalRentSum)}</strong>
+                      <strong style={{ color: '#2563eb' }}>{formatCurrency(totalCollectionsSum)}</strong>
                     </div>
                   </div>
                 </div>

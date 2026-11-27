@@ -593,14 +593,43 @@ export async function executeNightAuditAtomic({
     totalRoomTariffExclTax
   });
 
-  // Checked out list for today
+  // Checked out list for today (including same-day/early checkouts)
   const checkedOutReservations = state.reservations.filter((r) => {
     const st = (r.status || '').toLowerCase().replace(/[\s-]/g, '_');
-    return st === 'checked_out' && normalizeDateStr(r.checkOutDate) === curBusinessDate;
+    if (st !== 'checked_out') return false;
+    return (
+      normalizeDateStr(r.checkedOutAt) === curBusinessDate ||
+      normalizeDateStr(r.checkOutDate) === curBusinessDate
+    );
   });
 
   const checkedOutList = checkedOutReservations.map((r) => {
     const folio = state.folios?.[r.folioId];
+    const txs = Array.isArray(folio?.transactions) ? folio.transactions.filter((t) => t && !t.isVoided) : [];
+    const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
+    let roomChargesVal = folio?.totalCharges ?? r.totalRoomCharges ?? 0;
+    let extraChargesVal = 0;
+    let taxVal = folio?.totalTax ?? r.taxAmount ?? 0;
+    let paymentVal = folio?.totalPayments ?? r.paidAmount ?? 0;
+
+    if (txs.length > 0) {
+      const creditTxs = txs.filter((t) => t.type === 'PAYMENT' || t.direction === 'CREDIT' || t.direction === 'Credit' || Number(t.amount) < 0);
+      const debitTxs = txs.filter((t) => t.type !== 'PAYMENT' && t.direction !== 'CREDIT' && t.direction !== 'Credit' && Number(t.amount) >= 0);
+      const roomDebits = debitTxs.filter((t) => ['ROOM_RENT', 'ROOM_CHARGE', 'ACCOMMODATION'].includes(String(t.type || '').toUpperCase()));
+      const taxDebits = debitTxs.filter((t) => String(t.type || '').toUpperCase() === 'TAX');
+      const extraDebits = debitTxs.filter((t) => !['ROOM_RENT', 'ROOM_CHARGE', 'ACCOMMODATION', 'TAX'].includes(String(t.type || '').toUpperCase()));
+
+      roomChargesVal = r2(roomDebits.reduce((s, t) => s + (Number(t.amount) || 0), 0));
+      extraChargesVal = r2(extraDebits.reduce((s, t) => s + (Number(t.amount) || 0), 0));
+      taxVal = r2(
+        taxDebits.reduce((s, t) => s + (Number(t.amount) || 0), 0) +
+        debitTxs.reduce((s, t) => s + (Number(t.tax) || 0), 0)
+      );
+      paymentVal = r2(creditTxs.reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0));
+    }
+
+    const balanceVal = r2(Math.max(0, roomChargesVal + extraChargesVal + taxVal - paymentVal));
     return {
       room: r.roomNumber ? `Room ${r.roomNumber}` : '—',
       folio: r.folioId || '—',
@@ -608,13 +637,28 @@ export async function executeNightAuditAtomic({
       arrival: formatDisplayDate(r.checkInDate),
       departure: formatDisplayDate(r.checkOutDate),
       nights: Number(r.nights) || 1,
-      roomCharges: folio?.totalCharges || r.totalRoomCharges || 0,
-      extraCharges: 0,
+      roomCharges: roomChargesVal,
+      extraCharges: extraChargesVal,
       discount: 0,
-      tax: folio?.totalTax || r.taxAmount || 0,
-      payment: folio?.totalPayments || r.paidAmount || 0,
-      balance: folio?.balance || 0
+      tax: taxVal,
+      payment: paymentVal,
+      balance: balanceVal
     };
+  });
+
+  const arrivedTodayReservations = state.reservations.filter((r) => {
+    const st = (r.status || '').toLowerCase().replace(/[\s-]/g, '_');
+    if (st === 'cancelled' || st === 'canceled' || st === 'no_show' || st === 'noshow') return false;
+    return (
+      normalizeDateStr(r.checkedInAt) === curBusinessDate ||
+      (normalizeDateStr(r.checkInDate) === curBusinessDate && (st === 'in_house' || st === 'checked_in' || st === 'checked_out'))
+    );
+  });
+
+  const sumPax = (list) => ({
+    rooms: list.length,
+    adult: list.reduce((s, r) => s + (Number(r.adults) || 1), 0),
+    child: list.reduce((s, r) => s + (Number(r.children) || 0), 0)
   });
 
   // Departmental Reconciliation
@@ -672,9 +716,9 @@ export async function executeNightAuditAtomic({
     },
     // Pax movement
     paxStatus: [
-      { status: 'Arrived', rooms: 0, adult: 0, child: 0 },
-      { status: 'Checked Out', rooms: checkedOutList.length, adult: checkedOutList.length, child: 0 },
-      { status: 'Stayover', rooms: inHouseReservations.length, adult: inHouseReservations.length, child: 0 }
+      { status: 'Arrived', ...sumPax(arrivedTodayReservations) },
+      { status: 'Checked Out', ...sumPax(checkedOutReservations) },
+      { status: 'Stayover', ...sumPax(inHouseReservations) }
     ],
     isLocked: true // Date locking
   };
