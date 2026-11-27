@@ -223,7 +223,7 @@ export function isResMatchingRoom(res, room) {
     }
   }
   if (Array.isArray(res.rooms)) {
-    if (res.rooms.some((r) => (typeof r === 'object' ? (checkVal(r?.id) || checkVal(r?.roomNumber)) : checkVal(r)))) {
+    if (res.rooms.some((r) => (typeof r === 'object' ? (checkVal(r?.roomId) || checkVal(r?.id) || checkVal(r?.roomNumber)) : checkVal(r)))) {
       return true;
     }
   }

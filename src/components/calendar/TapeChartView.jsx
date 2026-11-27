@@ -515,7 +515,15 @@ export default function TapeChartView({
   onSlotClick,
   onSlotMaintenanceClick
 }) {
-  const [baseDate, setBaseDate] = useState(() => new Date(property?.businessDate || '2026-10-26'));
+  const [baseDate, setBaseDate] = useState(() => new Date(property?.businessDate || getTodayIsoDate()));
+  useEffect(() => {
+    if (property?.businessDate) {
+      const next = new Date(property.businessDate);
+      if (!Number.isNaN(next.getTime())) {
+        setBaseDate(next);
+      }
+    }
+  }, [property?.businessDate]);
   const [selectedRoomType, setSelectedRoomType] = useState('all');
   const [density, setDensity] = useState('cozy'); // 'cozy' | 'wide'
   const [isRoomTypeDropdownOpen, setIsRoomTypeDropdownOpen] = useState(false);
@@ -720,13 +728,23 @@ export default function TapeChartView({
     const unassignedResList = [];
 
     activeReservations.forEach((res) => {
-      const matchedRoom = rooms.find((rm) => isResMatchingRoom(res, rm));
-      if (matchedRoom) {
-        assignedResList.push({ res, room: matchedRoom });
+      const matchedRooms = rooms.filter((rm) => isResMatchingRoom(res, rm));
+      if (matchedRooms.length > 0) {
+        matchedRooms.forEach((room) => assignedResList.push({ res, room }));
       } else {
         unassignedResList.push(res);
       }
     });
+
+    // Write checked_out first so active (in_house / confirmed) reservations always take visual priority
+    const statusPriority = (r) => {
+      const st = String(r?.status || '').toLowerCase().replace(/[\s-]+/g, '_');
+      if (st === 'in_house' || st === 'checked_in') return 3;
+      if (st === 'confirmed' || st === 'hold' || st === 'on_hold') return 2;
+      if (st === 'checked_out') return 1;
+      return 0;
+    };
+    assignedResList.sort((a, b) => statusPriority(a.res) - statusPriority(b.res));
 
     // Populate starting and covering reservations for rooms
     assignedResList.forEach(({ res, room }) => {
