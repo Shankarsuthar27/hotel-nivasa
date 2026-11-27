@@ -2549,21 +2549,58 @@ class PMSStore {
 
   async createReservation(bookingData) {
     let maxNum = 370;
-    (this.reservations || []).forEach(r => {
-      const numMatch = String(r.id || '').match(/\d+/) || String(r.bookingReference || '').match(/\d+/);
+    const considerNum = (valStr) => {
+      const numMatch = String(valStr || '').match(/\d+/);
       if (numMatch) {
         const val = parseInt(numMatch[0], 10);
         if (val > maxNum && val < 999999) {
           maxNum = val;
         }
       }
+    };
+    (this.reservations || []).forEach(r => {
+      considerNum(r.id);
+      considerNum(r.bookingReference);
+      considerNum(r._firestoreDocId);
     });
-    const nextNum = Math.max(maxNum + 1, 378);
+    Object.keys(this.folios || {}).forEach(fid => considerNum(fid));
+    if (this.deletedReservationIds) {
+      this.deletedReservationIds.forEach(delId => considerNum(delId));
+    }
+
+    let nextNum = Math.max(maxNum + 1, 378);
+    const isIdTakenOrDeleted = (num) => {
+      const cId = `res_${num}`;
+      const cRef = `#RES_${num}`;
+      const cFol = `fol_${num}`;
+      if (this.deletedReservationIds) {
+        if (
+          this.deletedReservationIds.has(cId) ||
+          this.deletedReservationIds.has(cRef) ||
+          this.deletedReservationIds.has(cRef.toLowerCase())
+        ) {
+          return true;
+        }
+      }
+      if ((this.reservations || []).some(r => r.id === cId || r.bookingReference === cRef)) {
+        return true;
+      }
+      if (this.folios && this.folios[cFol]) {
+        return true;
+      }
+      return false;
+    };
+    while (isIdTakenOrDeleted(nextNum)) {
+      nextNum += 1;
+    }
+
     const ref = `#RES_${nextNum}`;
     const id = `res_${nextNum}`;
     const folioId = `fol_${nextNum}`;
     if (this.deletedReservationIds) {
       this.deletedReservationIds.delete(id);
+      this.deletedReservationIds.delete(ref);
+      this.deletedReservationIds.delete(ref.toLowerCase());
     }
     const isUnassigned = !bookingData.roomId || bookingData.roomId === 'unassigned' || bookingData.roomId === '';
     const room = !isUnassigned
@@ -2662,6 +2699,7 @@ class PMSStore {
       createdAt: (bookingData.createdAt && typeof bookingData.createdAt === 'string')
         ? bookingData.createdAt
         : (bookingData.createdAt instanceof Date ? bookingData.createdAt.toISOString() : new Date().toISOString()),
+      updatedAt: new Date().toISOString(),
       bookingDate: bookingData.bookingDate || checkInIso || getTodayIsoDate(),
       bookingTime: bookingData.bookingTime || getCurrentTimeString(),
       bookingDateFormatted: bookingData.bookingDateFormatted || formatBookingDateTime(bookingData.createdAt || new Date()),
