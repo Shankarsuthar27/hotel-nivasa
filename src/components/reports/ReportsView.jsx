@@ -90,8 +90,12 @@ export default function ReportsView({
   // Card 5: Reservation Report Form State
   const defaultResType = 'All (7 sheets)';
   const defaultMarketSegment = 'All segments';
-  const defaultResStartDate = '01/11/2026';
-  const defaultResEndDate = '03/11/2026';
+  const resBaseDate = (() => {
+    const d = property?.businessDate ? new Date(property.businessDate) : new Date();
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  })();
+  const defaultResStartDate = `01/${String(resBaseDate.getMonth() + 1).padStart(2, '0')}/${resBaseDate.getFullYear()}`;
+  const defaultResEndDate = `${String(resBaseDate.getDate()).padStart(2, '0')}/${String(resBaseDate.getMonth() + 1).padStart(2, '0')}/${resBaseDate.getFullYear()}`;
   const [resType, setResType] = useState(defaultResType);
   const [marketSegment, setMarketSegment] = useState(defaultMarketSegment);
   const [resStartDate, setResStartDate] = useState(defaultResStartDate);
@@ -626,8 +630,15 @@ export default function ReportsView({
                         <option value="All segments">All segments</option>
                         <option value="Walk-In">Walk-In</option>
                         <option value="Direct Booking">Direct Booking</option>
+                        <option value="Website">Website</option>
+                        <option value="Phone">Phone</option>
                         <option value="OTA">OTA</option>
                         <option value="Corporate">Corporate</option>
+                        <option value="FIT">FIT</option>
+                        <option value="Group">Group</option>
+                        <option value="Marriage / Social">Marriage / Social</option>
+                        <option value="MICE">MICE</option>
+                        <option value="Travel Agent">Travel Agent</option>
                       </select>
                     </div>
 

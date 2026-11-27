@@ -1812,22 +1812,26 @@ function formatResSlashDate(dateVal) {
 function matchesResMarketSegment(r, segment) {
   if (!segment || segment === 'All segments') return true;
   const segLower = segment.toLowerCase().trim();
+  const norm = (val) => String(val || '').toLowerCase().replace(/[\s/_-]+/g, '');
   const rSeg = String(r.marketSegment || '').toLowerCase().trim();
   const rSrc = String(r.bookingSource || '').toLowerCase().trim();
 
   if (segLower === 'walk-in') {
-    return rSeg.includes('walk') || rSrc.includes('walk') || rSeg === 'fit';
+    return rSeg.includes('walk') || rSrc.includes('walk');
   }
   if (segLower === 'direct booking') {
-    return rSeg.includes('direct') || rSrc.includes('direct') || rSrc.includes('phone') || rSrc.includes('email');
+    return rSeg.includes('direct') || rSrc.includes('direct') || rSrc.includes('website') || rSrc.includes('phone');
   }
   if (segLower === 'ota') {
-    return rSeg.includes('ota') || rSrc.includes('ota') || ['makemytrip', 'agoda', 'booking.com', 'expedia', 'airbnb'].some((ch) => rSrc.includes(ch));
+    return rSeg.includes('ota') || rSrc.includes('ota') || ['makemytrip', 'agoda', 'booking.com', 'expedia', 'airbnb', 'goibibo'].some((ch) => rSrc.includes(ch));
   }
   if (segLower === 'corporate') {
     return rSeg.includes('corp') || rSrc.includes('corp') || rSeg.includes('company');
   }
-  return rSeg === segLower || rSrc === segLower;
+  if (segLower === 'marriage / social') {
+    return rSeg.includes('marriage') || rSeg.includes('social');
+  }
+  return norm(rSeg) === norm(segLower) || norm(rSrc) === norm(segLower);
 }
 
 function filterReservationsByReportCategory(categoryKey, reservations, startIso, endIso, marketSegment) {
@@ -1837,22 +1841,20 @@ function filterReservationsByReportCategory(categoryKey, reservations, startIso,
     const checkInIso = toIsoDateString(r.checkInDate);
     const checkOutIso = toIsoDateString(r.checkOutDate);
     const createdIso = toIsoDateString(r.createdAt || r.bookingDate);
-    const status = String(r.status || '').toLowerCase().trim();
+    const status = String(r.status || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
 
     // Arrivals specifically matches check-in date falling in range
     if (categoryKey === 'arrivals') {
       const isArrivalDateInRange = Boolean(checkInIso && checkInIso >= startIso && checkInIso <= endIso);
-      const isArrivingStatus = ['confirmed', 'in_house', 'checked_in'].includes(status) || Boolean(r.isArriving);
+      const isArrivingStatus = ['confirmed', 'arriving', 'in_house', 'checked_in'].includes(status) || Boolean(r.isArriving);
       return isArrivalDateInRange && isArrivingStatus;
     }
 
-    // For all other categories, reservation is considered relevant if:
-    // 1. Stay dates overlap the report window [startIso, endIso]
-    // 2. Booking creation date is in the report window [startIso, endIso]
-    // 3. Or dates are unspecified
+    // For all other categories, match stay overlap with [startIso, endIso] (fallback to createdIso if stay dates missing)
     const inRange =
       (checkInIso && checkOutIso && checkInIso <= endIso && checkOutIso >= startIso) ||
-      (createdIso && createdIso >= startIso && createdIso <= endIso) ||
+      (checkInIso && !checkOutIso && checkInIso >= startIso && checkInIso <= endIso) ||
+      (!checkInIso && createdIso && createdIso >= startIso && createdIso <= endIso) ||
       (!checkInIso && !createdIso);
     if (!inRange) return false;
 
@@ -1882,6 +1884,9 @@ function formatPrettyBookingSource(source) {
   if (!source) return 'Walk-In';
   const s = String(source).toLowerCase().trim();
   if (s.includes('walk')) return 'Walk-In';
+  if (s.includes('website')) return 'Website';
+  if (s.includes('phone')) return 'Phone';
+  if (s.includes('travel')) return 'Travel Agent';
   if (s.includes('direct')) return 'Direct Booking';
   if (s.includes('ota') || s.includes('makemytrip') || s.includes('agoda') || s.includes('booking')) return 'OTA';
   if (s.includes('corp')) return 'Corporate';
@@ -1900,14 +1905,13 @@ function transformReservationRow(r) {
     'Guest';
 
   const bookingDate = formatResSlashDate(r.createdAt || r.bookingDate || r.checkInDate);
-  const rooms = Number(r.roomsCount || r.rooms || 1);
+  const rooms = Array.isArray(r.rooms) ? r.rooms.length : (Number(r.roomsCount || r.rooms || 1) || 1);
   const checkInDate = formatResSlashDate(r.checkInDate);
   const checkOutDate = formatResSlashDate(r.checkOutDate);
   const source = formatPrettyBookingSource(r.bookingSource);
-  const totalAmount = Number(r.totalAmount || 0);
-  const dueAmount = Number(
-    r.balanceDue !== undefined ? r.balanceDue : Math.max(0, totalAmount - Number(r.paidAmount || 0))
-  );
+  const totalAmount = Math.round((Number(r.totalAmount || 0)) * 100) / 100;
+  const rawDue = r.balanceDue !== undefined ? Number(r.balanceDue) : Math.max(0, totalAmount - Number(r.paidAmount || 0));
+  const dueAmount = Math.round(rawDue * 100) / 100;
   const isVip = r.isVIP || r.primaryGuest?.isVIP ? 'Yes' : 'No';
   const singleLady = r.isSingleLady || r.primaryGuest?.isSingleLady ? 'Yes' : 'No';
   const groupRes = r.isGroup || r.isGroupReservation ? 'Yes' : 'No';
@@ -1990,12 +1994,27 @@ function buildReservationWorksheetXml(sheetXml, sheetTitle, propertyName, dateRa
         `</row>`;
     });
 
+    const totalRooms = rows.reduce((sum, r) => sum + (Number(r.rooms) || 0), 0);
+    const sumTotalAmount = Math.round(rows.reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0) * 100) / 100;
+    const sumDueAmount = Math.round(rows.reduce((sum, r) => sum + (Number(r.dueAmount) || 0), 0) * 100) / 100;
+    const totalRowNum = 7 + rows.length;
+    bodyXml +=
+      `<row r="${totalRowNum}" ht="24" customHeight="1" spans="1:12" x14ac:dyDescent="0.25">` +
+      `<c r="A${totalRowNum}" s="6" t="inlineStr"><is><t>Total (${rows.length})</t></is></c>` +
+      `<c r="B${totalRowNum}" s="6"/><c r="C${totalRowNum}" s="6"/>` +
+      `<c r="D${totalRowNum}" s="6"><v>${totalRooms}</v></c>` +
+      `<c r="E${totalRowNum}" s="6"/><c r="F${totalRowNum}" s="6"/><c r="G${totalRowNum}" s="6"/>` +
+      `<c r="H${totalRowNum}" s="8"><v>${sumTotalAmount}</v></c>` +
+      `<c r="I${totalRowNum}" s="8"><v>${sumDueAmount}</v></c>` +
+      `<c r="J${totalRowNum}" s="6"/><c r="K${totalRowNum}" s="6"/><c r="L${totalRowNum}" s="6"/>` +
+      `</row>`;
+
     sheetXml = sheetXml.substring(0, row6End) + bodyXml + sheetXml.substring(sheetDataEnd);
     sheetXml = sheetXml.replace(
       /<mergeCells[\s\S]*?<\/mergeCells>/,
       `<mergeCells count="4"><mergeCell ref="A1:L1"/><mergeCell ref="A2:L2"/><mergeCell ref="A3:L3"/><mergeCell ref="A5:L5"/></mergeCells>`
     );
-    sheetXml = sheetXml.replace(/dimension ref="A1:L[0-9]+"/, `dimension ref="A1:L${6 + rows.length}"`);
+    sheetXml = sheetXml.replace(/dimension ref="A1:L[0-9]+"/, `dimension ref="A1:L${totalRowNum}"`);
   }
 
   return sheetXml;

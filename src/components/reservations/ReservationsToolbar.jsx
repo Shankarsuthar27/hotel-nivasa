@@ -630,26 +630,6 @@ export default function ReservationsToolbar({
 
         {/* Segmented View Mode Toggle Group */}
         <div className="otal-view-toggle-group">
-          {/* All Bookings */}
-          <button
-            type="button"
-            className={`otal-toggle-tab-btn ${bookingType === 'ALL' ? 'active' : ''}`}
-            title="All Bookings"
-            onClick={() => onBookingTypeChange && onBookingTypeChange('ALL')}
-          >
-            <Users size={18} className="shrink-0" />
-          </button>
-
-          {/* Group Bookings */}
-          <button
-            type="button"
-            className={`otal-toggle-tab-btn ${bookingType === 'GROUP' ? 'active' : ''}`}
-            title="Group Bookings Only"
-            onClick={() => onBookingTypeChange && onBookingTypeChange('GROUP')}
-          >
-            <User size={18} className="shrink-0" />
-          </button>
-
           {/* List View */}
           <button
             type="button"
