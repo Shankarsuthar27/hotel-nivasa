@@ -6321,6 +6321,9 @@ class PMSStore {
       this.deleteDocFromFirestore('folios', targetFolioId);
     }
 
+    // Reconcile any Night Audit snapshots that referenced this deleted reservation/folio
+    this.reconcileNightAuditsAfterReservationDelete(res, targetFolioId);
+
     this.logAudit(
       'DELETE_RESERVATION',
       'RESERVATION',
@@ -6339,6 +6342,119 @@ class PMSStore {
     this.recordCloudDeletion('reservations', deleteIds);
     this.notify();
     return true;
+  }
+
+  reconcileNightAuditsAfterReservationDelete(res, targetFolioId) {
+    if (!Array.isArray(this.nightAudits) || this.nightAudits.length === 0) return;
+
+    const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+    const norm = (v) => String(v || '').trim().toLowerCase();
+    const targetResId = norm(res?.id);
+    const targetRef = norm(res?.bookingReference);
+    const targetFolio = norm(targetFolioId);
+    const targetGuest = norm(res?.primaryGuest?.name || res?.guestName);
+    const targetRoom = norm(res?.roomNumber ? `Room ${res.roomNumber}` : '');
+
+    const matchesDeleted = (entry) => {
+      if (!entry) return false;
+      const eFolio = norm(entry.folio || entry.folioId);
+      const eResId = norm(entry.reservationId || entry.resId);
+      const eRef = norm(entry.bookingReference);
+      if (targetFolio && eFolio && eFolio === targetFolio) return true;
+      if (targetResId && eResId && eResId === targetResId) return true;
+      if (targetRef && eRef && eRef === targetRef) return true;
+      if (!eFolio && targetGuest && targetRoom && norm(entry.guest) === targetGuest && norm(entry.room) === targetRoom) {
+        return true;
+      }
+      return false;
+    };
+
+    this.nightAudits = this.nightAudits.map((audit) => {
+      if (!audit) return audit;
+      const origRc = Array.isArray(audit.roomCharges) ? audit.roomCharges : [];
+      const origLog = Array.isArray(audit.roomChargesLog) ? audit.roomChargesLog : [];
+      const origCo = Array.isArray(audit.checkedOutList) ? audit.checkedOutList : [];
+
+      const nextRc = origRc.filter((rc) => !matchesDeleted(rc));
+      const nextLog = origLog.filter((rc) => !matchesDeleted(rc));
+      const nextCo = origCo.filter((co) => !matchesDeleted(co));
+
+      if (nextRc.length === origRc.length && nextLog.length === origLog.length && nextCo.length === origCo.length) {
+        return audit;
+      }
+
+      const nextTariff = r2(nextRc.reduce((s, r) => s + (Number(r.ofrdTariff) || 0), 0));
+      const nextCgst = r2(nextRc.reduce((s, r) => s + (Number(r.cgst) || 0), 0));
+      const nextSgst = r2(nextRc.reduce((s, r) => s + (Number(r.sgst) || 0), 0));
+      const nextTax = r2(nextCgst + nextSgst);
+      const nextNet = r2(nextRc.reduce((s, r) => s + (Number(r.totalRent) || 0), 0));
+
+      const totalRooms = Number(audit.kpis?.totalRooms || audit.roomStatus?.total || this.rooms?.length || 0);
+      const blockedRooms = Number(audit.kpis?.blockedRooms || audit.roomStatus?.blocked || 0);
+      const sellableRooms = Math.max(0, totalRooms - blockedRooms);
+      const occupiedRooms = nextRc.length;
+      const vacantRooms = Math.max(0, sellableRooms - occupiedRooms);
+      const occupancyPercent = sellableRooms > 0 ? Math.round((occupiedRooms / sellableRooms) * 100) : 0;
+      const adr = occupiedRooms > 0 ? r2(nextTariff / occupiedRooms) : 0;
+      const revpar = sellableRooms > 0 ? r2(nextTariff / sellableRooms) : 0;
+
+      const nextAudit = {
+        ...audit,
+        roomCharges: nextRc,
+        roomChargesLog: nextLog,
+        checkedOutList: nextCo,
+        totalRoomTariff: nextTariff,
+        totalCGST: nextCgst,
+        totalSGST: nextSgst,
+        totalTax: nextTax,
+        totalRevenue: nextNet,
+        amountPosted: nextNet,
+        chargesPostedCount: nextRc.length,
+        occupiedRooms,
+        occupancyPercent,
+        adr,
+        revpar,
+        kpis: {
+          ...(audit.kpis || {}),
+          totalRooms,
+          sellableRooms,
+          occupiedRooms,
+          vacantRooms,
+          blockedRooms,
+          occupancyPercent,
+          adr,
+          revpar,
+          totalRoomRevenue: nextTariff
+        },
+        roomStatus: {
+          ...(audit.roomStatus || {}),
+          total: totalRooms,
+          occupied: occupiedRooms,
+          vacant: vacantRooms,
+          departed: nextCo.length,
+          blocked: blockedRooms
+        },
+        outletRevenues: audit.outletRevenues
+          ? {
+              ...audit.outletRevenues,
+              roomRent: {
+                ...(audit.outletRevenues.roomRent || { name: 'Front Office / Rooms' }),
+                amount: nextTariff
+              }
+            }
+          : audit.outletRevenues,
+        paxStatus: Array.isArray(audit.paxStatus)
+          ? audit.paxStatus.map((p) => {
+              if (p.status === 'Checked Out') return { ...p, rooms: nextCo.length };
+              if (p.status === 'Stayover') return { ...p, rooms: nextRc.length };
+              return p;
+            })
+          : audit.paxStatus
+      };
+
+      this.syncDocToFirestore('nightAudits', nextAudit.id, nextAudit);
+      return nextAudit;
+    });
   }
 }
 

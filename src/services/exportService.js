@@ -1133,7 +1133,14 @@ export function exportNightAuditExcel(
     // 2. Room Charges
     let roomChargeRows = [];
     if (matchedAudit?.roomChargesLog && Array.isArray(matchedAudit.roomChargesLog) && matchedAudit.roomChargesLog.length > 0) {
-      roomChargeRows = matchedAudit.roomChargesLog.map((log) => {
+      const validLogs = matchedAudit.roomChargesLog.filter((log) => {
+        if (!log) return false;
+        if (log.folio && folios && Object.keys(folios).length > 0 && !folios[log.folio]) {
+          return (reservations || []).some((r) => r.folioId === log.folio);
+        }
+        return true;
+      });
+      roomChargeRows = validLogs.map((log) => {
         const res = (reservations || []).find(r => r.roomNumber === log.room || r.primaryGuest?.name === log.guest) || {};
         const f = folios[res.folioId] || {};
         const nrml = Number(log.rate || res.baseRatePerNight || 0);
